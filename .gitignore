@@ -1,0 +1,51 @@
+# General Python
+__pycache__/
+*.py[cod]
+*.so
+*.dylib
+*.egg
+*.egg-info/
+.eggs/
+.build/
+pip-wheel-metadata/
+dist/
+build/
+.venv/
+venv/
+ENV/
+.env
+.env.*
+
+# Editors & OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Testing caches
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Project-specific data directories
+Tracks/
+tracks-new/
+misc/stems/
+raw-to-be-done/
+temp/
+cache/
+logs/
+mm-files/
+
+# Audio and large binaries (keep sample assets elsewhere)
+*.wav
+*.mp3
+*.m4a
+*.opus
+*.flac
+*.zip
+
+# Generated files
+*.log
+
