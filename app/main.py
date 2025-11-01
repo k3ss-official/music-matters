@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -13,14 +14,17 @@ from app.core.settings import configure_logging, settings
 from app.services.library import LibraryPaths
 
 
+logger = logging.getLogger(__name__)
+
+
 def create_app() -> FastAPI:
     configure_logging()
 
     library = LibraryPaths(settings)
 
     @asynccontextmanager
-    async def lifespan(_: FastAPI):
-        logging.getLogger(__name__).info("Ensuring directory structure exists")
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:  # pragma: no cover - managed by FastAPI
+        logger.info("Ensuring directory structure exists")
         library.ensure_structure()
         yield
 
