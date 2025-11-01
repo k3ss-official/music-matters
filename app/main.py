@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import logging
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
 from app.api.router import api_router
@@ -11,17 +14,25 @@ from app.core.settings import configure_logging, settings
 from app.services.library import LibraryPaths
 
 
+logger = logging.getLogger(__name__)
+
+
 def create_app() -> FastAPI:
     configure_logging()
 
-    app = FastAPI(title=settings.project_name, version=settings.version)
-
     library = LibraryPaths(settings)
 
-    @app.on_event("startup")
-    async def _startup() -> None:  # pragma: no cover - side effect
-        logging.getLogger(__name__).info("Ensuring directory structure exists")
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:  # pragma: no cover - managed by FastAPI
+        logger.info("Ensuring directory structure exists")
         library.ensure_structure()
+        yield
+
+    app = FastAPI(
+        title=settings.project_name,
+        version=settings.version,
+        lifespan=lifespan,
+    )
 
     app.include_router(api_router, prefix="/api/v1")
 
