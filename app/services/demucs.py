@@ -45,17 +45,14 @@ class DemucsService:
 
         cmd: list[str] = [
             demucs_bin,
-            "--name",
-            slug,
-            "--model",
+            "-n",
             self.config.demucs_model,
             "--device",
             self.config.demucs_device,
-            "--two-stems",
-            "false",
-            "--jobs",
+            "--mp3",  # Use MP3 output to avoid torchaudio/torchcodec issues
+            "-j",
             str(jobs),
-            "--out",
+            "-o",
             str(output_dir.parent),
         ]
 
@@ -71,7 +68,9 @@ class DemucsService:
         logger.info("Running Demucs", extra={"cmd": cmd, "input": str(input_path), "output": str(output_dir)})
         subprocess.run(cmd, check=True)
 
-        return output_dir / slug
+        # Demucs outputs to: output_dir.parent / model_name / track_name
+        demucs_output = output_dir.parent / self.config.demucs_model / input_path.stem
+        return demucs_output
 
 
 __all__ = ["DemucsService"]

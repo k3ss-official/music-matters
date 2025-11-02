@@ -30,11 +30,11 @@ The audio library lives outside the repo on `/Volumes/hotblack-2tb/mm-files` and
    - Duplicate `.env.example` to `.env` if you need to override settings via environment variables.
 3. **Run the API**
    ```bash
-   uvicorn app.main:app --reload
+   uvicorn app.main:app --reload --port 8010
    ```
 4. **Call the API**
    ```bash
-   curl http://localhost:8000/health
+   curl http://localhost:8010/health
    ```
 
 ## Documentation

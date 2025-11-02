@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, HttpUrl
@@ -28,13 +28,26 @@ class ProcessJobRequest(BaseModel):
     force: bool = False
 
 
+class StageProgress(BaseModel):
+    id: str
+    label: str
+    progress: float = Field(ge=0.0, le=1.0)
+    status: Literal["pending", "running", "done", "error"] = "pending"
+    detail: Optional[str] = None
+    eta_seconds: Optional[int] = None
+
+
 class JobResponse(BaseModel):
     job_id: UUID
-    status: str
+    track_id: UUID
+    status: Literal["queued", "running", "completed", "failed"]
     current_stage: Optional[str] = None
     progress: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     eta: Optional[datetime] = None
     detail: Optional[str] = None
+    stages: List[StageProgress] = Field(default_factory=list)
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
 
 
 class TrackSummary(BaseModel):
@@ -57,6 +70,37 @@ class TrackDetailResponse(TrackSummary):
     stems: List[str] = Field(default_factory=list)
     loops: List[str] = Field(default_factory=list)
     provenance: Dict[str, Any] = Field(default_factory=dict)
+
+
+class SearchRequest(BaseModel):
+    query: str
+    collection: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+
+
+class SearchResult(BaseModel):
+    track_id: UUID
+    title: str
+    artist: Optional[str] = None
+    source: str
+    status: str
+    confidence: float = Field(ge=0.0, le=1.0)
+
+
+class LoopPreview(BaseModel):
+    id: str
+    label: str
+    start_bar: int
+    bar_count: int
+    stem: str
+    bpm: float
+    musical_key: Optional[str] = None
+    energy: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    file_url: Optional[str] = None
+
+
+class LoopResliceRequest(BaseModel):
+    bar_length: int = Field(ge=1, le=32)
 
 
 class AgentStatus(BaseModel):
