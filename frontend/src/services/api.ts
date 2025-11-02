@@ -5,6 +5,8 @@ import type {
   StageProgress,
   SearchResult,
   TrackQuery,
+  TrackListResponse,
+  TrackSummary,
 } from '../types';
 
 const API_BASE = '/api/v1';
@@ -15,6 +17,12 @@ async function handleResponse<T>(response: Response): Promise<T> {
     throw new Error(text || `Request failed with ${response.status}`);
   }
   return response.json() as Promise<T>;
+}
+
+export async function listTracks(): Promise<TrackSummary[]> {
+  const response = await fetch(`${API_BASE}/library/tracks`);
+  const data = await handleResponse<TrackListResponse>(response);
+  return data.items;
 }
 
 export async function searchTracks(query: TrackQuery): Promise<SearchResult[]> {

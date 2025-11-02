@@ -5,25 +5,46 @@ import { LoopControls } from './components/LoopControls';
 import { ProgressTimeline } from './components/ProgressTimeline';
 import { SearchPanel } from './components/SearchPanel';
 import { ThemeSwitcher } from './components/ThemeSwitcher';
+import { UploadPanel } from './components/UploadPanel';
+import { TrackHistory } from './components/TrackHistory';
 import {
   fetchJob,
   ingestSource,
   listLoops,
+  listTracks,
   searchTracks,
   triggerLoopReslice,
   uploadFile,
 } from './services/api';
 import { useTheme } from './hooks/useTheme';
-import type { JobProgress, LoopPreview, SearchResult, StageProgress, TrackQuery } from './types';
+import type {
+  JobProgress,
+  LoopPreview,
+  ProcessingOptions,
+  SearchResult,
+  StageProgress,
+  TrackQuery,
+  TrackSummary,
+} from './types';
 
 const JOB_POLL_INTERVAL = 2500;
+const DEFAULT_PROCESSING_OPTIONS: ProcessingOptions = {
+  analysis: true,
+  separation: true,
+  loopSlicing: true,
+  mastering: false,
+};
 
 function App() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [tracks, setTracks] = useState<TrackSummary[]>([]);
   const [job, setJob] = useState<JobProgress | undefined>();
   const [jobId, setJobId] = useState<string | null>(null);
   const [activeTrackId, setActiveTrackId] = useState<string | null>(null);
   const [loops, setLoops] = useState<LoopPreview[]>([]);
+  const [trackHistory, setTrackHistory] = useState<TrackSummary[]>([]);
+  const [trackHistoryLoading, setTrackHistoryLoading] = useState(false);
+  const [trackHistoryError, setTrackHistoryError] = useState<string | undefined>();
   const [loopLength, setLoopLength] = useState(4);
   const [loading, setLoading] = useState(false);
   const [loopLoading, setLoopLoading] = useState(false);
@@ -33,6 +54,23 @@ function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = resolvedTheme;
   }, [resolvedTheme]);
+
+  const refreshTrackHistory = useCallback(async () => {
+    setTrackHistoryLoading(true);
+    try {
+      const items = await listTracks();
+      setTrackHistory(items);
+      setTrackHistoryError(undefined);
+    } catch (err) {
+      setTrackHistoryError((err as Error).message);
+    } finally {
+      setTrackHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshTrackHistory();
+  }, [refreshTrackHistory]);
 
   const loadLoops = useCallback(async (trackId: string, length: number) => {
     setLoopLoading(true);
@@ -48,6 +86,15 @@ function App() {
       setLoopLoading(false);
     }
   }, []);
+
+  const openTrack = useCallback(
+    async (trackId: string) => {
+      setActiveTrackId(trackId);
+      setLoops([]);
+      await loadLoops(trackId, loopLength);
+    },
+    [loadLoops, loopLength],
+  );
 
   useEffect(() => {
     if (!jobId) {
@@ -66,8 +113,8 @@ function App() {
         setJob(progress);
         if (progress.status === 'completed') {
           setJobId(null);
-          setActiveTrackId(progress.trackId);
-          await loadLoops(progress.trackId, loopLength);
+          await openTrack(progress.trackId);
+          void refreshTrackHistory();
           return;
         }
         timer = setTimeout(poll, JOB_POLL_INTERVAL);
@@ -86,7 +133,7 @@ function App() {
         clearTimeout(timer);
       }
     };
-  }, [jobId, loadLoops, loopLength]);
+  }, [jobId, openTrack, refreshTrackHistory]);
 
   const handleQuerySubmit = async (query: TrackQuery) => {
     const trimmed = query.query.trim();

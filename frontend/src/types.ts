@@ -27,6 +27,15 @@ export interface StageProgress {
   status: 'pending' | 'running' | 'done' | 'error';
 }
 
+export type ProcessingMode = 'full' | 'stems-only' | 'master-stems' | 'custom';
+
+export interface ProcessingOptions {
+  analysis: boolean;
+  separation: boolean;
+  loopSlicing: boolean;
+  mastering: boolean;
+}
+
 export interface LoopPreview {
   id: string;
   label: string;
@@ -58,4 +67,19 @@ export interface IngestPayload {
   source: string;
   collection?: string;
   tags?: string[];
+}
+
+export interface TrackSummary {
+  track_id: string;
+  title: string;
+  artist?: string | null;
+  status: string;
+  bpm?: number | null;
+  musical_key?: string | null;
+  created_at: string;
+}
+
+export interface TrackListResponse {
+  items: TrackSummary[];
+  total: number;
 }
