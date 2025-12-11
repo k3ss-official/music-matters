@@ -1,0 +1,186 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Inter', system-ui, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #0a0a0a;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #444;
+}
+
+/* Waveform styling */
+.waveform-container {
+  position: relative;
+  height: 80px;
+  background: linear-gradient(to bottom, #111 0%, #0a0a0a 100%);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.waveform-bar {
+  position: absolute;
+  bottom: 50%;
+  width: 2px;
+  background: linear-gradient(to top, #00ff88, #00cc6a);
+  transform-origin: bottom center;
+  transition: transform 0.1s ease;
+}
+
+.waveform-bar.playing {
+  animation: pulse 0.5s ease-in-out infinite;
+}
+
+/* Energy meter */
+.energy-meter {
+  height: 4px;
+  background: linear-gradient(to right, 
+    #22c55e 0%, 
+    #eab308 50%, 
+    #ef4444 100%
+  );
+  border-radius: 2px;
+}
+
+/* Section colors */
+.section-intro { background-color: rgba(59, 130, 246, 0.3); }
+.section-verse { background-color: rgba(139, 92, 246, 0.3); }
+.section-chorus { background-color: rgba(0, 255, 136, 0.3); }
+.section-breakdown { background-color: rgba(249, 115, 22, 0.3); }
+.section-drop { background-color: rgba(239, 68, 68, 0.3); }
+.section-bridge { background-color: rgba(234, 179, 8, 0.3); }
+.section-outro { background-color: rgba(107, 114, 128, 0.3); }
+
+/* Glow effects */
+.glow-accent {
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+}
+
+.glow-text {
+  text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+}
+
+/* Button styles */
+.btn-primary {
+  @apply bg-dj-accent text-black font-semibold px-4 py-2 rounded-lg 
+         hover:bg-dj-accent-dim transition-all duration-200
+         active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.btn-secondary {
+  @apply bg-gray-800 text-white font-semibold px-4 py-2 rounded-lg 
+         hover:bg-gray-700 transition-all duration-200
+         active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.btn-danger {
+  @apply bg-dj-red text-white font-semibold px-4 py-2 rounded-lg 
+         hover:bg-red-600 transition-all duration-200
+         active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+/* Card styles */
+.card {
+  @apply bg-gray-900/50 border border-gray-800 rounded-xl p-4 
+         backdrop-blur-sm;
+}
+
+.card-hover {
+  @apply hover:border-dj-accent/50 transition-all duration-300;
+}
+
+/* Input styles */
+.input {
+  @apply bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 
+         text-white placeholder-gray-500
+         focus:outline-none focus:border-dj-accent focus:ring-1 focus:ring-dj-accent
+         transition-all duration-200;
+}
+
+/* Badge styles */
+.badge {
+  @apply text-xs font-medium px-2 py-1 rounded-full;
+}
+
+.badge-accent {
+  @apply bg-dj-accent/20 text-dj-accent;
+}
+
+.badge-purple {
+  @apply bg-purple-500/20 text-purple-400;
+}
+
+.badge-blue {
+  @apply bg-blue-500/20 text-blue-400;
+}
+
+.badge-orange {
+  @apply bg-orange-500/20 text-orange-400;
+}
+
+/* Animation */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 3s linear infinite;
+}
+
+/* Loading skeleton */
+.skeleton {
+  @apply bg-gray-800 animate-pulse rounded;
+}
+
+/* Drag-and-drop zone */
+.drop-zone {
+  @apply border-2 border-dashed border-gray-600 rounded-xl p-8
+         transition-all duration-200
+         hover:border-dj-accent hover:bg-dj-accent/5;
+}
+
+.drop-zone.active {
+  @apply border-dj-accent bg-dj-accent/10;
+}
