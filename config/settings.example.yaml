@@ -1,0 +1,20 @@
+# Copy to settings.yaml and override values per machine
+
+paths:
+  workspace_root: /Volumes/deep-1t/Users/k3ss/projects/music-matters
+  library_root: /Volumes/hotblack-2tb/mm-files
+  downloads_dir: /Volumes/hotblack-2tb/mm-files/downloads
+  stems_dir: /Volumes/hotblack-2tb/mm-files/stems/separated
+  loops_dir: /Volumes/hotblack-2tb/mm-files/loops/generated
+  projects_dir: /Volumes/hotblack-2tb/mm-files/projects
+
+processing:
+  demucs_model: htdemucs_ft
+  demucs_device: mps
+  normalise_lufs: -14.0
+  target_sample_rate: 48000
+  chunk_size: 1048576
+
+metadata:
+  sqlite_path: /Volumes/deep-1t/Users/k3ss/projects/music-matters/.local/music-matters.db
+  cache_dir: /Volumes/hotblack-2tb/mm-files/cache
