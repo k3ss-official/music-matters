@@ -14,8 +14,8 @@ import numpy as np
 import soundfile as sf
 
 from app.api import schemas
-from app.core.settings import settings
-from app.services.download import DownloadService
+from app.config import settings
+from app.services.search.download_service import DownloadService
 from app.services.library import LibraryPaths
 
 StageStatus = str  # alias for readability
@@ -356,7 +356,7 @@ class PipelineOrchestrator:
         stems_dir = self._stems_dir(track.slug)
 
         def _separate() -> Dict[str, Path]:
-            from app.services.demucs import DemucsService
+            from app.services.processing.stem_separator import StemSeparator as DemucsService
             
             # Try full Demucs separation
             try:

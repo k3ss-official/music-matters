@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple, Any
 import json
 
-from app.core.config import (
+from app.config import (
     DJ_LIBRARY, TEMP_DIR, CACHE_DIR,
     SAMPLE_RATE, BIT_DEPTH, AUDIO_FORMAT,
     DEMUCS_MODEL, DEMUCS_DEVICE, DEMUCS_SHIFTS,

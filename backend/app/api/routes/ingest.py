@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from typing import Optional
 
 from app.api.schemas import IngestRequest, IngestResponse
-from app.core.settings import settings
+from app.config import settings
 from app.services.pipeline import pipeline
 
 router = APIRouter()

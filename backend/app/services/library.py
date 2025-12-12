@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from app.core.settings import Settings, settings
+from app.config import Settings, settings
 
 _SLUG_PATTERN = re.compile(r"[^a-z0-9-]+")
 

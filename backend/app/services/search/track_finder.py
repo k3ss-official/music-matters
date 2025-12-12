@@ -15,7 +15,7 @@ import urllib.parse
 import urllib.error
 from concurrent.futures import ThreadPoolExecutor
 
-from app.core.config import (
+from app.config import (
     CACHE_DIR, TEMP_DIR, AUDIO_SOURCES,
     YTDLP_FORMAT, YTDLP_QUALITY,
     SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET

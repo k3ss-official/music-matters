@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from app.api.schemas import AgentStatus
-from app.core.settings import settings
+from app.config import settings
 from app.services.registry import agent_registry
 
 router = APIRouter()
