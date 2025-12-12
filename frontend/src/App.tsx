@@ -1,323 +1,162 @@
-/**
- * Music Matters - Unified Application
- * Production-grade DJ & Producer automation platform
- * 
- * Features:
- * - Multi-source track search (MusicBrainz, Spotify, YouTube)
- * - SOTA audio structure analysis
- * - 6-stem separation (Demucs)
- * - Intelligent sampling & loop generation
- * - Harmonic mixing (Camelot wheel, mashup scoring)
- * - Audio fingerprinting & similarity detection
- * - DAW export (Rekordbox, Serato, M3U)
- * - Waveform visualization
- * - Desktop app (Tauri)
- */
-import { useState, useEffect, useCallback } from 'react';
-import SearchPanel from './components/SearchPanel';
-import TrackList from './components/TrackList';
-import SampleCard from './components/SampleCard';
-import ExtractionSettings from './components/ExtractionSettings';
-import SOTAPanel from './components/SOTAPanel';
-import MashupScorer from './components/MashupScorer';
-import Waveform from './components/Waveform';
+import { useState, useEffect } from 'react';
 import './index.css';
-
-type View = 'search' | 'results' | 'processing' | 'library' | 'sota' | 'mashup';
 
 interface Track {
   id: string;
-  title: string;
   artist: string;
-  year?: number;
-  duration_ms?: number;
+  title: string;
   bpm?: number;
   key?: string;
   camelot?: string;
-  cover_art_url?: string;
-  track_type?: string;
-}
-
-interface ProcessingJob {
-  id: string;
-  status: string;
-  progress: number;
-  stage: string;
-  result?: any;
-  error?: string;
+  year?: number;
 }
 
 function App() {
-  const [view, setView] = useState<View>('search');
+  const [connected, setConnected] = useState(false);
+  const [query, setQuery] = useState('');
   const [tracks, setTracks] = useState<Track[]>([]);
-  const [selectedTracks, setSelectedTracks] = useState<Set<string>>(new Set());
-  const [processingJobs, setProcessingJobs] = useState<Map<string, ProcessingJob>>(new Map());
-  const [samples, setSamples] = useState<any[]>([]);
-  const [isConnected, setIsConnected] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  // Check backend health
+  // Check backend connection
   useEffect(() => {
     const checkHealth = async () => {
       try {
-        const response = await fetch('http://localhost:8010/health');
-        const data = await response.json();
-        setIsConnected(data.status === 'ok');
+        const res = await fetch('/api/health');
+        if (res.ok) setConnected(true);
       } catch {
-        setIsConnected(false);
+        setConnected(false);
       }
     };
-
     checkHealth();
     const interval = setInterval(checkHealth, 5000);
     return () => clearInterval(interval);
   }, []);
 
-  const handleSearch = useCallback(async (searchParams: any) => {
+  const handleSearch = async () => {
+    if (!query.trim()) return;
+    setLoading(true);
     try {
-      const response = await fetch('http://localhost:8010/api/search/artist', {
+      const res = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(searchParams)
+        body: JSON.stringify({ query }),
       });
-      const data = await response.json();
+      const data = await res.json();
       setTracks(data.tracks || []);
-      setView('results');
-    } catch (error) {
-      console.error('Search error:', error);
-      alert('Search failed. Is the backend running?');
+    } catch (err) {
+      console.error('Search failed:', err);
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  };
 
-  const handleProcessTrack = useCallback(async (track: Track) => {
+  const handleGrab = async (track: Track) => {
     try {
-      const response = await fetch('http://localhost:8010/api/processing/process', {
+      const res = await fetch('/api/grab', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          audio_path: `/path/to/download/${track.id}`,  // This would come from download service
+          track_id: track.id,
           artist: track.artist,
           title: track.title,
           year: track.year,
-          enable_stems: true,
-          enable_sections: true,
-          enable_loops: true,
-          loop_bars: [4, 8, 16, 32]
-        })
+        }),
       });
-      const data = await response.json();
-      
-      // Add job to tracking
-      const newJobs = new Map(processingJobs);
-      newJobs.set(data.job_id, {
-        id: data.job_id,
-        status: 'queued',
-        progress: 0,
-        stage: 'Starting',
-      });
-      setProcessingJobs(newJobs);
-      setView('processing');
-
-      // Poll for status
-      pollJobStatus(data.job_id);
-    } catch (error) {
-      console.error('Processing error:', error);
-      alert('Failed to start processing');
+      const data = await res.json();
+      alert(`Processing started! Job ID: ${data.job_id}`);
+    } catch (err) {
+      console.error('GRAB failed:', err);
     }
-  }, [processingJobs]);
-
-  const pollJobStatus = useCallback(async (jobId: string) => {
-    const interval = setInterval(async () => {
-      try {
-        const response = await fetch(`http://localhost:8010/api/processing/job/${jobId}`);
-        const job = await response.json();
-
-        setProcessingJobs(prev => {
-          const newJobs = new Map(prev);
-          newJobs.set(jobId, job);
-          return newJobs;
-        });
-
-        if (job.status === 'completed' || job.status === 'failed') {
-          clearInterval(interval);
-          if (job.status === 'completed' && job.result) {
-            // Add to samples
-            setSamples(prev => [...prev, job.result]);
-          }
-        }
-      } catch (error) {
-        console.error('Job status error:', error);
-        clearInterval(interval);
-      }
-    }, 2000);
-  }, []);
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900">
-      {/* Connection Status Bar */}
-      {!isConnected && (
-        <div className="fixed top-0 left-0 right-0 bg-red-600 text-white text-center py-2 text-sm z-50 shadow-lg">
-          ⚠️ Backend not connected - Start server: <code className="bg-red-700 px-2 py-1 rounded ml-2">uvicorn app.main:app --host 0.0.0.0 --port 8010</code>
-        </div>
-      )}
-
+    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-teal-800 to-blue-900 text-white p-8">
       {/* Header */}
-      <header className={`border-b border-purple-800/30 bg-black/40 backdrop-blur-md sticky ${!isConnected ? 'top-10' : 'top-0'} z-40 shadow-2xl`}>
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3 cursor-pointer group" onClick={() => setView('search')}>
-              <span className="text-4xl group-hover:scale-110 transition-transform">🎧</span>
-              <div>
-                <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
-                  Music Matters
-                </h1>
-                <p className="text-xs text-gray-500 font-mono">SOTA DJ & Producer Platform v2.0</p>
-              </div>
-            </div>
-
-            {/* Navigation */}
-            <nav className="flex items-center gap-3">
-              {['search', 'results', 'processing', 'library', 'sota', 'mashup'].map((v) => (
-                <button
-                  key={v}
-                  onClick={() => setView(v as View)}
-                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                    view === v
-                      ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/50'
-                      : 'text-gray-400 hover:text-white hover:bg-purple-900/30'
-                  }`}
-                >
-                  {v.charAt(0).toUpperCase() + v.slice(1)}
-                </button>
-              ))}
-
-              <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
-                isConnected ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'
-              }`}>
-                <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'} animate-pulse`} />
-                <span className="text-xs font-medium">{isConnected ? 'Connected' : 'Offline'}</span>
-              </div>
-            </nav>
+      <div className="max-w-6xl mx-auto">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-400">
+              🎧 Music Matters v2.0
+            </h1>
+            <p className="text-gray-300 mt-2">SOTA DJ & Producer Automation Platform</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className={`w-3 h-3 rounded-full ${connected ? 'bg-green-400' : 'bg-red-400'} animate-pulse`} />
+            <span className="text-sm">{connected ? 'Connected' : 'Disconnected'}</span>
           </div>
         </div>
-      </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        {/* Search View */}
-        {view === 'search' && (
-          <div className="space-y-6 animate-fade-in">
-            <div className="text-center mb-8">
-              <h2 className="text-4xl font-bold text-white mb-2">Find Any Track</h2>
-              <p className="text-gray-400">Search across MusicBrainz, Spotify, and YouTube</p>
-            </div>
-            <SearchPanel onSearch={handleSearch} />
+        {/* Search */}
+        <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 mb-8">
+          <div className="flex gap-4">
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              placeholder="Search for tracks..."
+              className="flex-1 px-4 py-3 bg-white/5 border border-white/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-400 text-white placeholder-gray-400"
+            />
+            <button
+              onClick={handleSearch}
+              disabled={loading || !connected}
+              className="px-8 py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl font-semibold hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              {loading ? '🔍 Searching...' : '🔍 Search'}
+            </button>
           </div>
-        )}
+        </div>
 
-        {/* Results View */}
-        {view === 'results' && (
-          <div className="space-y-6 animate-fade-in">
-            <div className="flex items-center justify-between">
-              <h2 className="text-3xl font-bold text-white">
-                Search Results <span className="text-purple-400">({tracks.length})</span>
-              </h2>
-              <button
-                onClick={() => setView('search')}
-                className="px-4 py-2 bg-purple-900/50 text-purple-300 rounded-lg hover:bg-purple-800/50 transition"
-              >
-                ← New Search
-              </button>
-            </div>
-            <TrackList tracks={tracks} onSelectTrack={handleProcessTrack} />
-          </div>
-        )}
-
-        {/* Processing View */}
-        {view === 'processing' && (
-          <div className="space-y-6 animate-fade-in">
-            <h2 className="text-3xl font-bold text-white">Processing Jobs</h2>
+        {/* Results */}
+        {tracks.length > 0 && (
+          <div className="space-y-4">
+            <h2 className="text-2xl font-bold mb-4">🎵 Results ({tracks.length})</h2>
             <div className="grid gap-4">
-              {Array.from(processingJobs.values()).map((job) => (
-                <div key={job.id} className="bg-gray-800/50 rounded-xl p-6 border border-purple-800/30">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xl font-bold text-white">{job.id}</h3>
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      job.status === 'completed' ? 'bg-green-900/30 text-green-400' :
-                      job.status === 'failed' ? 'bg-red-900/30 text-red-400' :
-                      'bg-purple-900/30 text-purple-400'
-                    }`}>
-                      {job.status}
-                    </span>
+              {tracks.map((track) => (
+                <div
+                  key={track.id}
+                  className="bg-white/10 backdrop-blur-lg rounded-xl p-6 hover:bg-white/15 transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <h3 className="text-xl font-bold">{track.artist} - {track.title}</h3>
+                      <div className="flex gap-4 mt-2 text-sm text-gray-300">
+                        {track.year && <span>📅 {track.year}</span>}
+                        {track.bpm && <span>🥁 {track.bpm} BPM</span>}
+                        {track.key && <span>🎹 {track.key}</span>}
+                        {track.camelot && (
+                          <span className="px-2 py-1 bg-purple-500/30 rounded-lg font-mono">
+                            {track.camelot}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleGrab(track)}
+                      className="px-6 py-3 bg-gradient-to-r from-green-500 to-teal-500 rounded-xl font-semibold hover:from-green-600 hover:to-teal-600 transition-all"
+                    >
+                      ⬇ GRAB
+                    </button>
                   </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-400">{job.stage}</span>
-                      <span className="text-purple-400 font-medium">{job.progress}%</span>
-                    </div>
-                    <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-purple-600 to-pink-600 transition-all duration-500"
-                        style={{ width: `${job.progress}%` }}
-                      />
-                    </div>
-                  </div>
-                  {job.error && (
-                    <div className="mt-4 p-3 bg-red-900/20 border border-red-600/30 rounded-lg text-red-400 text-sm">
-                      {job.error}
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Library View */}
-        {view === 'library' && (
-          <div className="space-y-6 animate-fade-in">
-            <h2 className="text-3xl font-bold text-white">Your Library</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {samples.map((sample, idx) => (
-                <SampleCard key={idx} sample={sample} />
-              ))}
-              {samples.length === 0 && (
-                <div className="col-span-full text-center py-20 text-gray-500">
-                  <p className="text-xl">No samples yet</p>
-                  <p className="text-sm mt-2">Process some tracks to get started!</p>
-                </div>
-              )}
-            </div>
+        {/* Empty State */}
+        {!loading && tracks.length === 0 && query && (
+          <div className="text-center text-gray-400 py-12">
+            <p className="text-xl">No tracks found. Try a different search!</p>
           </div>
         )}
 
-        {/* SOTA Analysis View */}
-        {view === 'sota' && (
-          <div className="space-y-6 animate-fade-in">
-            <h2 className="text-3xl font-bold text-white">SOTA Analysis</h2>
-            <SOTAPanel />
-          </div>
-        )}
-
-        {/* Mashup Scorer View */}
-        {view === 'mashup' && (
-          <div className="space-y-6 animate-fade-in">
-            <h2 className="text-3xl font-bold text-white">Mashup Scorer</h2>
-            <MashupScorer />
-          </div>
-        )}
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-purple-800/30 mt-auto py-6 bg-black/20">
-        <div className="max-w-7xl mx-auto px-6 text-center">
-          <p className="text-sm text-gray-500">
-            Built for M4 Mini • Powered by Demucs, librosa, yt-dlp • SOTA Quality • Production Ready
-          </p>
-          <p className="text-xs text-gray-600 mt-1">
-            Music Matters v2.0 - The Ultimate DJ & Producer Automation Platform
-          </p>
+        {/* Footer */}
+        <div className="mt-16 text-center text-gray-400 text-sm">
+          <p>Music Matters v2.0 - Built by DJs, for DJs</p>
+          <p className="mt-2">Powered by Demucs, librosa & yt-dlp • Optimized for Apple Silicon</p>
         </div>
-      </footer>
+      </div>
     </div>
   );
 }

@@ -15,12 +15,14 @@ import type {
 } from '../types';
 
 // Use environment variable or detect sandbox URL
-const API_BASE = import.meta.env.VITE_API_URL || 
-  (window.location.hostname.includes('sandbox') 
+const API_BASE = (import.meta as any).env?.VITE_API_URL || 
+  (typeof window !== 'undefined' && window.location.hostname.includes('sandbox') 
     ? `https://8010-${window.location.hostname.split('-').slice(1).join('-')}/api`
     : 'http://localhost:8010/api');
 
-console.log('🎧 Music Matters API Base:', API_BASE);
+if (typeof window !== 'undefined') {
+  console.log('🎧 Music Matters API Base:', API_BASE);
+}
 
 const api = axios.create({
   baseURL: API_BASE,
