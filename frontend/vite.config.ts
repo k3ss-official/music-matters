@@ -12,13 +12,15 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    host: '0.0.0.0',
+    allowedHosts: ['all'], // Allow all hosts including sandbox domains
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:5555',
+        target: 'http://127.0.0.1:8010',
         changeOrigin: true,
       },
       '/socket.io': {
-        target: 'http://127.0.0.1:5555',
+        target: 'http://127.0.0.1:8010',
         ws: true,
       },
     },
