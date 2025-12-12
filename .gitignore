@@ -1,51 +1,59 @@
-# General Python
+# Python
 __pycache__/
 *.py[cod]
-*.so
-*.dylib
-*.egg
-*.egg-info/
-.eggs/
-.build/
-pip-wheel-metadata/
-dist/
-build/
+*$py.class
 .venv/
 venv/
 ENV/
 .env
-.env.*
+*.egg-info/
+dist/
+build/
 
-# Editors & OS
-.DS_Store
-.idea/
+# Node
+node_modules/
+dist/
+.npm
+package-lock.json
+
+# IDEs
 .vscode/
+.idea/
 *.swp
+*.swo
 
-# Testing caches
-.mypy_cache/
-.pytest_cache/
-.coverage
-htmlcov/
+# OS
+.DS_Store
+Thumbs.db
 
-# Project-specific data directories
-Tracks/
-tracks-new/
-misc/stems/
-raw-to-be-done/
-temp/
-cache/
+# Logs
+*.log
 logs/
-mm-files/
 
-# Audio and large binaries (keep sample assets elsewhere)
+# Temp files
+*.tmp
+*.temp
+.cache/
+
+# Audio files (don't commit processed tracks)
 *.wav
 *.mp3
-*.m4a
-*.opus
 *.flac
-*.zip
+*.m4a
 
-# Generated files
-*.log
+# Music Library (processed tracks)
+Music Matters/
+DJ_Library/
+DJ_Samples/
 
+# Demucs cache
+.demucs/
+
+# Testing
+.pytest_cache/
+coverage/
+*.cover
+
+# Tauri
+src-tauri/target/
+src-tauri/WixTools/

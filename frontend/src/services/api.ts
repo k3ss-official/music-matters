@@ -1,205 +1,171 @@
+/**
+ * API Service for communicating with the Python backend
+ */
+import axios from 'axios';
 import type {
-  IngestPayload,
-  JobProgress,
-  LoopPreview,
-  StageProgress,
-  SearchResult,
-  TrackQuery,
-  TrackListResponse,
-  TrackSummary,
+  Artist,
+  Track,
+  Sample,
+  AnalysisResult,
+  DownloadResult,
+  StemInfo,
+  StemResult,
+  TrackSearchResponse,
+  SampleExtractionResponse,
 } from '../types';
 
-const API_BASE = '/api/v1';
+const API_BASE = '/api';
 
-async function handleResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `Request failed with ${response.status}`);
+const api = axios.create({
+  baseURL: API_BASE,
+  timeout: 300000, // 5 minutes for long operations
+});
+
+// Health & Info
+export const checkHealth = async (): Promise<{ status: string; services: Record<string, boolean> }> => {
+  const response = await api.get('/health');
+  return response.data;
+};
+
+export const getAppInfo = async () => {
+  const response = await api.get('/info');
+  return response.data;
+};
+
+// Artist Search
+export const searchArtists = async (query: string): Promise<Artist[]> => {
+  const response = await api.get('/search/artists', { params: { q: query } });
+  return response.data.results;
+};
+
+// Track Search
+export const searchTracks = async (query: string, limit = 20): Promise<Track[]> => {
+  const response = await api.get('/search/tracks', { params: { q: query, limit } });
+  return response.data.results;
+};
+
+export const getArtistTracks = async (
+  artistName: string,
+  filters?: {
+    dateFrom?: string;
+    dateTo?: string;
+    trackTypes?: string[];
   }
-  return response.json() as Promise<T>;
-}
-
-export async function listTracks(): Promise<TrackSummary[]> {
-  const response = await fetch(`${API_BASE}/library/tracks`);
-  const data = await handleResponse<TrackListResponse>(response);
-  return data.items;
-}
-
-export async function searchTracks(query: TrackQuery): Promise<SearchResult[]> {
-  const response = await fetch(`${API_BASE}/library/search`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(query),
-  });
-  const payload = await handleResponse<RawSearchResult[]>(response);
-  return payload.map(toSearchResult);
-}
-
-export async function ingestSource(payload: IngestPayload): Promise<{
-  jobId: string;
-  trackId: string;
-}> {
-  const response = await fetch(`${API_BASE}/jobs/ingest`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  return handleResponse<{ job_id: string; track_id: string }>(response).then(
-    ({ job_id, track_id }) => ({
-      jobId: job_id,
-      trackId: track_id,
-    }),
-  );
-}
-
-export async function uploadFile(
-  file: File,
-  tags?: string[],
-  collection?: string,
-): Promise<{
-  jobId: string;
-  trackId: string;
-}> {
-  const formData = new FormData();
-  formData.append('file', file);
-  if (tags && tags.length > 0) {
-    formData.append('tags', tags.join(','));
+): Promise<TrackSearchResponse> => {
+  const params: Record<string, any> = {};
+  
+  if (filters?.dateFrom) params.date_from = filters.dateFrom;
+  if (filters?.dateTo) params.date_to = filters.dateTo;
+  if (filters?.trackTypes?.length) {
+    // Send multiple track_type params
+    const searchParams = new URLSearchParams();
+    filters.trackTypes.forEach(type => searchParams.append('track_type', type));
+    const response = await api.get(`/artist/${encodeURIComponent(artistName)}/tracks?${searchParams.toString()}`);
+    return response.data;
   }
-  if (collection) {
-    formData.append('collection', collection);
+  
+  const response = await api.get(`/artist/${encodeURIComponent(artistName)}/tracks`, { params });
+  return response.data;
+};
+
+// Download
+export const downloadTrack = async (
+  artist: string,
+  title: string,
+  url?: string
+): Promise<DownloadResult> => {
+  const response = await api.post('/download', { artist, title, url });
+  return response.data;
+};
+
+// Analysis
+export const analyzeTrack = async (filePath: string): Promise<AnalysisResult> => {
+  const response = await api.post('/analyze', { file_path: filePath });
+  return response.data;
+};
+
+// Sample Extraction
+export const extractSamples = async (
+  filePath: string,
+  options: {
+    artist?: string;
+    title?: string;
+    barCount?: number;
+    sectionPreference?: string;
+    extractStems?: boolean;
+    selectedStems?: string[];
+    maxSamples?: number;
   }
-
-  const response = await fetch(`${API_BASE}/jobs/upload`, {
-    method: 'POST',
-    body: formData,
+): Promise<SampleExtractionResponse> => {
+  const response = await api.post('/samples/extract', {
+    file_path: filePath,
+    artist: options.artist || 'Unknown',
+    title: options.title || 'Unknown',
+    bar_count: options.barCount || 16,
+    section_preference: options.sectionPreference,
+    extract_stems: options.extractStems || false,
+    selected_stems: options.selectedStems,
+    max_samples: options.maxSamples || 3,
   });
-  return handleResponse<{ job_id: string; track_id: string }>(response).then(
-    ({ job_id, track_id }) => ({
-      jobId: job_id,
-      trackId: track_id,
-    }),
-  );
-}
+  return response.data;
+};
 
-export async function fetchJob(jobId: string): Promise<JobProgress> {
-  const response = await fetch(`${API_BASE}/jobs/${jobId}`);
-  const payload = await handleResponse<RawJobProgress>(response);
-  return toJobProgress(payload);
-}
+export const extractCustomSample = async (
+  filePath: string,
+  startTime: number,
+  endTime: number,
+  options: {
+    artist?: string;
+    title?: string;
+    extractStems?: boolean;
+  }
+): Promise<Sample> => {
+  const response = await api.post('/samples/custom', {
+    file_path: filePath,
+    start_time: startTime,
+    end_time: endTime,
+    artist: options.artist || 'Unknown',
+    title: options.title || 'Unknown',
+    extract_stems: options.extractStems || false,
+  });
+  return response.data;
+};
 
-export async function listLoops(trackId: string, barLength?: number): Promise<LoopPreview[]> {
-  const query = barLength ? `?bar_length=${barLength}` : '';
-  const response = await fetch(`${API_BASE}/library/tracks/${trackId}/loops${query}`);
-  const payload = await handleResponse<RawLoopPreview[]>(response);
-  return payload.map(toLoopPreview);
-}
+export const listSamples = async (): Promise<{ name: string; path: string; size: number }[]> => {
+  const response = await api.get('/samples');
+  return response.data.samples;
+};
 
-export async function triggerLoopReslice(
-  trackId: string,
-  barLength: number,
-): Promise<LoopPreview[]> {
-  const response = await fetch(
-    `${API_BASE}/library/tracks/${trackId}/loops/reslice`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bar_length: barLength }),
-    },
-  );
-  const payload = await handleResponse<RawLoopPreview[]>(response);
-  return payload.map(toLoopPreview);
-}
+export const deleteSample = async (sampleId: string): Promise<{ deleted: string }> => {
+  const response = await api.delete(`/samples/${sampleId}`);
+  return response.data;
+};
 
-interface RawJobProgress {
-  job_id: string;
-  track_id: string;
-  status: 'queued' | 'running' | 'completed' | 'failed';
-  current_stage: string;
-  progress?: number;
-  eta?: string;
-  detail?: string;
-  stages: RawStageProgress[];
-  started_at?: string;
-  completed_at?: string;
-}
+// Stem Separation
+export const getStemInfo = async (): Promise<StemInfo> => {
+  const response = await api.get('/stems/info');
+  return response.data;
+};
 
-interface RawStageProgress {
-  id: string;
-  label: string;
-  progress: number;
-  status: 'pending' | 'running' | 'done' | 'error';
-  detail?: string | null;
-  eta_seconds?: number | null;
-}
+export const separateStems = async (
+  filePath: string,
+  selectedStems?: string[]
+): Promise<StemResult> => {
+  const response = await api.post('/stems/separate', {
+    file_path: filePath,
+    selected_stems: selectedStems,
+  });
+  return response.data;
+};
 
-interface RawLoopPreview {
-  id: string;
-  label: string;
-  start_bar: number;
-  bar_count: number;
-  stem: string;
-  bpm: number;
-  musical_key?: string | null;
-  energy?: number | null;
-  file_url?: string | null;
-}
+// Audio file URL helper
+export const getAudioUrl = (filename: string): string => {
+  return `${API_BASE}/audio/${encodeURIComponent(filename)}`;
+};
 
-interface RawSearchResult {
-  track_id: string;
-  title: string;
-  artist?: string | null;
-  source: string;
-  status: string;
-  confidence: number;
-}
+// File download helper
+export const getDownloadUrl = (filePath: string): string => {
+  return `${API_BASE}/download-file?path=${encodeURIComponent(filePath)}`;
+};
 
-function toJobProgress(raw: RawJobProgress): JobProgress {
-  return {
-    jobId: raw.job_id,
-    trackId: raw.track_id,
-    status: raw.status,
-    currentStage: (raw.current_stage ?? undefined) as JobProgress['currentStage'],
-    progress: raw.progress ?? undefined,
-    eta: raw.eta,
-    detail: raw.detail ?? undefined,
-    startedAt: raw.started_at,
-    completedAt: raw.completed_at,
-    stages: raw.stages.map(toStageProgress),
-  };
-}
-
-function toStageProgress(raw: RawStageProgress): StageProgress {
-  return {
-    id: raw.id as StageProgress['id'],
-    label: raw.label,
-    progress: raw.progress,
-    status: raw.status,
-    detail: raw.detail ?? undefined,
-    etaSeconds: raw.eta_seconds ?? undefined,
-  };
-}
-
-function toLoopPreview(raw: RawLoopPreview): LoopPreview {
-  return {
-    id: raw.id,
-    label: raw.label,
-    startBar: raw.start_bar,
-    barCount: raw.bar_count,
-    stem: raw.stem,
-    bpm: raw.bpm,
-    key: raw.musical_key ?? undefined,
-    energy: raw.energy ?? undefined,
-    fileUrl: raw.file_url ?? undefined,
-  };
-}
-
-function toSearchResult(raw: RawSearchResult): SearchResult {
-  return {
-    trackId: raw.track_id,
-    title: raw.title,
-    artist: raw.artist,
-    source: raw.source,
-    status: raw.status,
-    confidence: raw.confidence,
-  };
-}
+export default api;
