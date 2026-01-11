@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react';
+import SearchPanel from './components/SearchPanel';
+import WaveformView from './components/WaveformView';
+import NeuralMixPanel from './components/NeuralMixPanel';
+import LoopControlsPanel from './components/LoopControlsPanel';
+import HotCuesPanel from './components/HotCuesPanel';
+import ExportPanel from './components/ExportPanel';
 import './index.css';
 
-interface Track {
+export interface Track {
   id: string;
   artist: string;
   title: string;
@@ -9,13 +15,62 @@ interface Track {
   key?: string;
   camelot?: string;
   year?: number;
+  audioUrl?: string;
+  waveformData?: number[];
+  beats?: number[];
+  downbeats?: number[];
+  duration?: number;
+}
+
+export interface Loop {
+  id: string;
+  startTime: number;
+  endTime: number;
+  startBeat: number;
+  endBeat: number;
+  length: number; // in beats
+  color: string;
+  name?: string;
+}
+
+export interface StemLevels {
+  drums: number;
+  bass: number;
+  vocals: number;
+  guitar: number;
+  piano: number;
+  other: number;
 }
 
 function App() {
   const [connected, setConnected] = useState(false);
-  const [query, setQuery] = useState('');
-  const [tracks, setTracks] = useState<Track[]>([]);
+  const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [loading, setLoading] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  
+  // Playback state
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [loopEnabled, setLoopEnabled] = useState(false);
+  
+  // Loop state
+  const [loopStart, setLoopStart] = useState<number | null>(null);
+  const [loopEnd, setLoopEnd] = useState<number | null>(null);
+  const [loopLength, setLoopLength] = useState<number>(16); // beats
+  const [hotCues, setHotCues] = useState<Loop[]>([]);
+  const [selectedHotCue, setSelectedHotCue] = useState<string | null>(null);
+  
+  // Stem levels
+  const [stemLevels, setStemLevels] = useState<StemLevels>({
+    drums: 100,
+    bass: 100,
+    vocals: 100,
+    guitar: 100,
+    piano: 100,
+    other: 100,
+  });
+  const [soloedStem, setSoloedStem] = useState<keyof StemLevels | null>(null);
+  const [mutedStems, setMutedStems] = useState<Set<keyof StemLevels>>(new Set());
 
   // Check backend connection
   useEffect(() => {
@@ -32,131 +87,263 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleSearch = async () => {
-    if (!query.trim()) return;
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (!currentTrack) return;
+      
+      // Spacebar = play/pause
+      if (e.code === 'Space' && !e.target || (e.target as HTMLElement).tagName !== 'INPUT') {
+        e.preventDefault();
+        setIsPlaying(!isPlaying);
+      }
+      
+      // Number keys = set loop length (in beats)
+      const loopLengths: { [key: string]: number } = {
+        'Digit1': 1,
+        'Digit2': 2,
+        'Digit4': 4,
+        'Digit8': 8,
+        'Digit6': 16, // 6 key for 16 beats
+        'Digit3': 32, // 3 key for 32 beats
+      };
+      
+      if (loopLengths[e.code]) {
+        setLoopLength(loopLengths[e.code]);
+        if (loopStart !== null) {
+          // Auto-set loop end based on new length
+          const beatDuration = 60 / (currentTrack.bpm || 120);
+          setLoopEnd(loopStart + loopLengths[e.code] * beatDuration);
+        }
+      }
+      
+      // I key = set loop in point
+      if (e.code === 'KeyI') {
+        setLoopStart(currentTime);
+        const beatDuration = 60 / (currentTrack.bpm || 120);
+        setLoopEnd(currentTime + loopLength * beatDuration);
+      }
+      
+      // O key = set loop out point
+      if (e.code === 'KeyO') {
+        setLoopEnd(currentTime);
+      }
+      
+      // L key = toggle loop on/off
+      if (e.code === 'KeyL') {
+        setLoopEnabled(!loopEnabled);
+      }
+      
+      // Arrow keys = move loop
+      if (e.code === 'ArrowLeft' && loopStart !== null && loopEnd !== null) {
+        const beatDuration = 60 / (currentTrack.bpm || 120);
+        setLoopStart(loopStart - beatDuration);
+        setLoopEnd(loopEnd - beatDuration);
+      }
+      if (e.code === 'ArrowRight' && loopStart !== null && loopEnd !== null) {
+        const beatDuration = 60 / (currentTrack.bpm || 120);
+        setLoopStart(loopStart + beatDuration);
+        setLoopEnd(loopEnd + beatDuration);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [currentTrack, isPlaying, currentTime, loopStart, loopEnd, loopLength, loopEnabled]);
+
+  const handleTrackSelected = async (track: Track) => {
     setLoading(true);
     try {
-      const res = await fetch('/api/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
-      });
+      // Fetch track details with beat detection
+      const res = await fetch(`/api/track/${track.id}/analyze`);
       const data = await res.json();
-      setTracks(data.tracks || []);
+      
+      setCurrentTrack({
+        ...track,
+        audioUrl: data.audioUrl,
+        waveformData: data.waveformData,
+        beats: data.beats,
+        downbeats: data.downbeats,
+        duration: data.duration,
+        bpm: data.bpm,
+        key: data.key,
+      });
+      
+      // Reset state
+      setLoopStart(null);
+      setLoopEnd(null);
+      setHotCues([]);
+      setCurrentTime(0);
+      setIsPlaying(false);
     } catch (err) {
-      console.error('Search failed:', err);
+      console.error('Failed to load track:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleGrab = async (track: Track) => {
+  const handleSaveLoop = () => {
+    if (loopStart === null || loopEnd === null || !currentTrack) return;
+    
+    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2'];
+    const newLoop: Loop = {
+      id: `loop-${Date.now()}`,
+      startTime: loopStart,
+      endTime: loopEnd,
+      startBeat: Math.floor(loopStart / (60 / (currentTrack.bpm || 120))),
+      endBeat: Math.floor(loopEnd / (60 / (currentTrack.bpm || 120))),
+      length: loopLength,
+      color: colors[hotCues.length % colors.length],
+      name: `Loop ${hotCues.length + 1}`,
+    };
+    
+    setHotCues([...hotCues, newLoop]);
+  };
+
+  const handleLoadHotCue = (loop: Loop) => {
+    setLoopStart(loop.startTime);
+    setLoopEnd(loop.endTime);
+    setLoopLength(loop.length);
+    setSelectedHotCue(loop.id);
+    setCurrentTime(loop.startTime);
+  };
+
+  const handleExport = async (exportStems: boolean, dawTarget?: string) => {
+    if (!currentTrack || loopStart === null || loopEnd === null) return;
+    
+    setProcessing(true);
     try {
-      const res = await fetch('/api/grab', {
+      const res = await fetch('/api/loop/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          track_id: track.id,
-          artist: track.artist,
-          title: track.title,
-          year: track.year,
+          track_id: currentTrack.id,
+          start_time: loopStart,
+          end_time: loopEnd,
+          export_stems: exportStems,
+          stem_levels: exportStems ? stemLevels : undefined,
+          daw_target: dawTarget,
         }),
       });
+      
       const data = await res.json();
-      alert(`Processing started! Job ID: ${data.job_id}`);
+      alert(`Loop exported! Files: ${data.files.join(', ')}`);
     } catch (err) {
-      console.error('GRAB failed:', err);
+      console.error('Export failed:', err);
+      alert('Export failed. Check console for details.');
+    } finally {
+      setProcessing(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-teal-800 to-blue-900 text-white p-8">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white">
       {/* Header */}
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-400">
-              🎧 Music Matters v2.0
-            </h1>
-            <p className="text-gray-300 mt-2">SOTA DJ & Producer Automation Platform</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className={`w-3 h-3 rounded-full ${connected ? 'bg-green-400' : 'bg-red-400'} animate-pulse`} />
-            <span className="text-sm">{connected ? 'Connected' : 'Disconnected'}</span>
-          </div>
-        </div>
-
-        {/* Search */}
-        <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 mb-8">
-          <div className="flex gap-4">
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-              placeholder="Search for tracks..."
-              className="flex-1 px-4 py-3 bg-white/5 border border-white/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-400 text-white placeholder-gray-400"
-            />
-            <button
-              onClick={handleSearch}
-              disabled={loading || !connected}
-              className="px-8 py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl font-semibold hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-            >
-              {loading ? '🔍 Searching...' : '🔍 Search'}
-            </button>
-          </div>
-        </div>
-
-        {/* Results */}
-        {tracks.length > 0 && (
-          <div className="space-y-4">
-            <h2 className="text-2xl font-bold mb-4">🎵 Results ({tracks.length})</h2>
-            <div className="grid gap-4">
-              {tracks.map((track) => (
-                <div
-                  key={track.id}
-                  className="bg-white/10 backdrop-blur-lg rounded-xl p-6 hover:bg-white/15 transition-all"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <h3 className="text-xl font-bold">{track.artist} - {track.title}</h3>
-                      <div className="flex gap-4 mt-2 text-sm text-gray-300">
-                        {track.year && <span>📅 {track.year}</span>}
-                        {track.bpm && <span>🥁 {track.bpm} BPM</span>}
-                        {track.key && <span>🎹 {track.key}</span>}
-                        {track.camelot && (
-                          <span className="px-2 py-1 bg-purple-500/30 rounded-lg font-mono">
-                            {track.camelot}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleGrab(track)}
-                      className="px-6 py-3 bg-gradient-to-r from-green-500 to-teal-500 rounded-xl font-semibold hover:from-green-600 hover:to-teal-600 transition-all"
-                    >
-                      ⬇ GRAB
-                    </button>
-                  </div>
+      <div className="border-b border-white/10 bg-black/30 backdrop-blur-lg">
+        <div className="max-w-[1920px] mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-400">
+                🎧 Music Matters
+              </h1>
+              <p className="text-gray-400 text-sm mt-1">Loop Extraction & Stem Control</p>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${connected ? 'bg-green-400' : 'bg-red-400'} animate-pulse`} />
+                <span className="text-sm text-gray-400">{connected ? 'Connected' : 'Disconnected'}</span>
+              </div>
+              {currentTrack && (
+                <div className="text-sm text-gray-400">
+                  {currentTrack.bpm && <span className="mr-4">🥁 {currentTrack.bpm} BPM</span>}
+                  {currentTrack.key && <span>🎹 {currentTrack.key}</span>}
                 </div>
-              ))}
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="max-w-[1920px] mx-auto px-6 py-6">
+        {!currentTrack ? (
+          <SearchPanel
+            connected={connected}
+            loading={loading}
+            onTrackSelected={handleTrackSelected}
+          />
+        ) : (
+          <div className="grid grid-cols-12 gap-6">
+            {/* Left Panel - Neural Mix */}
+            <div className="col-span-3">
+              <NeuralMixPanel
+                stemLevels={stemLevels}
+                setStemLevels={setStemLevels}
+                soloedStem={soloedStem}
+                setSoloedStem={setSoloedStem}
+                mutedStems={mutedStems}
+                setMutedStems={setMutedStems}
+              />
+            </div>
+
+            {/* Center Panel - Waveform & Controls */}
+            <div className="col-span-6 space-y-4">
+              <WaveformView
+                track={currentTrack}
+                currentTime={currentTime}
+                setCurrentTime={setCurrentTime}
+                isPlaying={isPlaying}
+                setIsPlaying={setIsPlaying}
+                loopStart={loopStart}
+                loopEnd={loopEnd}
+                setLoopStart={setLoopStart}
+                loopEnabled={loopEnabled}
+                hotCues={hotCues}
+              />
+              
+              <LoopControlsPanel
+                loopLength={loopLength}
+                setLoopLength={setLoopLength}
+                loopStart={loopStart}
+                loopEnd={loopEnd}
+                setLoopStart={setLoopStart}
+                setLoopEnd={setLoopEnd}
+                loopEnabled={loopEnabled}
+                setLoopEnabled={setLoopEnabled}
+                currentTime={currentTime}
+                track={currentTrack}
+                onSaveLoop={handleSaveLoop}
+              />
+            </div>
+
+            {/* Right Panel - Hot Cues & Export */}
+            <div className="col-span-3 space-y-4">
+              <HotCuesPanel
+                hotCues={hotCues}
+                selectedHotCue={selectedHotCue}
+                onLoadHotCue={handleLoadHotCue}
+                onDeleteHotCue={(id) => setHotCues(hotCues.filter(h => h.id !== id))}
+              />
+              
+              <ExportPanel
+                onExport={handleExport}
+                processing={processing}
+                hasLoop={loopStart !== null && loopEnd !== null}
+              />
             </div>
           </div>
         )}
-
-        {/* Empty State */}
-        {!loading && tracks.length === 0 && query && (
-          <div className="text-center text-gray-400 py-12">
-            <p className="text-xl">No tracks found. Try a different search!</p>
-          </div>
-        )}
-
-        {/* Footer */}
-        <div className="mt-16 text-center text-gray-400 text-sm">
-          <p>Music Matters v2.0 - Built by DJs, for DJs</p>
-          <p className="mt-2">Powered by Demucs, librosa & yt-dlp • Optimized for Apple Silicon</p>
-        </div>
       </div>
+
+      {/* Loading Overlay */}
+      {(loading || processing) && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-gray-900 rounded-2xl p-8 text-center">
+            <div className="w-16 h-16 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-xl font-semibold">{loading ? 'Loading track...' : 'Processing export...'}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
