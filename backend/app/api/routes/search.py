@@ -5,11 +5,12 @@ Multi-source track search with intelligent filtering
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from app.api.schemas import SearchRequest, SearchResult
 
-router = APIRouter(prefix="/search", tags=["search"])
+router = APIRouter(tags=["search"])
 
 
-class SearchRequest(BaseModel):
+class ArtistSearchRequest(BaseModel):
     artist: str
     date_from: Optional[str] = None
     date_to: Optional[str] = None
@@ -22,8 +23,8 @@ class TrackSearchRequest(BaseModel):
     limit: int = 20
 
 
-@router.post("/artist")
-async def search_by_artist(request: SearchRequest):
+@router.post("/search/artist")
+async def search_by_artist(request: ArtistSearchRequest):
     """Search for tracks by artist name with filters."""
     # Import here to avoid circular dependencies
     from app.services.search.metadata_service import get_metadata_service
@@ -46,22 +47,63 @@ async def search_by_artist(request: SearchRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/tracks")
-async def search_tracks(request: TrackSearchRequest):
-    """Search for tracks by title/query."""
+@router.get("/search/tracks")
+async def search_tracks_get(q: str = "", limit: int = 20):
+    """Search for tracks via GET (frontend expectation)."""
+    from app.api.schemas import SearchRequest
+    from app.services.pipeline import pipeline
+    payload = SearchRequest(query=q)
+    results = pipeline.search_tracks(payload)
+    return {
+        "results": [
+            {
+                "id": str(r.track_id),
+                "artist": r.artist,
+                "title": r.title,
+                "status": r.status,
+                "source": r.source
+            }
+            for r in results[:limit]
+        ]
+    }
+
+
+@router.get("/search/artists")
+async def search_artists_get(q: str = ""):
+    """Search for artists via GET."""
     from app.services.search.metadata_service import get_metadata_service
-    
-    try:
-        service = get_metadata_service()
-        tracks = service.search_tracks(query=request.query, limit=request.limit)
-        
-        return {
-            "query": request.query,
-            "count": len(tracks),
-            "tracks": [t.to_dict() for t in tracks]
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    service = get_metadata_service()
+    artists = service.search_artists(q)
+    return {
+        "results": [
+            {
+                "id": a.get("id"),
+                "name": a.get("name"),
+                "type": a.get("type"),
+                "country": a.get("country")
+            }
+            for a in artists
+        ]
+    }
+
+
+@router.post("/search")
+async def search_tracks_general(payload: SearchRequest):
+    """General search across library and metadata."""
+    from app.services.pipeline import pipeline
+    results = pipeline.search_tracks(payload)
+    return {
+        "tracks": [
+            {
+                "id": str(r.track_id),
+                "artist": r.artist,
+                "title": r.title,
+                "status": r.status,
+                "source": r.source
+            }
+            for r in results
+        ]
+    }
 
 
 @router.get("/preview/{track_id}")

@@ -127,28 +127,26 @@ export default function NeuralMixPanel({
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => handleSolo(key)}
-                    className={`w-8 h-8 rounded-md text-xs font-bold transition-all ${
-                      isSoloed
+                    className={`w-8 h-8 rounded-md text-xs font-bold transition-all ${isSoloed
                         ? 'bg-yellow-500 text-black'
                         : 'bg-white/10 hover:bg-white/20 text-gray-400'
-                    }`}
+                      }`}
                   >
                     S
                   </button>
                   <button
                     onClick={() => handleMute(key)}
-                    className={`w-8 h-8 rounded-md text-xs font-bold transition-all ${
-                      isMuted
+                    className={`w-8 h-8 rounded-md text-xs font-bold transition-all ${isMuted
                         ? 'bg-red-500 text-white'
                         : 'bg-white/10 hover:bg-white/20 text-gray-400'
-                    }`}
+                      }`}
                   >
                     M
                   </button>
                   <span className="text-xs font-mono w-10 text-right">{level}%</span>
                 </div>
               </div>
-              
+
               {/* Vertical Fader */}
               <div className="relative h-32 bg-white/5 rounded-lg overflow-hidden">
                 <div
@@ -166,7 +164,10 @@ export default function NeuralMixPanel({
                   value={level}
                   onChange={(e) => handleLevelChange(key, parseInt(e.target.value))}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  style={{ writingMode: 'bt-lr', WebkitAppearance: 'slider-vertical' }}
+                  style={{
+                    writingMode: 'vertical-lr' as any,
+                    WebkitAppearance: 'slider-vertical' as any
+                  }}
                 />
               </div>
             </div>

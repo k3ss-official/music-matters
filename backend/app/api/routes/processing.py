@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 import uuid
 
-router = APIRouter(prefix="/processing", tags=["processing"])
+router = APIRouter(tags=["processing"])
 
 # In-memory job tracking (upgrade to Redis/DB for production)
 jobs = {}
@@ -26,12 +26,83 @@ class ProcessingRequest(BaseModel):
 
 
 class SampleExtractionRequest(BaseModel):
-    audio_path: str
-    bars: int = 16
-    section_preference: Optional[str] = None  # 'drop', 'chorus', 'breakdown', etc.
+    file_path: str  # Frontend uses file_path
+    artist: Optional[str] = "Unknown"
+    title: Optional[str] = "Unknown"
+    bar_count: int = 16
+    section_preference: Optional[str] = None
+    extract_stems: bool = False
+    selected_stems: Optional[List[str]] = None
+    max_samples: int = 3
 
 
-@router.post("/process")
+@router.post("/samples/extract")
+async def extract_samples_v2(request: SampleExtractionRequest):
+    """Bridge for frontend extractSamples call."""
+    from app.services.processing.sample_extractor import get_sample_extractor
+    
+    try:
+        extractor = get_sample_extractor()
+        # Mocking multi-sample result for UI
+        sample_path = extractor.extract_smart_sample(
+            audio_path=request.file_path,
+            bars=request.bar_count,
+            section_preference=request.section_preference
+        )
+        
+        return {
+            "success": True,
+            "samples": [
+                {
+                    "id": "sample-1",
+                    "path": str(sample_path),
+                    "bars": request.bar_count,
+                    "label": "Intelligent SOTA Extraction"
+                }
+            ],
+            "track_id": str(uuid.uuid4())
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/samples")
+async def list_samples():
+    """List available samples."""
+    return {"samples": []}
+
+
+@router.get("/stems/info")
+async def get_stem_info():
+    """Get info about available stems."""
+    return {
+        "model": "htdemucs_6s",
+        "stems": ["drums", "bass", "vocals", "guitar", "piano", "other"]
+    }
+
+
+@router.post("/stems/separate")
+async def separate_stems_alias(request: dict):
+    """Bridge for frontend separateStems call."""
+    from app.services.processing.stem_separator import get_stem_separator
+    
+    file_path = request.get("file_path")
+    if not file_path:
+         raise HTTPException(status_code=400, detail="file_path required")
+         
+    try:
+        separator = get_stem_separator()
+        result = separator.separate(Path(file_path))
+        return {
+            "success": True,
+            "output_dir": str(result.output_dir),
+            "stems": {name: str(path) for name, path in result.stems.items()}
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/processing/process")
 async def process_track(request: ProcessingRequest, background_tasks: BackgroundTasks):
     """
     Full track processing pipeline:

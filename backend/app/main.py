@@ -11,7 +11,7 @@ The ultimate DJ & producer automation platform combining:
 """
 import logging
 from pathlib import Path
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -61,13 +61,13 @@ async def serve_audio(path: str):
     file_path = settings.MUSIC_LIBRARY / path
     
     if not file_path.exists():
-        return {"error": "File not found"}, 404
+        raise HTTPException(status_code=404, detail="File not found")
     
     # Security: ensure path is within library
     try:
         file_path.resolve().relative_to(settings.MUSIC_LIBRARY.resolve())
-    except ValueError:
-        return {"error": "Access denied"}, 403
+    except (ValueError, RuntimeError):
+        raise HTTPException(status_code=403, detail="Access denied")
     
     return FileResponse(
         file_path,

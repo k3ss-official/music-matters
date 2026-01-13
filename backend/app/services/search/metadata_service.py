@@ -4,10 +4,9 @@ Combines MusicBrainz, Discogs, and Spotify for comprehensive artist/track data
 """
 import time
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 from dataclasses import dataclass, asdict
 from datetime import datetime
-from functools import lru_cache
 from cachetools import TTLCache
 
 import musicbrainzngs
@@ -15,7 +14,7 @@ import discogs_client
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 
-from config import (
+from app.config import (
     MUSICBRAINZ_RATE_LIMIT, DISCOGS_RATE_LIMIT, SPOTIFY_RATE_LIMIT,
     SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, DISCOGS_TOKEN,
     METADATA_CACHE_TTL, SEARCH_CACHE_TTL

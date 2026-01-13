@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/analysis", tags=["analysis"])
+router = APIRouter(tags=["analysis"])
 
 
 class AnalysisRequest(BaseModel):

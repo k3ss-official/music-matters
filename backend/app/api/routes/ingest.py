@@ -23,6 +23,18 @@ async def enqueue_ingest(payload: IngestRequest) -> IngestResponse:
         raise HTTPException(status_code=400, detail=str(exc))
 
 
+@router.post("/download", response_model=IngestResponse, status_code=202)
+async def download_track_alias(request: dict) -> IngestResponse:
+    """Bridge for frontend downloadTrack call."""
+    url = request.get("url")
+    if not url:
+        # If no URL, might be just metadata ingest (placeholder)
+        raise HTTPException(status_code=400, detail="URL required for download")
+    
+    payload = IngestRequest(source=url)
+    return pipeline.queue_ingest(payload)
+
+
 @router.post("/upload", response_model=IngestResponse, status_code=202)
 async def upload_and_ingest(
     file: UploadFile = File(...),

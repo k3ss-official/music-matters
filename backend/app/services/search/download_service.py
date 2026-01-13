@@ -14,7 +14,7 @@ import json
 
 import yt_dlp
 
-from config import (
+from app.config import (
     DOWNLOADS_DIR, TEMP_DIR, YTDLP_OPTIONS, AUDIO_SOURCES,
     SAMPLE_RATE, AUDIO_FORMAT
 )
@@ -50,9 +50,10 @@ class DownloadResult:
 class DownloadService:
     """Service for downloading audio tracks from various sources"""
     
-    def __init__(self):
+    def __init__(self, config=None):
         self.downloads_dir = DOWNLOADS_DIR
         self.temp_dir = TEMP_DIR
+        self.config = config
         
     def _get_safe_filename(self, title: str, artist: str) -> str:
         """Generate a safe filename from title and artist"""

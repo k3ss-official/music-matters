@@ -70,6 +70,66 @@ class Settings(BaseSettings):
     ENABLE_CACHE: bool = True
     CACHE_TTL: int = 86400  # 24 hours
     
+    # Metadata Service
+    MUSICBRAINZ_RATE_LIMIT: float = 1.0
+    DISCOGS_RATE_LIMIT: float = 2.0
+    SPOTIFY_RATE_LIMIT: float = 0.1
+    METADATA_CACHE_TTL: int = 604800  # 7 days
+    SEARCH_CACHE_TTL: int = 86400    # 1 day
+    
+    # Paths & Dirs
+    DATA_DIR: Path = Path.home() / "Music Matters" / "Data"
+    STEMS_DIR: Path = Path.home() / "Music Matters" / "Stems"
+    SAMPLES_DIR: Path = Path.home() / "Music Matters" / "Samples"
+    LOOPS_DIR: Path = Path.home() / "Music Matters" / "Loops"
+    PROJECTS_DIR: Path = Path.home() / "Music Matters" / "Projects"
+    DOWNLOADS_DIR: Path = Path.home() / "Music Matters" / "Downloads"
+    DEMUCS_OVERLAP: float = 0.25
+    DEFAULT_BAR_LENGTH: int = 16
+    MIN_SAMPLE_BARS: int = 4
+    MAX_SAMPLE_BARS: int = 64
+    
+    @property
+    def workspace_root(self) -> Path:
+        """Root directory of the project."""
+        return Path(__file__).parent.parent.parent
+
+    @property
+    def resolved_cache_dir(self) -> Path:
+        return self.CACHE_DIR.expanduser().resolve()
+
+    @property
+    def resolved_downloads_dir(self) -> Path:
+        return self.DOWNLOADS_DIR.expanduser().resolve()
+
+    @property
+    def resolved_stems_dir(self) -> Path:
+        return self.STEMS_DIR.expanduser().resolve()
+
+    @property
+    def resolved_loops_dir(self) -> Path:
+        return self.LOOPS_DIR.expanduser().resolve()
+
+    @property
+    def resolved_projects_dir(self) -> Path:
+        return self.PROJECTS_DIR.expanduser().resolve()
+    
+    # Audio Analysis Internals
+    ENERGY_HOP_LENGTH: int = 512
+    ENERGY_FRAME_LENGTH: int = 2048
+    MIN_SECTION_LENGTH_SECONDS: float = 8.0
+    SECTION_TYPES: List[str] = field(default_factory=lambda: [
+        "intro", "verse", "chorus", "breakdown", "drop", "bridge", "outro"
+    ])
+    
+    # yt-dlp
+    YTDLP_OPTIONS: Dict[str, Any] = field(default_factory=lambda: {
+        'format': 'bestaudio/best',
+        'noplaylist': True,
+        'quiet': True,
+        'no_warnings': True,
+    })
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
@@ -208,6 +268,29 @@ class TrackOutput:
             "fingerprint": self.fingerprint,
         }
 
+    def to_info_txt(self) -> str:
+        """Generate a human-readable info summary for the track."""
+        lines = [
+            f"ARTIST: {self.artist}",
+            f"TITLE: {self.title}",
+            f"YEAR: {self.year or 'Unknown'}",
+            f"BPM: {self.bpm:.1f}",
+            f"KEY: {self.key} ({self.camelot})",
+            f"DURATION: {self.duration:.1f}s",
+            "",
+            "--- ANALYSIS ---",
+        ]
+        
+        for s in self.structure:
+            lines.append(f"{s.get('name', 'Section').upper()}: {s.get('start_time', 0):.1f}s - {s.get('end_time', 0):.1f}s")
+        
+        lines.append("")
+        lines.append("--- STEMS ---")
+        for stem in self.stems:
+            lines.append(f"✓ {stem.upper()}")
+            
+        return "\n".join(lines)
+
 
 # Initialize directories on import
 def init_directories():
@@ -221,3 +304,71 @@ def init_directories():
 # Create global settings instance
 settings = Settings()
 init_directories()
+
+# Export settings as top-level constants for compatibility with services
+APP_NAME = settings.APP_NAME
+APP_VERSION = settings.APP_VERSION
+DEBUG = settings.DEBUG
+HOST = settings.HOST
+PORT = settings.PORT
+RELOAD = settings.RELOAD
+
+MUSIC_LIBRARY = settings.MUSIC_LIBRARY
+DJ_LIBRARY = settings.MUSIC_LIBRARY  # Alias
+DJ_LIBRARY_DIR = settings.MUSIC_LIBRARY  # Alias
+CACHE_DIR = settings.CACHE_DIR
+TEMP_DIR = settings.TEMP_DIR
+DATA_DIR = settings.DATA_DIR
+STEMS_DIR = settings.STEMS_DIR
+SAMPLES_DIR = settings.SAMPLES_DIR
+LOOPS_DIR = settings.LOOPS_DIR
+PROJECTS_DIR = settings.PROJECTS_DIR
+DOWNLOADS_DIR = settings.DOWNLOADS_DIR
+
+SAMPLE_RATE = settings.SAMPLE_RATE
+BIT_DEPTH = settings.BIT_DEPTH
+AUDIO_FORMAT = settings.AUDIO_FORMAT
+
+DEMUCS_MODEL = settings.DEMUCS_MODEL
+DEMUCS_DEVICE = settings.DEMUCS_DEVICE
+DEMUCS_SHIFTS = settings.DEMUCS_SHIFTS
+DEMUCS_STEMS = settings.DEMUCS_STEMS
+DEMUCS_OVERLAP = settings.DEMUCS_OVERLAP
+
+SAMPLE_BAR_OPTIONS = settings.SAMPLE_BAR_OPTIONS
+DEFAULT_SAMPLE_BARS = settings.DEFAULT_SAMPLE_BARS
+LOOP_BAR_LENGTHS = settings.LOOP_BAR_LENGTHS
+DEFAULT_BAR_LENGTH = settings.DEFAULT_BAR_LENGTH
+MIN_SAMPLE_BARS = settings.MIN_SAMPLE_BARS
+MAX_SAMPLE_BARS = settings.MAX_SAMPLE_BARS
+
+ENERGY_HOP_LENGTH = settings.ENERGY_HOP_LENGTH
+ENERGY_FRAME_LENGTH = settings.ENERGY_FRAME_LENGTH
+MIN_SECTION_LENGTH_SECONDS = settings.MIN_SECTION_LENGTH_SECONDS
+SECTION_TYPES = settings.SECTION_TYPES
+
+AUDIO_SOURCES = settings.AUDIO_SOURCES
+YTDLP_FORMAT = settings.YTDLP_FORMAT
+YTDLP_QUALITY = settings.YTDLP_QUALITY
+YTDLP_OPTIONS = settings.YTDLP_OPTIONS
+
+SPOTIFY_CLIENT_ID = settings.SPOTIFY_CLIENT_ID
+SPOTIFY_CLIENT_SECRET = settings.SPOTIFY_CLIENT_SECRET
+DISCOGS_TOKEN = settings.DISCOGS_TOKEN
+MUSICBRAINZ_USER_AGENT = settings.MUSICBRAINZ_USER_AGENT
+
+MIN_BPM = settings.MIN_BPM
+MAX_BPM = settings.MAX_BPM
+ENABLE_SOTA_ANALYSIS = settings.ENABLE_SOTA_ANALYSIS
+ENABLE_FINGERPRINTING = settings.ENABLE_FINGERPRINTING
+
+MAX_CONCURRENT_JOBS = settings.MAX_CONCURRENT_JOBS
+JOB_TIMEOUT = settings.JOB_TIMEOUT
+ENABLE_CACHE = settings.ENABLE_CACHE
+CACHE_TTL = settings.CACHE_TTL
+
+MUSICBRAINZ_RATE_LIMIT = settings.MUSICBRAINZ_RATE_LIMIT
+DISCOGS_RATE_LIMIT = settings.DISCOGS_RATE_LIMIT
+SPOTIFY_RATE_LIMIT = settings.SPOTIFY_RATE_LIMIT
+METADATA_CACHE_TTL = settings.METADATA_CACHE_TTL
+SEARCH_CACHE_TTL = settings.SEARCH_CACHE_TTL

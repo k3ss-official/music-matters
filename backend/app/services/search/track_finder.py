@@ -5,7 +5,6 @@ Find any track: by artist, by memory, by vibe.
 import re
 import json
 import logging
-import hashlib
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
@@ -13,11 +12,10 @@ from datetime import datetime
 import urllib.request
 import urllib.parse
 import urllib.error
-from concurrent.futures import ThreadPoolExecutor
 
 from app.config import (
-    CACHE_DIR, TEMP_DIR, AUDIO_SOURCES,
-    YTDLP_FORMAT, YTDLP_QUALITY,
+    CACHE_DIR, AUDIO_SOURCES,
+    YTDLP_QUALITY,
     SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
 )
 
@@ -494,7 +492,7 @@ class TrackFinder:
         ]
         
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            _proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
             
             # Find the downloaded file
             for f in output_dir.glob("*.wav"):
@@ -530,7 +528,7 @@ class TrackFinder:
         ]
         
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            _proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
             
             for f in output_dir.glob("*.wav"):
                 if f.stat().st_mtime > (datetime.now().timestamp() - 60):

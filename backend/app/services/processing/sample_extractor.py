@@ -10,12 +10,12 @@ from dataclasses import dataclass, asdict
 import numpy as np
 import soundfile as sf
 
-from config import (
+from app.config import (
     SAMPLES_DIR, SAMPLE_RATE, DEFAULT_SAMPLE_BARS,
     SAMPLE_BAR_OPTIONS, MIN_SAMPLE_BARS, MAX_SAMPLE_BARS
 )
-from services.audio_analyzer import get_audio_analyzer, AnalysisResult, Section
-from services.stem_separator import get_stem_manager
+from app.services.analysis.audio_analyzer import get_audio_analyzer, AnalysisResult, Section
+from app.services.processing.stem_separator import get_stem_manager
 
 logger = logging.getLogger(__name__)
 

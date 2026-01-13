@@ -11,7 +11,7 @@ import numpy as np
 import librosa
 import soundfile as sf
 
-from config import (
+from app.config import (
     SAMPLE_RATE, ENERGY_HOP_LENGTH, ENERGY_FRAME_LENGTH,
     MIN_SECTION_LENGTH_SECONDS, SECTION_TYPES, DEFAULT_SAMPLE_BARS
 )
