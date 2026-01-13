@@ -14,6 +14,7 @@ from app.api.routes import (
     jobs,
     status,
     ingest,
+    loop,
 )
 
 api_router = APIRouter()
@@ -28,3 +29,4 @@ api_router.include_router(library.router)
 api_router.include_router(jobs.router)
 api_router.include_router(status.router)
 api_router.include_router(ingest.router)
+api_router.include_router(loop.router)
