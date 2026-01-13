@@ -5,7 +5,8 @@ Multi-source track search with intelligent filtering
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from app.api.schemas import SearchRequest, SearchResult
+import yt_dlp
+import re
 
 router = APIRouter(tags=["search"])
 
@@ -14,7 +15,7 @@ class ArtistSearchRequest(BaseModel):
     artist: str
     date_from: Optional[str] = None
     date_to: Optional[str] = None
-    track_types: Optional[List[str]] = None  # ['original', 'remix', 'collaboration', 'production']
+    track_types: Optional[List[str]] = None
     limit: int = 50
 
 
@@ -23,25 +24,95 @@ class TrackSearchRequest(BaseModel):
     limit: int = 20
 
 
+def search_youtube(query: str, limit: int = 20) -> List[dict]:
+    """Search YouTube for tracks using yt-dlp."""
+    try:
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': True,
+            'default_search': 'ytsearch',
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            # Search YouTube
+            search_query = f"ytsearch{limit}:{query}"
+            results = ydl.extract_info(search_query, download=False)
+            
+            if not results or 'entries' not in results:
+                return []
+            
+            tracks = []
+            for entry in results['entries']:
+                if not entry:
+                    continue
+                    
+                # Parse artist and title from video title
+                title = entry.get('title', '')
+                artist, track_title = parse_artist_title(title)
+                
+                tracks.append({
+                    'id': entry.get('id', ''),
+                    'artist': artist,
+                    'title': track_title,
+                    'source': 'youtube',
+                    'url': f"https://www.youtube.com/watch?v={entry.get('id')}",
+                    'duration': entry.get('duration', 0),
+                    'thumbnail': entry.get('thumbnail', ''),
+                })
+            
+            return tracks
+            
+    except Exception as e:
+        print(f"YouTube search error: {e}")
+        return []
+
+
+def parse_artist_title(video_title: str) -> tuple[str, str]:
+    """
+    Parse artist and title from YouTube video title.
+    
+    Common formats:
+    - "Artist - Title"
+    - "Artist: Title"
+    - "Title by Artist"
+    - "Title (Artist)"
+    """
+    # Try "Artist - Title"
+    if ' - ' in video_title:
+        parts = video_title.split(' - ', 1)
+        return parts[0].strip(), parts[1].strip()
+    
+    # Try "Artist: Title"
+    if ': ' in video_title:
+        parts = video_title.split(': ', 1)
+        return parts[0].strip(), parts[1].strip()
+    
+    # Try "Title by Artist"
+    if ' by ' in video_title.lower():
+        parts = re.split(r' by ', video_title, flags=re.IGNORECASE)
+        return parts[1].strip(), parts[0].strip()
+    
+    # Try "Title (Artist)"
+    match = re.match(r'(.+?)\s*\((.+?)\)', video_title)
+    if match:
+        return match.group(2).strip(), match.group(1).strip()
+    
+    # Fallback: whole title
+    return "Unknown Artist", video_title
+
+
 @router.post("/search/artist")
 async def search_by_artist(request: ArtistSearchRequest):
-    """Search for tracks by artist name with filters."""
-    # Import here to avoid circular dependencies
-    from app.services.search.metadata_service import get_metadata_service
-    
+    """Search for tracks by artist name."""
     try:
-        service = get_metadata_service()
-        tracks = service.get_artist_tracks(
-            artist_name=request.artist,
-            date_from=request.date_from,
-            date_to=request.date_to,
-            track_types=request.track_types
-        )
+        query = request.artist
+        tracks = search_youtube(query, request.limit)
         
         return {
             "artist": request.artist,
             "count": len(tracks),
-            "tracks": [t.to_dict() for t in tracks[:request.limit]]
+            "tracks": tracks
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -50,64 +121,38 @@ async def search_by_artist(request: ArtistSearchRequest):
 @router.get("/search/tracks")
 async def search_tracks_get(q: str = "", limit: int = 20):
     """Search for tracks via GET (frontend expectation)."""
-    from app.api.schemas import SearchRequest
-    from app.services.pipeline import pipeline
-    payload = SearchRequest(query=q)
-    results = pipeline.search_tracks(payload)
-    return {
-        "results": [
-            {
-                "id": str(r.track_id),
-                "artist": r.artist,
-                "title": r.title,
-                "status": r.status,
-                "source": r.source
-            }
-            for r in results[:limit]
-        ]
-    }
+    if not q or q.strip() == "":
+        return {"results": []}
+    
+    try:
+        tracks = search_youtube(q, limit)
+        return {"results": tracks}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/search/artists")
 async def search_artists_get(q: str = ""):
     """Search for artists via GET."""
-    from app.services.search.metadata_service import get_metadata_service
-    service = get_metadata_service()
-    artists = service.search_artists(q)
-    return {
-        "results": [
-            {
-                "id": a.get("id"),
-                "name": a.get("name"),
-                "type": a.get("type"),
-                "country": a.get("country")
-            }
-            for a in artists
-        ]
-    }
+    # For MVP, return empty - can add MusicBrainz later
+    return {"results": []}
 
 
 @router.post("/search")
-async def search_tracks_general(payload: SearchRequest):
-    """General search across library and metadata."""
-    from app.services.pipeline import pipeline
-    results = pipeline.search_tracks(payload)
-    return {
-        "tracks": [
-            {
-                "id": str(r.track_id),
-                "artist": r.artist,
-                "title": r.title,
-                "status": r.status,
-                "source": r.source
-            }
-            for r in results
-        ]
-    }
+async def search_tracks_general(payload: TrackSearchRequest):
+    """General search across YouTube."""
+    try:
+        tracks = search_youtube(payload.query, payload.limit)
+        return {"tracks": tracks}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/preview/{track_id}")
 async def get_preview_url(track_id: str):
-    """Get preview URL for a track."""
-    # This would integrate with Spotify/YouTube for preview URLs
-    return {"track_id": track_id, "preview_url": None, "message": "Preview generation coming soon"}
+    """Get preview URL for a track (YouTube video ID)."""
+    return {
+        "track_id": track_id,
+        "preview_url": f"https://www.youtube.com/watch?v={track_id}",
+        "message": "YouTube preview"
+    }
