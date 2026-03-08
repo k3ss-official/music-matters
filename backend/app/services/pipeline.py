@@ -325,6 +325,15 @@ class PipelineOrchestrator:
 
         def _download() -> Path:
             if "://" in source:
+                import yt_dlp
+                try:
+                    with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True}) as ydl:
+                        info = ydl.extract_info(source, download=False)
+                        if info:
+                            track.title = info.get("title", track.title)
+                            track.artist = info.get("artist") or info.get("uploader", track.artist)
+                except Exception:
+                    pass
                 return self._downloader.download(source)
             source_path = Path(source).expanduser().resolve()
             if not source_path.exists():

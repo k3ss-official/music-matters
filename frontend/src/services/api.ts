@@ -101,6 +101,14 @@ export const getAudioUrl = (filename: string): string => {
   return `${API_BASE}/audio/${encodeURIComponent(filename)}`;
 };
 
+export const getTrackAudioUrl = (trackId: string): string => {
+  return `${API_BASE}/audio/tracks/${trackId}`;
+};
+
+export const getStemAudioUrl = (trackId: string, stemName: string): string => {
+  return `${API_BASE}/audio/stems/${trackId}/${stemName}`;
+};
+
 // File download helper
 export const getDownloadUrl = (filePath: string): string => {
   return `${API_BASE}/download-file?path=${encodeURIComponent(filePath)}`;

@@ -1,24 +1,42 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import './index.css';
-import { UploadPanel } from './components/UploadPanel';
-import { TrackHistory } from './components/TrackHistory';
-import { TrackWorkspace } from './components/TrackWorkspace';
-import type { TrackSummary, ProcessingOptions, JobProgress } from './types';
+
+import type { TrackSummary, JobProgress, ProcessingOptions, TrackDetailResponse, LoopPreview } from './types';
 import * as api from './services/api';
+
+import { SearchIngest } from './components/SearchIngest';
+import { QueuePanel } from './components/QueuePanel';
+import { LibraryBrowser } from './components/LibraryBrowser';
+import { CentreWorkspace } from './components/CentreWorkspace';
+import { AnalysisPanel } from './components/AnalysisPanel';
+import { StemLanes } from './components/StemLanes';
+import { ExportPanel } from './components/ExportPanel';
+import type WaveSurfer from 'wavesurfer.js';
 
 function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [tracks, setTracks] = useState<TrackSummary[]>([]);
   const [activeJobs, setActiveJobs] = useState<Record<string, JobProgress>>({});
+
+  // Selection State
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
+  const [trackDetail, setTrackDetail] = useState<TrackDetailResponse | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  // Waveform & Loop State
+  const [waveformReady, setWaveformReady] = useState(false);
+  const [regionStart, setRegionStart] = useState<number>(0);
+  const [regionEnd, setRegionEnd] = useState<number>(0);
+  const [selectedStems, setSelectedStems] = useState<string[]>([]);
+  const wavesurferRef = useRef<WaveSurfer | null>(null);
+  const regionsRef = useRef<any>(null);
 
   // Health check
   useEffect(() => {
     const checkHealth = async () => {
       try {
         const data = await api.checkHealth();
-        if (data.status === 'ok') setIsConnected(true);
-        else setIsConnected(false);
+        setIsConnected(data.status === 'ok');
       } catch {
         setIsConnected(false);
       }
@@ -53,9 +71,13 @@ function App() {
         jobs.forEach((j) => { jobMap[j.jobId] = j; });
         setActiveJobs(jobMap);
 
-        // Re-load tracks if any job just completed (basic heuristic)
+        // Re-load tracks if any job just completed
         if (jobs.some(j => j.status === 'completed')) {
           loadTracks();
+          // If the selected track just completed processing, refresh its details
+          if (selectedTrackId && jobs.some(j => j.status === 'completed' && j.trackId === selectedTrackId)) {
+            fetchTrackDetail(selectedTrackId);
+          }
         }
       } catch (e) {
         // ignore
@@ -64,20 +86,36 @@ function App() {
     pollJobs();
     const interval = setInterval(pollJobs, 3000);
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedTrackId]);
+
+  // Handle Track Selection
+  const handleTrackSelect = (id: string) => {
+    if (id === selectedTrackId) return;
+    setSelectedTrackId(id);
+    setWaveformReady(false);
+    setSelectedStems([]);
+    setRegionStart(0);
+    setRegionEnd(0);
+    fetchTrackDetail(id);
+  };
+
+  const fetchTrackDetail = async (id: string) => {
+    setDetailLoading(true);
+    try {
+      const detail = await api.getTrackDetail(id);
+      setTrackDetail(detail);
+    } catch (e) {
+      console.error('Failed to load track detail', e);
+      setTrackDetail(null);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
 
   const handleFileUpload = async (file: File, options: ProcessingOptions) => {
     try {
       const data = await api.uploadTrack(file, options);
-      setActiveJobs(prev => ({
-        ...prev,
-        [data.job_id]: {
-          jobId: data.job_id,
-          trackId: data.track_id,
-          status: 'queued',
-          stages: []
-        }
-      }));
+      addJobToQueue(data.job_id, data.track_id);
     } catch (e) {
       alert('Upload Failed!');
       console.error(e);
@@ -86,123 +124,116 @@ function App() {
 
   const handleUrlSubmit = async (url: string, options: ProcessingOptions) => {
     try {
-      const data = await api.ingestSource({
-        source: url,
-        options: options
-      });
-      setActiveJobs(prev => ({
-        ...prev,
-        [data.job_id]: {
-          jobId: data.job_id,
-          trackId: data.track_id,
-          status: 'queued',
-          stages: []
-        }
-      }));
+      const data = await api.ingestSource({ source: url, options });
+      addJobToQueue(data.job_id, data.track_id);
     } catch (e) {
       alert('Ingest Failed!');
       console.error(e);
     }
   };
 
+  const addJobToQueue = (jobId: string, trackId: string) => {
+    setActiveJobs(prev => ({
+      ...prev,
+      [jobId]: { jobId, trackId, status: 'queued', stages: [] }
+    }));
+    // Try to auto-select it if possible, allowing immediate feedback
+    handleTrackSelect(trackId);
+  };
+
+  const toggleStemSelection = (stem: string) => {
+    setSelectedStems(prev =>
+      prev.includes(stem) ? prev.filter(s => s !== stem) : [...prev, stem]
+    );
+  };
+
+  const navigateToLoop = (loop: LoopPreview) => {
+    alert(`Export complete! Loop ID: ${loop.id}`);
+  };
+
   return (
-    <div className="min-h-screen bg-[#0f0f13] text-white">
-      {/* Header */}
-      <header className="bg-black/50 backdrop-blur border-b border-gray-800 p-4 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-3xl">🎧</span>
-            <div>
-              <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-teal-400 to-purple-500">
-                Music Matters
-              </h1>
-              <p className="text-xs text-gray-400">Production & Slicing Suite</p>
+    <div className="h-screen w-full bg-[#0a0a0f] text-gray-300 flex flex-col overflow-hidden font-sans">
+      {/* HEADER */}
+      <header className="h-[60px] bg-[#12121a] border-b border-white/5 flex items-center justify-between px-6 flex-shrink-0 relative z-20 shadow-md">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#00d4ff] to-[#8b5cf6] p-0.5 shadow-[0_0_15px_rgba(0,212,255,0.4)]">
+            <div className="w-full h-full bg-[#12121a] rounded-md flex items-center justify-center text-white text-lg">
+              🎧
             </div>
           </div>
+          <div>
+            <h1 className="text-lg font-bold text-white tracking-wide">
+              Music <span className="text-[#00d4ff]">Matters</span>
+            </h1>
+          </div>
+        </div>
 
-          <div className="flex items-center gap-4">
-            {Object.keys(activeJobs).length > 0 && (
-              <div className="text-sm bg-purple-900/30 text-purple-400 px-3 py-1 rounded-full animate-pulse border border-purple-500/30">
-                {Object.keys(activeJobs).length} Active Job(s)
-              </div>
-            )}
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ${isConnected
-              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-              : 'bg-red-500/10 text-red-400 border-red-500/20'
-              }`}>
-              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400' : 'bg-red-500'}`} />
-              {isConnected ? 'Backend Ready' : 'Backend Offline'}
-            </div>
+        <div className="flex items-center gap-4">
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] uppercase font-bold tracking-widest border transition-colors ${isConnected
+              ? 'bg-[#00ff88]/10 text-[#00ff88] border-[#00ff88]/30'
+              : 'bg-[#ff3b5c]/10 text-[#ff3b5c] border-[#ff3b5c]/30'
+            }`}>
+            <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-[#00ff88] animate-pulse' : 'bg-[#ff3b5c]'}`} />
+            {isConnected ? 'Backend Online' : 'Backend Offline'}
           </div>
         </div>
       </header>
 
-      {/* Main Layout */}
-      <main className="max-w-7xl mx-auto p-4 md:p-6 pb-20">
-        {selectedTrackId ? (
-          <TrackWorkspace trackId={selectedTrackId} onClose={() => setSelectedTrackId(null)} />
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* 3-ZONE LAYOUT */}
+      <main className="flex-1 overflow-hidden flex text-sm">
 
-            <div className="lg:col-span-2 space-y-6">
-              {/* Upload & Ingest Panel */}
-              <UploadPanel
-                onFileUpload={handleFileUpload}
-                onUrlSubmit={handleUrlSubmit}
-              />
+        {/* LEFT SIDEBAR (280px) */}
+        <aside className="w-[280px] bg-[#0a0a0f] border-r border-white/5 flex flex-col p-4 gap-4 overflow-y-auto hide-scrollbar z-10 shrink-0">
+          <SearchIngest
+            onFileUpload={handleFileUpload}
+            onUrlSubmit={handleUrlSubmit}
+          />
+          <QueuePanel jobs={activeJobs} />
+          <LibraryBrowser
+            tracks={tracks}
+            onTrackSelect={handleTrackSelect}
+            selectedTrackId={selectedTrackId}
+            loading={tracks.length === 0}
+          />
+        </aside>
 
-              {/* Active Jobs Queue */}
-              {Object.values(activeJobs).length > 0 && (
-                <section className="bg-gray-900/50 p-6 rounded-2xl border border-gray-800 shadow-xl">
-                  <h2 className="text-xl font-bold text-white mb-4">Processing Queue</h2>
-                  <div className="space-y-4">
-                    {Object.values(activeJobs).map(job => (
-                      <div key={job.jobId} className="bg-black/40 border border-gray-700/50 p-4 rounded-xl relative overflow-hidden">
-                        <div className="flex justify-between text-sm mb-2">
-                          <div className="font-medium text-gray-300">Job {job.jobId.slice(0, 8)}</div>
-                          <div className="text-teal-400 font-bold uppercase tracking-wider text-xs">
-                            {job.currentStage || job.status}
-                          </div>
-                        </div>
+        {/* CENTRE WORKSPACE (flex-grow) */}
+        <section className="flex-1 p-6 overflow-y-auto hide-scrollbar relative z-0 min-w-[500px]">
+          <CentreWorkspace
+            trackId={selectedTrackId}
+            trackDetail={trackDetail}
+            regionStart={regionStart}
+            regionEnd={regionEnd}
+            onUpdateRegion={(s, e) => { setRegionStart(s); setRegionEnd(e); }}
+            wavesurferRef={wavesurferRef}
+            regionsRef={regionsRef}
+            waveformReady={waveformReady}
+            setWaveformReady={setWaveformReady}
+          />
+        </section>
 
-                        {/* Progress Bar overall */}
-                        <div className="h-1.5 w-full bg-gray-800 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-teal-500 transition-all duration-500 shadow-[0_0_10px_rgba(20,184,166,0.8)]"
-                            style={{ width: `${(job.progress || 0) * 100}%` }}
-                          />
-                        </div>
+        {/* RIGHT SIDEBAR (320px) */}
+        <aside className="w-[320px] bg-[#0a0a0f] border-l border-white/5 flex flex-col p-4 gap-4 overflow-y-auto hide-scrollbar z-10 shrink-0">
+          <AnalysisPanel loading={detailLoading} trackDetail={trackDetail} />
 
-                        {/* Individual stages */}
-                        <div className="flex gap-2 mt-4 overflow-x-auto text-xs pb-1">
-                          {job.stages?.map(stage => (
-                            <div key={stage.id} className={`flex-shrink-0 px-2 py-1 rounded transition-colors ${stage.status === 'done' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' :
-                              stage.status === 'running' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30 animate-pulse' :
-                                stage.status === 'error' ? 'bg-red-500/20 text-red-300 border border-red-500/30' :
-                                  'bg-gray-800 border border-gray-700 text-gray-500'
-                              }`}>
-                              {stage.label}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
-            </div>
+          <StemLanes
+            trackId={selectedTrackId || ''}
+            availableStems={trackDetail?.stems || []}
+            selectedStems={selectedStems}
+            onToggleStemSelection={toggleStemSelection}
+            loading={detailLoading}
+          />
 
-            {/* Sidebar: Library History */}
-            <div className="lg:col-span-1">
-              <TrackHistory
-                tracks={tracks}
-                onTrackSelect={(id) => setSelectedTrackId(id)}
-                selectedTrackId={selectedTrackId}
-              />
-            </div>
+          <ExportPanel
+            trackId={selectedTrackId || ''}
+            selectedStems={selectedStems}
+            regionStart={regionStart}
+            regionEnd={regionEnd}
+            onExportComplete={navigateToLoop}
+            disabled={!selectedTrackId || !waveformReady || detailLoading}
+          />
+        </aside>
 
-          </div>
-        )}
       </main>
     </div>
   );
