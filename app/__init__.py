@@ -1,1 +1,0 @@
-"""Music Matters application package."""

@@ -184,7 +184,7 @@ After integration:
 ```bash
 # Backend
 cd /Volumes/deep-1t/Users/k3ss/projects/music-matters
-conda activate music
+conda activate music-matters
 uvicorn app.main:app --reload --port 8010
 
 # Frontend

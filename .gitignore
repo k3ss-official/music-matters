@@ -57,3 +57,12 @@ coverage/
 # Tauri
 src-tauri/target/
 src-tauri/WixTools/
+
+# Ruff linter cache
+.ruff_cache/
+
+# Accidental tilde expansion (Demucs output bug)
+backend/~/
+
+# IDE workspace files
+*.code-workspace
