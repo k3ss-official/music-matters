@@ -84,6 +84,13 @@ export interface TrackListResponse {
   total: number;
 }
 
+export interface TrackDetailResponse extends TrackSummary {
+  metadata: Record<string, any>;
+  stems: string[];
+  loops: string[];
+  provenance: Record<string, any>;
+}
+
 // Additional types for DJ Sample Discovery integration
 export interface Artist {
   id: string;

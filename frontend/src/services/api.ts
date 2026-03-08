@@ -12,6 +12,13 @@ import type {
   StemResult,
   TrackSearchResponse,
   SampleExtractionResponse,
+  TrackSummary,
+  TrackListResponse,
+  TrackDetailResponse,
+  JobProgress,
+  IngestPayload,
+  ProcessingOptions,
+  LoopPreview
 } from '../types';
 
 const API_BASE = '/api';
@@ -21,14 +28,59 @@ const api = axios.create({
   timeout: 300000, // 5 minutes for long operations
 });
 
-// Health & Info
-export const checkHealth = async (): Promise<{ status: string; services: Record<string, boolean> }> => {
-  const response = await api.get('/health');
+// --- v2 Main API ---
+
+// Library
+export const listTracks = async (limit = 50, offset = 0): Promise<TrackListResponse> => {
+  const response = await api.get('/library/tracks', { params: { limit, offset } });
   return response.data;
 };
 
-export const getAppInfo = async () => {
-  const response = await api.get('/info');
+export const getTrackDetail = async (trackId: string): Promise<TrackDetailResponse> => {
+  const response = await api.get(`/library/tracks/${trackId}`);
+  return response.data;
+};
+
+// Ingest
+export const ingestSource = async (payload: IngestPayload & { options?: ProcessingOptions }): Promise<{ job_id: string; track_id: string }> => {
+  const response = await api.post('/ingest/ingest', payload);
+  return response.data;
+};
+
+export const uploadTrack = async (file: File, options: ProcessingOptions): Promise<{ job_id: string; track_id: string }> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('options', JSON.stringify(options));
+
+  const response = await api.post('/ingest/upload', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
+};
+
+// Jobs
+export const listActiveJobs = async (): Promise<JobProgress[]> => {
+  const response = await api.get('/jobs/active');
+  return response.data;
+};
+
+// Loops
+export const createCustomLoop = async (trackId: string, startTime: number, endTime: number, stems: string[]): Promise<LoopPreview> => {
+  const response = await api.post(`/library/tracks/${trackId}/loops/custom`, {
+    start_time: startTime,
+    end_time: endTime,
+    stems
+  });
+  return response.data;
+};
+
+// --- Legacy / Domain Specific APIs ---
+
+// Health & Info
+export const checkHealth = async (): Promise<{ status: string }> => {
+  const response = await api.get('/health');
   return response.data;
 };
 
@@ -42,120 +94,6 @@ export const searchArtists = async (query: string): Promise<Artist[]> => {
 export const searchTracks = async (query: string, limit = 20): Promise<Track[]> => {
   const response = await api.get('/search/tracks', { params: { q: query, limit } });
   return response.data.results;
-};
-
-export const getArtistTracks = async (
-  artistName: string,
-  filters?: {
-    dateFrom?: string;
-    dateTo?: string;
-    trackTypes?: string[];
-  }
-): Promise<TrackSearchResponse> => {
-  const params: Record<string, any> = {};
-  
-  if (filters?.dateFrom) params.date_from = filters.dateFrom;
-  if (filters?.dateTo) params.date_to = filters.dateTo;
-  if (filters?.trackTypes?.length) {
-    // Send multiple track_type params
-    const searchParams = new URLSearchParams();
-    filters.trackTypes.forEach(type => searchParams.append('track_type', type));
-    const response = await api.get(`/artist/${encodeURIComponent(artistName)}/tracks?${searchParams.toString()}`);
-    return response.data;
-  }
-  
-  const response = await api.get(`/artist/${encodeURIComponent(artistName)}/tracks`, { params });
-  return response.data;
-};
-
-// Download
-export const downloadTrack = async (
-  artist: string,
-  title: string,
-  url?: string
-): Promise<DownloadResult> => {
-  const response = await api.post('/download', { artist, title, url });
-  return response.data;
-};
-
-// Analysis
-export const analyzeTrack = async (filePath: string): Promise<AnalysisResult> => {
-  const response = await api.post('/analyze', { file_path: filePath });
-  return response.data;
-};
-
-// Sample Extraction
-export const extractSamples = async (
-  filePath: string,
-  options: {
-    artist?: string;
-    title?: string;
-    barCount?: number;
-    sectionPreference?: string;
-    extractStems?: boolean;
-    selectedStems?: string[];
-    maxSamples?: number;
-  }
-): Promise<SampleExtractionResponse> => {
-  const response = await api.post('/samples/extract', {
-    file_path: filePath,
-    artist: options.artist || 'Unknown',
-    title: options.title || 'Unknown',
-    bar_count: options.barCount || 16,
-    section_preference: options.sectionPreference,
-    extract_stems: options.extractStems || false,
-    selected_stems: options.selectedStems,
-    max_samples: options.maxSamples || 3,
-  });
-  return response.data;
-};
-
-export const extractCustomSample = async (
-  filePath: string,
-  startTime: number,
-  endTime: number,
-  options: {
-    artist?: string;
-    title?: string;
-    extractStems?: boolean;
-  }
-): Promise<Sample> => {
-  const response = await api.post('/samples/custom', {
-    file_path: filePath,
-    start_time: startTime,
-    end_time: endTime,
-    artist: options.artist || 'Unknown',
-    title: options.title || 'Unknown',
-    extract_stems: options.extractStems || false,
-  });
-  return response.data;
-};
-
-export const listSamples = async (): Promise<{ name: string; path: string; size: number }[]> => {
-  const response = await api.get('/samples');
-  return response.data.samples;
-};
-
-export const deleteSample = async (sampleId: string): Promise<{ deleted: string }> => {
-  const response = await api.delete(`/samples/${sampleId}`);
-  return response.data;
-};
-
-// Stem Separation
-export const getStemInfo = async (): Promise<StemInfo> => {
-  const response = await api.get('/stems/info');
-  return response.data;
-};
-
-export const separateStems = async (
-  filePath: string,
-  selectedStems?: string[]
-): Promise<StemResult> => {
-  const response = await api.post('/stems/separate', {
-    file_path: filePath,
-    selected_stems: selectedStems,
-  });
-  return response.data;
 };
 
 // Audio file URL helper
