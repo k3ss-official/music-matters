@@ -5,11 +5,12 @@ import type { TrackSummary } from '../types';
 interface LibraryBrowserProps {
     tracks: TrackSummary[];
     onTrackSelect: (id: string) => void;
+    onTrackDelete?: (id: string) => void;
     selectedTrackId: string | null;
     loading?: boolean;
 }
 
-export function LibraryBrowser({ tracks, onTrackSelect, selectedTrackId, loading }: LibraryBrowserProps) {
+export function LibraryBrowser({ tracks, onTrackSelect, onTrackDelete, selectedTrackId, loading }: LibraryBrowserProps) {
     const [activeTab, setActiveTab] = useState<'tracks' | 'stems' | 'loops'>('tracks');
 
     const getStatusColor = (status: string) => {
@@ -137,7 +138,14 @@ export function LibraryBrowser({ tracks, onTrackSelect, selectedTrackId, loading
                                         {getStatusLabel(track.status)}
                                     </span>
 
-                                    <button className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-[#ff3b5c] transition-colors" title="Delete (Stub)">
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (onTrackDelete) onTrackDelete(track.track_id);
+                                        }}
+                                        className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-[#ff3b5c] transition-colors"
+                                        title="Delete Track"
+                                    >
                                         <Trash2 size={16} />
                                     </button>
                                 </div>

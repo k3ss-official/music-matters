@@ -237,6 +237,21 @@ class PipelineOrchestrator:
             stages=[stage.to_schema() for stage in job.stages.values()],
         )
 
+    def delete_track(self, track_id: UUID) -> None:
+        if track_id not in self._tracks:
+            raise KeyError(f"Track {track_id} not found")
+        # delete track folder and clear it from memory
+        try:
+            track_dir = self._library.get_track_dir(track_id)
+            if track_dir.exists():
+                import shutil
+                shutil.rmtree(track_dir)
+        except Exception as e:
+            logger.error(f"Failed to delete track directory for {track_id}: {e}")
+        del self._tracks[track_id]
+        if track_id in self._loop_records:
+            del self._loop_records[track_id]
+
     async def _run_pipeline(
         self, job: JobRecord, payload: schemas.IngestRequest | None = None
     ) -> None:

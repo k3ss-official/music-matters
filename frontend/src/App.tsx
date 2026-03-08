@@ -141,6 +141,20 @@ function App() {
     handleTrackSelect(trackId);
   };
 
+  const handleDeleteTrack = async (id: string) => {
+    try {
+      await api.deleteTrack(id);
+      if (selectedTrackId === id) {
+        setSelectedTrackId(null);
+        setWaveformReady(false);
+        setTrackDetail(null);
+      }
+      loadTracks();
+    } catch (e) {
+      console.error('Failed to delete track', e);
+    }
+  };
+
   const toggleStemSelection = (stem: string) => {
     setSelectedStems(prev =>
       prev.includes(stem) ? prev.filter(s => s !== stem) : [...prev, stem]
@@ -170,8 +184,8 @@ function App() {
 
         <div className="flex items-center gap-4">
           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] uppercase font-bold tracking-widest border transition-colors ${isConnected
-              ? 'bg-[#00ff88]/10 text-[#00ff88] border-[#00ff88]/30'
-              : 'bg-[#ff3b5c]/10 text-[#ff3b5c] border-[#ff3b5c]/30'
+            ? 'bg-[#00ff88]/10 text-[#00ff88] border-[#00ff88]/30'
+            : 'bg-[#ff3b5c]/10 text-[#ff3b5c] border-[#ff3b5c]/30'
             }`}>
             <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-[#00ff88] animate-pulse' : 'bg-[#ff3b5c]'}`} />
             {isConnected ? 'Backend Online' : 'Backend Offline'}
@@ -192,6 +206,7 @@ function App() {
           <LibraryBrowser
             tracks={tracks}
             onTrackSelect={handleTrackSelect}
+            onTrackDelete={handleDeleteTrack}
             selectedTrackId={selectedTrackId}
             loading={tracks.length === 0}
           />
