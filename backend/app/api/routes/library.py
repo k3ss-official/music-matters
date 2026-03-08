@@ -17,9 +17,15 @@ from app.api.schemas import (
     TrackDetailResponse,
     TrackListResponse,
 )
+from pydantic import BaseModel
 from app.services.pipeline import pipeline
 
-router = APIRouter()
+class CustomLoopRequest(BaseModel):
+    start_time: float
+    end_time: float
+    stems: list[str] = []
+
+router = APIRouter(prefix="/library", tags=["library"])
 
 
 @router.post("/search", response_model=list[SearchResult])
@@ -101,3 +107,21 @@ async def loop_audio(track_id: str, loop_id: str) -> FileResponse:
 
     filename = path.name
     return FileResponse(path, media_type="audio/wav", filename=filename)
+
+
+@router.post("/tracks/{track_id}/loops/custom", response_model=LoopPreview)
+async def create_custom_loop(track_id: str, payload: CustomLoopRequest) -> LoopPreview:
+    try:
+        track_uuid = UUID(track_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    try:
+        return await pipeline.extract_custom_loop(
+            track_uuid, 
+            start_time=payload.start_time, 
+            end_time=payload.end_time,
+            stems=payload.stems
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 import subprocess
 import torch
 
-from config import (
+from app.config import (
     STEMS_DIR, TEMP_DIR, DEMUCS_MODEL, DEMUCS_STEMS,
     DEMUCS_DEVICE, DEMUCS_SHIFTS, DEMUCS_OVERLAP, SAMPLE_RATE
 )

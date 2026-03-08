@@ -64,7 +64,9 @@ class JobRecord:
     def progress(self) -> float:
         total = len(self.stages)
         completed = sum(1 for stage in self.stages.values() if stage.status == "done")
-        running = next((stage for stage in self.stages.values() if stage.status == "running"), None)
+        running = next(
+            (stage for stage in self.stages.values() if stage.status == "running"), None
+        )
         base = completed / total
         if running:
             return min(1.0, base + running.progress / total)
@@ -151,7 +153,7 @@ class PipelineOrchestrator:
         self._lock = asyncio.Lock()
         self._library = LibraryPaths(settings)
         self._downloader = DownloadService(settings)
-        self._fallback_root = settings.workspace_root / ".library"
+        self._fallback_root = settings.MUSIC_LIBRARY / ".library"
         self._fallback_root.mkdir(parents=True, exist_ok=True)
 
     # ------------------------------------------------------------------
@@ -169,12 +171,30 @@ class PipelineOrchestrator:
             artist=None,
             status="queued",
             created_at=datetime.now(timezone.utc),
-            metadata={"tags": payload.tags, "collection": payload.collection, "source": str(payload.source)},
+            metadata={
+                "tags": payload.tags,
+                "collection": payload.collection,
+                "source": str(payload.source),
+            },
         )
         self._tracks[track_id] = track_record
 
         job_record = JobRecord(job_id=job_id, track_id=track_id)
-        job_record.stages = {stage_id: StageState(stage_id, label) for stage_id, label in _STAGE_TEMPLATE}
+        
+        # Determine which stages to run
+        options = payload.options
+        stages_to_add = [("ingest", "Ingest")]
+        if options.analysis:
+            stages_to_add.append(("analysis", "Analysis"))
+        if options.separation:
+            stages_to_add.append(("separation", "Separation"))
+        if options.loop_slicing:
+            stages_to_add.append(("loop", "Loop Slicing"))
+        stages_to_add.append(("project", "Project Assembly"))
+
+        job_record.stages = {
+            stage_id: StageState(stage_id, label) for stage_id, label in stages_to_add
+        }
         self._jobs[job_id] = job_record
 
         loop = asyncio.get_running_loop()
@@ -182,14 +202,18 @@ class PipelineOrchestrator:
 
         return schemas.IngestResponse(job_id=job_id, track_id=track_id, stage="queued")
 
-    def queue_processing(self, payload: schemas.ProcessJobRequest) -> schemas.JobResponse:
+    def queue_processing(
+        self, payload: schemas.ProcessJobRequest
+    ) -> schemas.JobResponse:
         track_id = payload.track_id
         if track_id not in self._tracks:
             raise KeyError(f"Track {track_id} not registered")
 
         job_id = uuid4()
         job_record = JobRecord(job_id=job_id, track_id=track_id)
-        job_record.stages = {stage_id: StageState(stage_id, label) for stage_id, label in _STAGE_TEMPLATE}
+        job_record.stages = {
+            stage_id: StageState(stage_id, label) for stage_id, label in _STAGE_TEMPLATE
+        }
         self._jobs[job_id] = job_record
 
         loop = asyncio.get_running_loop()
@@ -213,17 +237,37 @@ class PipelineOrchestrator:
             stages=[stage.to_schema() for stage in job.stages.values()],
         )
 
-    async def _run_pipeline(self, job: JobRecord, payload: schemas.IngestRequest | None = None) -> None:
+    async def _run_pipeline(
+        self, job: JobRecord, payload: schemas.IngestRequest | None = None
+    ) -> None:
         job.started_at = datetime.now(timezone.utc)
         job.status = "running"
         track = self._tracks[job.track_id]
+        
+        # Default options if not provided (e.g. reprocessing)
+        options = payload.options if payload else schemas.ProcessingOptions()
 
         try:
-            audio_path = await self._run_stage(job, "ingest", self._stage_ingest, track, payload)
-            await self._run_stage(job, "analysis", self._stage_analysis, track, audio_path)
-            await self._run_stage(job, "separation", self._stage_separation, track, audio_path)
-            await self._run_stage(job, "loop", self._stage_loop, track, audio_path)
-            await self._run_stage(job, "project", self._stage_project, track, audio_path)
+            audio_path = await self._run_stage(
+                job, "ingest", self._stage_ingest, track, payload
+            )
+            
+            if options.analysis:
+                await self._run_stage(
+                    job, "analysis", self._stage_analysis, track, audio_path
+                )
+            
+            if options.separation:
+                await self._run_stage(
+                    job, "separation", self._stage_separation, track, audio_path
+                )
+            
+            if options.loop_slicing:
+                await self._run_stage(job, "loop", self._stage_loop, track, audio_path)
+            
+            await self._run_stage(
+                job, "project", self._stage_project, track, audio_path
+            )
             job.status = "completed"
             job.detail = "Pipeline completed"
             job.completed_at = datetime.now(timezone.utc)
@@ -308,23 +352,23 @@ class PipelineOrchestrator:
 
         def _compute() -> Dict[str, Any]:
             import librosa
-            
+
             info = sf.info(str(audio_path))
             duration = info.frames / float(info.samplerate)
-            
+
             # Load audio for analysis
             y, sr = librosa.load(str(audio_path), sr=None, mono=True, duration=120.0)
-            
+
             # BPM detection
             tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
             bpm = float(tempo)
-            
+
             # Key detection (simplified - use chromagram)
             chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
             key_idx = int(chroma.mean(axis=1).argmax())
-            keys = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+            keys = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
             key = keys[key_idx]
-            
+
             return {
                 "bpm": bpm,
                 "key": key,
@@ -356,21 +400,23 @@ class PipelineOrchestrator:
         stems_dir = self._stems_dir(track.slug)
 
         def _separate() -> Dict[str, Path]:
-            from app.services.processing.stem_separator import StemSeparator as DemucsService
-            
+            from app.services.processing.stem_separator import (
+                StemSeparator as DemucsService,
+            )
+
             # Try full Demucs separation
             try:
                 stage.detail = "Demucs processing (this may take a few minutes)"
                 stage.progress = 0.3
-                
+
                 demucs = DemucsService(self._library.config)
                 output_dir = demucs.separate(
                     input_path=audio_path,
                     output_root=stems_dir.parent,
                     force=False,
-                    jobs=1
+                    jobs=1,
                 )
-                
+
                 # Collect generated stems
                 stem_map = {}
                 if output_dir.exists():
@@ -381,14 +427,14 @@ class PipelineOrchestrator:
                             if not target.exists():
                                 shutil.copy2(stem_file, target)
                             stem_map[stem_name] = target
-                
+
                 if stem_map:
                     return stem_map
-                    
+
             except Exception as e:  # pylint: disable=broad-except
                 stage.detail = f"Demucs failed, using HPSS fallback: {str(e)[:50]}"
                 stage.progress = 0.5
-            
+
             # Fallback to HPSS if Demucs fails
             info = sf.info(str(audio_path))
             sr = int(info.samplerate)
@@ -402,6 +448,7 @@ class PipelineOrchestrator:
 
             try:
                 import librosa
+
                 harmonic, percussive = librosa.effects.hpss(data)
                 harmonic_path = stems_dir / "harmonic.wav"
                 percussive_path = stems_dir / "percussive.wav"
@@ -464,7 +511,7 @@ class PipelineOrchestrator:
                         break
                 else:
                     slice_audio = data[start:end]
-                loop_id = f"{track.slug}-loop-{index+1}"
+                loop_id = f"{track.slug}-loop-{index + 1}"
                 file_path = loops_dir / f"{loop_id}.wav"
                 sf.write(file_path, slice_audio, sr)
                 results.append(
@@ -523,10 +570,14 @@ class PipelineOrchestrator:
     # ------------------------------------------------------------------
     # Library views
     # ------------------------------------------------------------------
-    def list_tracks(self, limit: int = 50, offset: int = 0) -> schemas.TrackListResponse:
+    def list_tracks(
+        self, limit: int = 50, offset: int = 0
+    ) -> schemas.TrackListResponse:
         items = list(self._tracks.values())
         page = items[offset : offset + limit]
-        return schemas.TrackListResponse(items=[record.to_summary() for record in page], total=len(items))
+        return schemas.TrackListResponse(
+            items=[record.to_summary() for record in page], total=len(items)
+        )
 
     def get_track(self, track_id: UUID) -> schemas.TrackDetailResponse:
         record = self._tracks.get(track_id)
@@ -575,14 +626,18 @@ class PipelineOrchestrator:
         results.sort(key=lambda item: item.confidence, reverse=True)
         return results[:20]
 
-    def list_loops(self, track_id: UUID, bar_length: Optional[int] = None) -> List[schemas.LoopPreview]:
+    def list_loops(
+        self, track_id: UUID, bar_length: Optional[int] = None
+    ) -> List[schemas.LoopPreview]:
         loop_map = self._loop_records.get(track_id, {})
         previews = [loop.to_preview(track_id) for loop in loop_map.values()]
         if bar_length is not None:
             previews = [loop for loop in previews if loop.bar_count == bar_length]
         return previews
 
-    async def reslice_loops(self, track_id: UUID, bar_length: int) -> List[schemas.LoopPreview]:
+    async def reslice_loops(
+        self, track_id: UUID, bar_length: int
+    ) -> List[schemas.LoopPreview]:
         track = self._tracks.get(track_id)
         if track is None or track.original_path is None:
             raise KeyError(f"Track {track_id} not registered")
@@ -613,7 +668,7 @@ class PipelineOrchestrator:
                         break
                 else:
                     slice_audio = data[start:end]
-                loop_id = f"{track.slug}-loop-{bar_length}b-{index+1}"
+                loop_id = f"{track.slug}-loop-{bar_length}b-{index + 1}"
                 file_path = loops_dir / f"{loop_id}.wav"
                 sf.write(file_path, slice_audio, sr)
                 records.append(
@@ -639,13 +694,71 @@ class PipelineOrchestrator:
         return [loop.to_preview(track_id) for loop in loop_records]
 
     def get_loop_audio(self, track_id: UUID, loop_id: str) -> Path:
+        # Check if it is an AI generated loop map first
         loop_map = self._loop_records.get(track_id, {})
         record = loop_map.get(loop_id)
-        if record is None:
-            raise KeyError(f"Loop {loop_id} not registered")
-        if not record.path.exists():
-            raise FileNotFoundError(f"Loop file missing: {record.path}")
-        return record.path
+        if record and record.path.exists():
+            return record.path
+            
+        track = self.get_track(track_id)
+        if not track.loops_dir:
+            raise FileNotFoundError("No loops generated yet")
+
+        # It's an exported custom loop
+        loop_path = track.loops_dir / f"{loop_id}.wav"
+        if not loop_path.exists():
+            raise FileNotFoundError(f"Loop not found at {loop_path}")
+        return loop_path
+
+    async def extract_custom_loop(
+        self, track_id: UUID, start_time: float, end_time: float, stems: list[str]
+    ) -> schemas.LoopPreview:
+        track = self.get_track(track_id)
+        if not track.original_path or not track.original_path.exists():
+            raise FileNotFoundError(f"Original audio not found for {track_id}")
+
+        def _generate():
+            from app.services.processing.sample_extractor import get_sample_extractor
+            xtp = get_sample_extractor()
+            
+            # Use sample extractor to do the bounce
+            out_path = xtp.extract_custom_sample(
+                track_path=track.original_path,
+                start_time=start_time,
+                end_time=end_time,
+                artist=track.artist or "Unknown",
+                title=track.title,
+                extract_stems=len(stems) > 0
+            )
+            
+            # Record it
+            import time
+            loop_id = f"custom-{int(time.time())}"
+            if track.loops_dir:
+                dest = track.loops_dir / f"{loop_id}.wav"
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                import shutil
+                shutil.copy(out_path, dest)
+                out_path = dest
+
+            return LoopRecord(
+                id=loop_id,
+                label=f"Custom Loop ({end_time-start_time:.1f}s)",
+                path=out_path,
+                start_bar=0,
+                bar_count=0,
+                stem="custom",
+                bpm=track.bpm or 120.0,
+                musical_key=track.musical_key,
+                energy=0.5
+            ).to_preview(track.track_id)
+
+        try:
+            return await asyncio.to_thread(_generate)
+        except Exception as exc:
+            import logging
+            logging.error(f"Custom loop failed: {exc}")
+            raise KeyError("Failed to slice custom loop")
 
     # ------------------------------------------------------------------
     # Helpers
@@ -665,7 +778,9 @@ class PipelineOrchestrator:
         base = settings.resolved_projects_dir
         return self._ensure_category_dir(base, "projects", slug)
 
-    def _ensure_category_dir(self, preferred: Path, category: str, slug: Optional[str] = None) -> Path:
+    def _ensure_category_dir(
+        self, preferred: Path, category: str, slug: Optional[str] = None
+    ) -> Path:
         target = preferred / slug if slug else preferred
         try:
             target.mkdir(parents=True, exist_ok=True)

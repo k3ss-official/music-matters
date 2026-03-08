@@ -9,10 +9,17 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, Field, HttpUrl
 
 
+class ProcessingOptions(BaseModel):
+    analysis: bool = True
+    separation: bool = True
+    loop_slicing: bool = True
+    mastering: bool = False
+
 class IngestRequest(BaseModel):
     source: HttpUrl | str = Field(..., description="URL or local path to ingest")
     tags: List[str] = Field(default_factory=list)
     collection: Optional[str] = Field(default=None, description="Logical grouping for batch jobs")
+    options: ProcessingOptions = Field(default_factory=ProcessingOptions)
 
 
 class IngestResponse(BaseModel):

@@ -8,11 +8,12 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from typing import Optional
 
-from app.api.schemas import IngestRequest, IngestResponse
+from app.api.schemas import IngestRequest, IngestResponse, ProcessingOptions
+import json
 from app.config import settings
 from app.services.pipeline import pipeline
 
-router = APIRouter()
+router = APIRouter(prefix="/ingest", tags=["ingest"])
 
 
 @router.post("/ingest", response_model=IngestResponse, status_code=202)
@@ -28,31 +29,45 @@ async def upload_and_ingest(
     file: UploadFile = File(...),
     tags: Optional[str] = Form(None),
     collection: Optional[str] = Form(None),
+    options: Optional[str] = Form(None),  # JSON string
 ) -> IngestResponse:
     """Upload an audio file and ingest it into the pipeline."""
     try:
         # Save uploaded file to downloads directory
         downloads_dir = settings.resolved_downloads_dir
         downloads_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Sanitize filename
-        safe_filename = "".join(c for c in file.filename or "upload.wav" if c.isalnum() or c in "._- ")
+        safe_filename = "".join(
+            c for c in file.filename or "upload.wav" if c.isalnum() or c in "._- "
+        )
         file_path = downloads_dir / safe_filename
-        
+
         # Write file
         with file_path.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        
+
         # Parse tags
         tag_list = [t.strip() for t in tags.split(",")] if tags else []
-        
+
+        # Parse options if provided
+        processing_options = ProcessingOptions()
+        if options:
+            try:
+                opts_dict = json.loads(options)
+                processing_options = ProcessingOptions(**opts_dict)
+            except (json.JSONDecodeError, TypeError):
+                # Fallback to default if invalid
+                pass
+
         # Queue ingestion
         payload = IngestRequest(
-            source=str(file_path),
-            tags=tag_list,
-            collection=collection or "uploads"
+            source=str(file_path), 
+            tags=tag_list, 
+            collection=collection or "uploads",
+            options=processing_options
         )
         return pipeline.queue_ingest(payload)
-        
+
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException
 from app.api.schemas import JobResponse, ProcessJobRequest
 from app.services.pipeline import pipeline
 
-router = APIRouter()
+router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
 @router.post("/process", response_model=JobResponse, status_code=202)
@@ -17,6 +17,16 @@ async def enqueue_processing(payload: ProcessJobRequest) -> JobResponse:
     job = pipeline.queue_processing(payload)
     pipeline.touch_track(payload.track_id, status="pending")
     return job
+
+
+@router.get("/active", response_model=list[JobResponse])
+async def active_jobs() -> list[JobResponse]:
+    """Return all currently running or queued jobs."""
+    return [
+        pipeline.get_job(job.job_id)
+        for job in pipeline._jobs.values()
+        if job.status in ("queued", "running")
+    ]
 
 
 @router.get("/{job_id}", response_model=JobResponse)

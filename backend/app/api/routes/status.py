@@ -13,7 +13,7 @@ router = APIRouter()
 
 @router.get("/health", tags=["system"])
 async def health() -> dict[str, str]:
-    return {"status": "ok", "version": settings.version}
+    return {"status": "ok", "version": "2.0.0"}
 
 
 @router.get("/agents", response_model=list[AgentStatus])

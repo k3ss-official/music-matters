@@ -15,7 +15,7 @@ import discogs_client
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 
-from config import (
+from app.config import (
     MUSICBRAINZ_RATE_LIMIT, DISCOGS_RATE_LIMIT, SPOTIFY_RATE_LIMIT,
     SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, DISCOGS_TOKEN,
     METADATA_CACHE_TTL, SEARCH_CACHE_TTL

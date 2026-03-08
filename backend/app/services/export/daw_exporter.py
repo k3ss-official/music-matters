@@ -489,7 +489,7 @@ def get_daw_exporter(export_dir: Path = None) -> DAWExporter:
     global _exporter
     if _exporter is None:
         if export_dir is None:
-            from config import DATA_DIR
+            from app.config import DATA_DIR
             export_dir = DATA_DIR / 'exports'
         _exporter = DAWExporter(export_dir)
     return _exporter

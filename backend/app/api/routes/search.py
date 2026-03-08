@@ -2,6 +2,7 @@
 Music Matters - Search & Discovery Routes
 Multi-source track search with intelligent filtering
 """
+
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -13,59 +14,88 @@ class SearchRequest(BaseModel):
     artist: str
     date_from: Optional[str] = None
     date_to: Optional[str] = None
-    track_types: Optional[List[str]] = None  # ['original', 'remix', 'collaboration', 'production']
+    track_types: Optional[List[str]] = (
+        None  # ['original', 'remix', 'collaboration', 'production']
+    )
     limit: int = 50
 
 
 class TrackSearchRequest(BaseModel):
     query: str
     limit: int = 20
+    source: str = "youtube"  # youtube, soundcloud
 
 
-@router.post("/artist")
-async def search_by_artist(request: SearchRequest):
-    """Search for tracks by artist name with filters."""
-    # Import here to avoid circular dependencies
-    from app.services.search.metadata_service import get_metadata_service
-    
+class OnlineSearchRequest(BaseModel):
+    query: str
+    limit: int = 10
+    source: str = "youtube"  # youtube or soundcloud
+
+
+@router.post("/online")
+async def search_online(request: OnlineSearchRequest):
+    """Search YouTube/SoundCloud for tracks (no API keys needed)."""
+    from app.services.search.download_service import DownloadService
+
     try:
-        service = get_metadata_service()
-        tracks = service.get_artist_tracks(
-            artist_name=request.artist,
-            date_from=request.date_from,
-            date_to=request.date_to,
-            track_types=request.track_types
-        )
-        
-        return {
-            "artist": request.artist,
-            "count": len(tracks),
-            "tracks": [t.to_dict() for t in tracks[:request.limit]]
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        dl = DownloadService()
+        results = []
 
+        if request.source == "youtube":
+            # Use yt-dlp to search YouTube
+            import yt_dlp
 
-@router.post("/tracks")
-async def search_tracks(request: TrackSearchRequest):
-    """Search for tracks by title/query."""
-    from app.services.search.metadata_service import get_metadata_service
-    
-    try:
-        service = get_metadata_service()
-        tracks = service.search_tracks(query=request.query, limit=request.limit)
-        
+            ydl_opts = {
+                "quiet": True,
+                "no_warnings": True,
+                "extract_flat": "infinite",
+            }
+            search_query = f"ytsearch{request.limit}:{request.query}"
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                result = ydl.extract_info(search_query, download=False)
+                if result and "entries" in result:
+                    for entry in result["entries"][: request.limit]:
+                        results.append(
+                            {
+                                "id": entry.get("id", ""),
+                                "title": entry.get("title", ""),
+                                "artist": entry.get("uploader", "Unknown"),
+                                "youtube_url": f"https://youtube.com/watch?v={entry.get('id')}",
+                                "duration": entry.get("duration"),
+                                "thumbnail": entry.get("thumbnail"),
+                                "source": "youtube",
+                            }
+                        )
+        elif request.source == "soundcloud":
+            import yt_dlp
+
+            ydl_opts = {
+                "quiet": True,
+                "no_warnings": True,
+                "extract_flat": "infinite",
+            }
+            search_query = f"scsearch{request.limit}:{request.query}"
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                result = ydl.extract_info(search_query, download=False)
+                if result and "entries" in result:
+                    for entry in result["entries"][: request.limit]:
+                        results.append(
+                            {
+                                "id": entry.get("id", ""),
+                                "title": entry.get("title", ""),
+                                "artist": entry.get("uploader", "Unknown"),
+                                "soundcloud_url": entry.get("url", ""),
+                                "duration": entry.get("duration"),
+                                "thumbnail": entry.get("thumbnail"),
+                                "source": "soundcloud",
+                            }
+                        )
+
         return {
             "query": request.query,
-            "count": len(tracks),
-            "tracks": [t.to_dict() for t in tracks]
+            "source": request.source,
+            "count": len(results),
+            "tracks": results,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/preview/{track_id}")
-async def get_preview_url(track_id: str):
-    """Get preview URL for a track."""
-    # This would integrate with Spotify/YouTube for preview URLs
-    return {"track_id": track_id, "preview_url": None, "message": "Preview generation coming soon"}
