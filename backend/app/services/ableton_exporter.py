@@ -86,7 +86,8 @@ class AbletonExporter:
 
         # Transport
         transport = ET.SubElement(live_set, "Transport")
-        ET.SubElement(transport, "Tempo").set("Value", str(self.bpm))
+        tempo_el = ET.SubElement(transport, "Tempo")
+        tempo_el.set("Value", str(self.bpm))
         ET.SubElement(transport, "TimeSigId").set("Value", "4")
 
         # Track list (8 tracks for stems)
@@ -184,6 +185,9 @@ class AbletonExporter:
         output_path: Path,
         stem_files: Dict[str, str],
         track_title: str = "Music Matters Loop",
+        bpm: float = 120.0,
+        start_time: float = 0.0,
+        end_time: float = 0.0,
     ) -> Path:
         """
         Export to Ableton Live project
@@ -199,6 +203,19 @@ class AbletonExporter:
         output_path = Path(output_path)
         if not str(output_path).endswith(".als"):
             output_path = output_path.with_suffix(".als")
+
+        # Set BPM and register clips so _create_project_xml can embed them
+        self.bpm = bpm
+        for idx, (stem_name, file_path) in enumerate(stem_files.items()):
+            if Path(file_path).exists():
+                self.add_clip(
+                    name=f"{track_title} - {stem_name}",
+                    file_path=file_path,
+                    track_idx=idx,
+                    scene_idx=0,
+                    start_time=start_time,
+                    end_time=end_time,
+                )
 
         # Create a temporary directory for the project
         with tempfile.TemporaryDirectory() as temp_dir:
