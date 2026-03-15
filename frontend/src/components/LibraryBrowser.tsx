@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Music, List, Mic2, FolderOpen, MoreVertical, Trash2 } from 'lucide-react';
+import { Music, List, Mic2, FolderOpen, MoreVertical, Trash2, Tag } from 'lucide-react';
 import type { TrackSummary } from '../types';
 
 interface LibraryBrowserProps {
@@ -127,6 +127,24 @@ export function LibraryBrowser({ tracks, onTrackSelect, onTrackDelete, selectedT
                                         {timeAgo(track.created_at)}
                                     </span>
                                 </div>
+                                {/* Auto-generated tags */}
+                                {(() => {
+                                    const meta = (track as any).metadata || {};
+                                    const autoTags: string[] = [];
+                                    if (track.bpm && track.bpm > 140) autoTags.push('fast');
+                                    else if (track.bpm && track.bpm < 90) autoTags.push('slow');
+                                    if (Array.isArray(meta.tags)) autoTags.push(...meta.tags.slice(0, 3));
+                                    if (autoTags.length === 0) return null;
+                                    return (
+                                        <div className="flex flex-wrap gap-1 mt-1.5">
+                                            {autoTags.map((tag, idx) => (
+                                                <span key={idx} className="text-[9px] bg-[#8b5cf6]/10 text-[#8b5cf6] border border-[#8b5cf6]/20 px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide">
+                                                    {tag}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    );
+                                })()}
                             </div>
 
                             <div className="flex flex-col items-end justify-between h-full gap-2">
