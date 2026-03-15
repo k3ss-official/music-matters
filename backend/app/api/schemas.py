@@ -103,6 +103,7 @@ class LoopPreview(BaseModel):
     bpm: float
     musical_key: Optional[str] = None
     energy: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    tags: List[str] = Field(default_factory=list)
     file_url: Optional[str] = None
 
 
