@@ -62,9 +62,16 @@ class DatabaseService:
                 bpm REAL NOT NULL,
                 musical_key TEXT,
                 energy REAL,
+                tags TEXT DEFAULT '[]',
                 FOREIGN KEY(track_id) REFERENCES tracks(track_id) ON DELETE CASCADE
             )
         """)
+        # Migration: add tags column if it doesn't exist (for existing databases)
+        try:
+            conn.execute("ALTER TABLE loop_records ADD COLUMN tags TEXT DEFAULT '[]'")
+        except Exception:
+            pass  # Column already exists
+
 
     def save_track(self, track) -> None:
         """Upsert a TrackRecord."""
@@ -143,8 +150,8 @@ class DatabaseService:
         conn.execute(
             """
             INSERT INTO loop_records (
-                id, track_id, label, path, start_bar, bar_count, stem, bpm, musical_key, energy
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                id, track_id, label, path, start_bar, bar_count, stem, bpm, musical_key, energy, tags
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 label=excluded.label,
                 path=excluded.path,
@@ -153,7 +160,8 @@ class DatabaseService:
                 stem=excluded.stem,
                 bpm=excluded.bpm,
                 musical_key=excluded.musical_key,
-                energy=excluded.energy
+                energy=excluded.energy,
+                tags=excluded.tags
             """,
             (
                 loop.id,
@@ -165,7 +173,8 @@ class DatabaseService:
                 loop.stem,
                 loop.bpm,
                 loop.musical_key,
-                loop.energy
+                loop.energy,
+                json.dumps(getattr(loop, 'tags', []) or []),
             )
         )
 
@@ -187,7 +196,8 @@ class DatabaseService:
                 "stem": row['stem'],
                 "bpm": row['bpm'],
                 "musical_key": row['musical_key'],
-                "energy": row['energy']
+                "energy": row['energy'],
+                "tags": json.loads(row['tags']) if row.get('tags') else [],
             }
         return loops
 
