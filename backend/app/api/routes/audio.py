@@ -15,19 +15,29 @@ async def get_track_audio(track_id: str) -> FileResponse:
     try:
         track_uuid = UUID(track_id)
         track = pipeline.get_track(track_uuid)
-        source_path_str = track.metadata.get("source_path")
-        
+
+        # Try multiple sources for the audio path
+        source_path_str = (
+            track.metadata.get("source_path")
+            or track.metadata.get("source")
+            or (str(track.original_path) if track.original_path else None)
+        )
+
         if not source_path_str:
-            raise HTTPException(status_code=404, detail="Source path not found in metadata")
-            
+            raise HTTPException(
+                status_code=404, detail="Source path not found in metadata"
+            )
+
         source_path = Path(source_path_str)
         if not source_path.exists():
             raise HTTPException(status_code=404, detail="Audio file not found on disk")
-            
+
         return FileResponse(
-            source_path, 
-            media_type="audio/wav" if source_path.suffix.lower() == ".wav" else "audio/mpeg",
-            headers={"Accept-Ranges": "bytes"}
+            source_path,
+            media_type="audio/wav"
+            if source_path.suffix.lower() == ".wav"
+            else "audio/mpeg",
+            headers={"Accept-Ranges": "bytes"},
         )
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid track ID")
@@ -40,21 +50,23 @@ async def get_stem_audio(track_id: str, stem_name: str) -> FileResponse:
     try:
         track_uuid = UUID(track_id)
         track = pipeline.get_track(track_uuid)
-        
+
         stem_path_str = track.provenance.get("stems", {}).get(stem_name)
         if not stem_path_str:
             # Fallback path logic if not in provenance
-            stem_path = pipeline._library.get_track_dir(track_uuid) / "stems" / f"{stem_name}.wav"
+            stem_path = (
+                pipeline._library.get_track_dir(track_uuid)
+                / "stems"
+                / f"{stem_name}.wav"
+            )
         else:
             stem_path = Path(stem_path_str)
-            
+
         if not stem_path.exists():
             raise HTTPException(status_code=404, detail="Stem file not found on disk")
-            
+
         return FileResponse(
-            stem_path, 
-            media_type="audio/wav",
-            headers={"Accept-Ranges": "bytes"}
+            stem_path, media_type="audio/wav", headers={"Accept-Ranges": "bytes"}
         )
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid track ID")
