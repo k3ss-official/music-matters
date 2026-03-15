@@ -85,6 +85,7 @@ class LoopRecord:
     bpm: float
     musical_key: Optional[str]
     energy: Optional[float] = None
+    tags: List[str] = field(default_factory=list)
 
     def to_preview(self, track_id: UUID) -> schemas.LoopPreview:
         return schemas.LoopPreview(
@@ -96,6 +97,7 @@ class LoopRecord:
             bpm=self.bpm,
             musical_key=self.musical_key,
             energy=self.energy,
+            tags=self.tags,
             file_url=f"/api/v1/library/tracks/{track_id}/loops/{self.id}/audio",
         )
 
@@ -521,6 +523,38 @@ class PipelineOrchestrator:
         stage.progress = 1.0
         return audio_path
 
+
+    @staticmethod
+    def _compute_energy(audio: "np.ndarray", sr: int) -> float:
+        """Compute normalised RMS energy 0.0-1.0."""
+        import math
+        import librosa
+        rms = librosa.feature.rms(y=audio)[0]
+        mean_rms = float(rms.mean())
+        if mean_rms <= 0:
+            return 0.0
+        db = 20 * math.log10(mean_rms)
+        return max(0.0, min(1.0, (db + 60) / 60))
+
+    @staticmethod
+    def _auto_tags(energy: float, bpm: float, key: Optional[str]) -> List[str]:
+        """Generate automatic tags from loop properties."""
+        tags: List[str] = []
+        if energy >= 0.75:
+            tags.append("high-energy")
+        elif energy <= 0.25:
+            tags.append("low-energy")
+        if bpm:
+            if bpm < 90:
+                tags.append("slow")
+            elif bpm > 140:
+                tags.append("fast")
+            else:
+                tags.append(f"{int(round(bpm / 10) * 10)}bpm")
+        if key:
+            tags.append(key.lower())
+        return tags
+
     async def _stage_loop(
         self,
         job: JobRecord,
@@ -565,6 +599,8 @@ class PipelineOrchestrator:
                 loop_id = f"{track.slug}-loop-{index + 1}"
                 file_path = loops_dir / f"{loop_id}.wav"
                 sf.write(file_path, slice_audio, sr)
+                slice_energy = PipelineOrchestrator._compute_energy(slice_audio, sr)
+                loop_tags = PipelineOrchestrator._auto_tags(slice_energy, bpm, track.musical_key)
                 results.append(
                     LoopRecord(
                         id=loop_id,
@@ -575,7 +611,8 @@ class PipelineOrchestrator:
                         stem="mixdown",
                         bpm=bpm,
                         musical_key=track.musical_key,
-                        energy=None,
+                        energy=slice_energy,
+                        tags=loop_tags,
                     ),
                 )
 
