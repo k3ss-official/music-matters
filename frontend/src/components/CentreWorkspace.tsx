@@ -3,7 +3,7 @@ import type { TrackDetailResponse } from '../types';
 import { WaveformCanvas } from './WaveformCanvas';
 import { LoopEditorToolbar } from './LoopEditorToolbar';
 import { getTrackAudioUrl, createCustomLoop, getSmartPhrases, type SmartPhrase } from '../services/api';
-import { Zap } from 'lucide-react';
+import { Zap, Loader2, AlertCircle, X } from 'lucide-react';
 
 interface CentreWorkspaceProps {
     trackId: string | null;
@@ -35,14 +35,24 @@ export function CentreWorkspace({
     const [snapEnabled, setSnapEnabled] = React.useState(true);
     const [smartPhrases, setSmartPhrases] = React.useState<SmartPhrase[]>([]);
     const [loadingPhrases, setLoadingPhrases] = React.useState(false);
+    const [phrasesError, setPhrasesError] = React.useState<string | null>(null);
+    const [saveSuccess, setSaveSuccess] = React.useState(false);
 
     React.useEffect(() => {
         if (trackId && waveformReady) {
+            setPhrasesError(null);
             setLoadingPhrases(true);
             getSmartPhrases(trackId)
                 .then(resp => setSmartPhrases(resp.phrases || []))
-                .catch(() => setSmartPhrases([]))
+                .catch((err: any) => {
+                    setSmartPhrases([]);
+                    setPhrasesError(err?.response?.data?.detail || err?.message || 'Failed to load phrases');
+                })
                 .finally(() => setLoadingPhrases(false));
+        }
+        if (!trackId) {
+            setSmartPhrases([]);
+            setPhrasesError(null);
         }
     }, [trackId, waveformReady]);
 
@@ -57,9 +67,14 @@ export function CentreWorkspace({
             verse: 'Verse',
             chorus: 'Chorus',
             drop: 'Drop',
-            bridge: 'Bridge'
+            bridge: 'Bridge',
+            breakdown: 'Breakdown',
+            build: 'Build',
+            'pre-chorus': 'Pre-Ch',
+            hook: 'Hook',
+            instrumental: 'Inst',
         };
-        return labels[type] || type;
+        return labels[type] || type.charAt(0).toUpperCase() + type.slice(1);
     };
 
     const getPhraseColor = (type: string) => {
@@ -69,7 +84,12 @@ export function CentreWorkspace({
             verse: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
             chorus: 'bg-pink-500/20 text-pink-400 border-pink-500/30',
             drop: 'bg-red-500/20 text-red-400 border-red-500/30',
-            bridge: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
+            bridge: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+            breakdown: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+            build: 'bg-teal-500/20 text-teal-400 border-teal-500/30',
+            'pre-chorus': 'bg-fuchsia-500/20 text-fuchsia-400 border-fuchsia-500/30',
+            hook: 'bg-rose-500/20 text-rose-400 border-rose-500/30',
+            instrumental: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
         };
         return colors[type] || 'bg-gray-500/20 text-gray-400 border-gray-500/30';
     };
@@ -77,9 +97,12 @@ export function CentreWorkspace({
     const handleSaveLoop = async () => {
         if (!trackId || saving) return;
         setSaving(true);
+        setSaveSuccess(false);
         try {
             const allStems = trackDetail?.stems || ['drums', 'bass', 'other', 'vocals'];
             await createCustomLoop(trackId, regionStart, regionEnd, allStems);
+            setSaveSuccess(true);
+            setTimeout(() => setSaveSuccess(false), 2500);
         } catch (err) {
             console.error('Failed to save loop:', err);
         } finally {
