@@ -108,24 +108,29 @@ async def export_ableton(request: AbletonExportRequest):
     except KeyError:
         raise HTTPException(status_code=404, detail="Track not found")
 
-    stems_dir = settings.resolved_stems_dir / track.slug
+    # Resolve stems directory from track record
+    from app.services.pipeline import pipeline as _pipeline
+    track_record = _pipeline._tracks.get(track_uuid)
+    if track_record and track_record.stems_dir:
+        stems_dir = track_record.stems_dir
+    else:
+        stems_dir = settings.resolved_stems_dir / track.slug
 
     stem_files = {}
-    available_stems = [
-        "drums",
-        "bass",
-        "other",
-        "vocals",
-        "guitar",
-        "piano",
-        "synth",
-        "other",
-    ]
-
     for stem in request.stems:
-        stem_file = stems_dir / f"{stem}.wav"
-        if stem_file.exists():
-            stem_files[stem] = str(stem_file)
+        stem_clean = stem.replace(".wav", "")
+        for candidate in [
+            stems_dir / f"{stem_clean}.wav",
+            stems_dir / stem_clean,
+        ]:
+            if candidate.exists():
+                stem_files[stem_clean] = str(candidate)
+                break
+
+    # Fallback: use all WAV files in stems dir
+    if not stem_files and stems_dir.exists():
+        for wav in stems_dir.glob("*.wav"):
+            stem_files[wav.stem] = str(wav)
 
     if not stem_files:
         raise HTTPException(status_code=400, detail="No stem files found")
@@ -139,7 +144,12 @@ async def export_ableton(request: AbletonExportRequest):
         output_file = output_dir / f"{track.slug}_ableton.als"
 
         exporter.export(
-            output_path=output_file, stem_files=stem_files, track_title=track.title
+            output_path=output_file,
+            stem_files=stem_files,
+            track_title=track.title,
+            bpm=float(track.bpm or 120.0),
+            start_time=request.start_time,
+            end_time=request.end_time,
         )
 
         return {
