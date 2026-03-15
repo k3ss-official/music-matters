@@ -2,7 +2,8 @@ import React from 'react';
 import type { TrackDetailResponse } from '../types';
 import { WaveformCanvas } from './WaveformCanvas';
 import { LoopEditorToolbar } from './LoopEditorToolbar';
-import { getTrackAudioUrl } from '../services/api';
+import { getTrackAudioUrl, createCustomLoop, getSmartPhrases, type SmartPhrase } from '../services/api';
+import { Zap } from 'lucide-react';
 
 interface CentreWorkspaceProps {
     trackId: string | null;
@@ -30,6 +31,61 @@ export function CentreWorkspace({
     errorMsg
 }: CentreWorkspaceProps) {
     const [previewing, setPreviewing] = React.useState(false);
+    const [saving, setSaving] = React.useState(false);
+    const [snapEnabled, setSnapEnabled] = React.useState(true);
+    const [smartPhrases, setSmartPhrases] = React.useState<SmartPhrase[]>([]);
+    const [loadingPhrases, setLoadingPhrases] = React.useState(false);
+
+    React.useEffect(() => {
+        if (trackId && waveformReady) {
+            setLoadingPhrases(true);
+            getSmartPhrases(trackId)
+                .then(resp => setSmartPhrases(resp.phrases || []))
+                .catch(() => setSmartPhrases([]))
+                .finally(() => setLoadingPhrases(false));
+        }
+    }, [trackId, waveformReady]);
+
+    const handleSmartPhrase = (phrase: SmartPhrase) => {
+        onUpdateRegion(phrase.start_time, phrase.end_time);
+    };
+
+    const getPhraseLabel = (type: string) => {
+        const labels: Record<string, string> = {
+            intro: 'Intro',
+            outro: 'Outro',
+            verse: 'Verse',
+            chorus: 'Chorus',
+            drop: 'Drop',
+            bridge: 'Bridge'
+        };
+        return labels[type] || type;
+    };
+
+    const getPhraseColor = (type: string) => {
+        const colors: Record<string, string> = {
+            intro: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+            outro: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+            verse: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+            chorus: 'bg-pink-500/20 text-pink-400 border-pink-500/30',
+            drop: 'bg-red-500/20 text-red-400 border-red-500/30',
+            bridge: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
+        };
+        return colors[type] || 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+    };
+
+    const handleSaveLoop = async () => {
+        if (!trackId || saving) return;
+        setSaving(true);
+        try {
+            const allStems = trackDetail?.stems || ['drums', 'bass', 'other', 'vocals'];
+            await createCustomLoop(trackId, regionStart, regionEnd, allStems);
+        } catch (err) {
+            console.error('Failed to save loop:', err);
+        } finally {
+            setSaving(false);
+        }
+    };
 
     React.useEffect(() => {
         // Sync previewing state with actual wavesurfer play state, and bound checking
@@ -85,7 +141,15 @@ export function CentreWorkspace({
             {/* Main Waveform Area */}
             <div className="flex-1 p-6 flex flex-col bg-black/20">
                 <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-[#00d4ff]">Slice Workspace</h3>
+                    <div className="flex items-center gap-4">
+                        <h3 className="text-sm font-bold uppercase tracking-wider text-[#00d4ff]">Slice Workspace</h3>
+                        {smartPhrases.length > 0 && (
+                            <div className="flex items-center gap-1">
+                                <Zap size={12} className="text-yellow-400" />
+                                <span className="text-[10px] text-yellow-400 font-medium uppercase">Smart</span>
+                            </div>
+                        )}
+                    </div>
                     {/* Waveform tools */}
                     <div className="flex items-center gap-1">
                         {['Zoom In', 'Zoom Out', 'Fit'].map(lbl => (
@@ -96,6 +160,22 @@ export function CentreWorkspace({
                     </div>
                 </div>
 
+                {/* Smart Phrases */}
+                {smartPhrases.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-4">
+                        {smartPhrases.map((phrase, idx) => (
+                            <button
+                                key={idx}
+                                onClick={() => handleSmartPhrase(phrase)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold border transition-all hover:scale-105 ${getPhraseColor(phrase.type)}`}
+                            >
+                                <Zap size={10} />
+                                {getPhraseLabel(phrase.type)} ({phrase.bar_count}b)
+                            </button>
+                        ))}
+                    </div>
+                )}
+
                 <div className="flex-1 bg-[#0a0a0f] border border-white/5 rounded-lg overflow-hidden shadow-inner relative flex flex-col justify-center min-h-[220px]">
                     <WaveformCanvas
                         audioUrl={audioUrl}
@@ -103,6 +183,9 @@ export function CentreWorkspace({
                         regionsRef={regionsRef}
                         onReady={() => setWaveformReady(true)}
                         onRegionUpdate={onUpdateRegion}
+                        downbeats={trackDetail?.metadata?.beat_grid?.downbeats || []}
+                        bpm={trackDetail?.bpm || null}
+                        snapEnabled={snapEnabled}
                     />
                 </div>
             </div>
@@ -115,7 +198,11 @@ export function CentreWorkspace({
                     bpm={trackDetail?.bpm || null}
                     onUpdateRegion={onUpdateRegion}
                     onPreviewToggle={() => setPreviewing(!previewing)}
+                    onSaveLoop={handleSaveLoop}
                     previewing={previewing}
+                    saving={saving}
+                    snapEnabled={snapEnabled}
+                    onSnapToggle={() => setSnapEnabled(!snapEnabled)}
                 />
             )}
         </div>

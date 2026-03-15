@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DownloadCloud, Layers } from 'lucide-react';
+import { DownloadCloud, Layers, Music2 } from 'lucide-react';
 import * as api from '../services/api';
 
 interface ExportPanelProps {
@@ -49,6 +49,22 @@ export function ExportPanel({
         } catch (e: any) {
             console.error(e);
             setErrorMsg(e.message || 'Export failed');
+        } finally {
+            setExporting(false);
+        }
+    };
+
+    const handleExportAbleton = async () => {
+        try {
+            setExporting(true);
+            setErrorMsg(null);
+            const result = await api.exportToAbleton(trackId, selectedStems, regionStart, regionEnd);
+            if (result.download_url) {
+                window.open(result.download_url, '_blank');
+            }
+        } catch (e: any) {
+            console.error(e);
+            setErrorMsg(e.message || 'Ableton export failed');
         } finally {
             setExporting(false);
         }
@@ -107,6 +123,14 @@ export function ExportPanel({
                 className="w-full py-2 rounded-lg font-bold text-xs text-[#8b5cf6] bg-[#8b5cf6]/10 border border-[#8b5cf6]/30 hover:bg-[#8b5cf6]/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
                 Export All Stems
+            </button>
+
+            <button
+                disabled={disabled || exporting || selectedStems.length === 0 || regionEnd <= regionStart}
+                onClick={handleExportAbleton}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-bold text-xs text-[#22c55e] bg-[#22c55e]/10 border border-[#22c55e]/30 hover:bg-[#22c55e]/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+                <Music2 size={16} /> Export to Ableton (.als)
             </button>
         </div>
     );

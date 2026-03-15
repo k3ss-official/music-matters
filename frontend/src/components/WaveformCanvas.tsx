@@ -10,6 +10,9 @@ interface WaveformCanvasProps {
     onRegionUpdate?: (start: number, end: number) => void;
     wavesurferRef?: React.MutableRefObject<WaveSurfer | null>;
     regionsRef?: React.MutableRefObject<any>;
+    downbeats?: number[];
+    bpm?: number | null;
+    snapEnabled?: boolean;
 }
 
 export function WaveformCanvas({
@@ -19,11 +22,34 @@ export function WaveformCanvas({
     onRegionUpdate,
     wavesurferRef,
     regionsRef,
+    downbeats = [],
+    bpm = null,
+    snapEnabled = true,
 }: WaveformCanvasProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const timelineRef = useRef<HTMLDivElement>(null);
     const [loading, setLoading] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+    const snapToGrid = (time: number): number => {
+        if (!snapEnabled || downbeats.length === 0) return time;
+        const sortedDownbeats = [...downbeats].sort((a, b) => a - b);
+        let closest = sortedDownbeats[0];
+        let minDist = Math.abs(time - closest);
+        for (const db of sortedDownbeats) {
+            const dist = Math.abs(time - db);
+            if (dist < minDist) {
+                minDist = dist;
+                closest = db;
+            }
+        }
+        return closest;
+    };
+
+    const snapEnabledRef = useRef(snapEnabled);
+    const downbeatsRef = useRef(downbeats);
+    snapEnabledRef.current = snapEnabled;
+    downbeatsRef.current = downbeats;
 
     useEffect(() => {
         if (!containerRef.current || !timelineRef.current || !audioUrl) return;
@@ -80,7 +106,29 @@ export function WaveformCanvas({
         });
 
         wsRegions.on('region-updated', (region: any) => {
-            if (onRegionUpdate) onRegionUpdate(region.start, region.end);
+            let snappedStart = region.start;
+            let snappedEnd = region.end;
+            if (snapEnabledRef.current && downbeatsRef.current.length > 0) {
+                snappedStart = snapToGrid(region.start);
+                snappedEnd = snapToGrid(region.end);
+                if (snappedStart !== region.start || snappedEnd !== region.end) {
+                    region.setOptions({ start: snappedStart, end: snappedEnd });
+                }
+            }
+            if (onRegionUpdate) onRegionUpdate(snappedStart, snappedEnd);
+        });
+
+        wsRegions.on('region-created', (region: any) => {
+            let snappedStart = region.start;
+            let snappedEnd = region.end;
+            if (snapEnabledRef.current && downbeatsRef.current.length > 0) {
+                snappedStart = snapToGrid(region.start);
+                snappedEnd = snapToGrid(region.end);
+                if (snappedStart !== region.start || snappedEnd !== region.end) {
+                    region.setOptions({ start: snappedStart, end: snappedEnd });
+                }
+            }
+            if (onRegionUpdate) onRegionUpdate(snappedStart, snappedEnd);
         });
 
         ws.on('error', (err: any) => {

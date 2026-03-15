@@ -80,6 +80,50 @@ export const createCustomLoop = async (trackId: string, startTime: number, endTi
   return response.data;
 };
 
+export interface SmartPhrase {
+  type: string;
+  start_time: number;
+  end_time: number;
+  start_bar: number;
+  bar_count: number;
+  confidence: number;
+  energy: number;
+}
+
+export interface SmartPhrasesResponse {
+  phrases: SmartPhrase[];
+  duration: number;
+  bpm: number;
+}
+
+export const getSmartPhrases = async (trackId: string): Promise<SmartPhrasesResponse> => {
+  const response = await api.get(`/library/tracks/${trackId}/phrases`);
+  return response.data;
+};
+
+export interface AbletonExportResponse {
+  success: boolean;
+  format: string;
+  output_file: string;
+  stem_count: number;
+  download_url: string;
+}
+
+export const exportToAbleton = async (
+  trackId: string, 
+  stems: string[], 
+  startTime: number = 0, 
+  endTime: number = 0
+): Promise<AbletonExportResponse> => {
+  const response = await api.post('/export/ableton', {
+    track_id: trackId,
+    stems,
+    start_time: startTime,
+    end_time: endTime
+  });
+  return response.data;
+};
+
 // --- Legacy / Domain Specific APIs ---
 
 // Health & Info

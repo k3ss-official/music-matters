@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play } from 'lucide-react';
+import { Play, Save, Magnet } from 'lucide-react';
 
 interface LoopEditorToolbarProps {
     regionStart: number;
@@ -7,7 +7,11 @@ interface LoopEditorToolbarProps {
     bpm: number | null;
     onUpdateRegion: (start: number, end: number) => void;
     onPreviewToggle: () => void;
+    onSaveLoop: () => void;
     previewing?: boolean;
+    saving?: boolean;
+    snapEnabled?: boolean;
+    onSnapToggle?: () => void;
 }
 
 export function LoopEditorToolbar({
@@ -16,7 +20,11 @@ export function LoopEditorToolbar({
     bpm,
     onUpdateRegion,
     onPreviewToggle,
+    onSaveLoop,
     previewing = false,
+    saving = false,
+    snapEnabled = true,
+    onSnapToggle,
 }: LoopEditorToolbarProps) {
     const formatTime = (seconds: number) => {
         return seconds.toFixed(3);
@@ -101,19 +109,39 @@ export function LoopEditorToolbar({
                     {!bpm && <span className="text-xs text-[#ff3b5c]/70 ml-2">(Requires BPM Analysis)</span>}
                 </div>
 
-                <button
-                    onClick={onPreviewToggle}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm transition-all ${previewing
-                            ? 'bg-[#ff3b5c]/20 text-[#ff3b5c] border border-[#ff3b5c]/50 shadow-[0_0_10px_rgba(255,59,92,0.3)]'
-                            : 'bg-[#8b5cf6]/20 text-[#8b5cf6] border border-[#8b5cf6]/50 shadow-[0_0_10px_rgba(139,92,246,0.2)] hover:bg-[#8b5cf6]/30'
-                        }`}
-                >
-                    {previewing ? 'Stop Preview' : (
-                        <>
-                            <Play size={14} fill="currentColor" /> Preview Loop
-                        </>
+                <div className="flex items-center gap-2">
+                    {onSnapToggle && (
+                        <button
+                            onClick={onSnapToggle}
+                            className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-bold transition-all ${snapEnabled
+                                ? 'bg-[#00d4ff]/20 text-[#00d4ff] border border-[#00d4ff]/50'
+                                : 'bg-white/5 text-gray-400 border border-white/10'
+                            }`}
+                        >
+                            <Magnet size={12} /> Snap {snapEnabled ? 'On' : 'Off'}
+                        </button>
                     )}
-                </button>
+                    <button
+                        onClick={onSaveLoop}
+                        disabled={saving}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold bg-[#22c55e]/20 text-[#22c55e] border border-[#22c55e]/50 hover:bg-[#22c55e]/30 transition-all disabled:opacity-50"
+                    >
+                        <Save size={14} /> {saving ? 'Saving...' : 'Save Loop'}
+                    </button>
+                    <button
+                        onClick={onPreviewToggle}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm transition-all ${previewing
+                                ? 'bg-[#ff3b5c]/20 text-[#ff3b5c] border border-[#ff3b5c]/50 shadow-[0_0_10px_rgba(255,59,92,0.3)]'
+                                : 'bg-[#8b5cf6]/20 text-[#8b5cf6] border border-[#8b5cf6]/50 shadow-[0_0_10px_rgba(139,92,246,0.2)] hover:bg-[#8b5cf6]/30'
+                            }`}
+                    >
+                        {previewing ? 'Stop Preview' : (
+                            <>
+                                <Play size={14} fill="currentColor" /> Preview Loop
+                            </>
+                        )}
+                    </button>
+                </div>
             </div>
         </div>
     );

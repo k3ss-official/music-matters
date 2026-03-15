@@ -17,6 +17,7 @@ from app.api import schemas
 from app.config import settings
 from app.services.search.download_service import DownloadService
 from app.services.library import LibraryPaths
+from app.services.db import db
 
 StageStatus = str  # alias for readability
 
@@ -150,6 +151,18 @@ class PipelineOrchestrator:
         self._jobs: Dict[UUID, JobRecord] = {}
         self._tracks: Dict[UUID, TrackRecord] = {}
         self._loop_records: Dict[UUID, Dict[str, LoopRecord]] = {}
+
+        # Hydrate from DB on boot
+        raw_tracks = db.load_all_tracks()
+        for tid, data in raw_tracks.items():
+            self._tracks[tid] = TrackRecord(**data)
+
+        raw_loops = db.load_all_loops()
+        for tid, loops_map in raw_loops.items():
+            self._loop_records[tid] = {
+                lid: LoopRecord(**ldata) for lid, ldata in loops_map.items()
+            }
+
         self._lock = asyncio.Lock()
         self._library = LibraryPaths(settings)
         self._downloader = DownloadService(settings)
@@ -178,9 +191,10 @@ class PipelineOrchestrator:
             },
         )
         self._tracks[track_id] = track_record
+        db.save_track(track_record)
 
         job_record = JobRecord(job_id=job_id, track_id=track_id)
-        
+
         # Determine which stages to run
         options = payload.options
         stages_to_add = [("ingest", "Ingest")]
@@ -245,10 +259,12 @@ class PipelineOrchestrator:
             track_dir = self._library.get_track_dir(track_id)
             if track_dir.exists():
                 import shutil
+
                 shutil.rmtree(track_dir)
         except Exception as e:
             logger.error(f"Failed to delete track directory for {track_id}: {e}")
         del self._tracks[track_id]
+        db.delete_track(track_id)
         if track_id in self._loop_records:
             del self._loop_records[track_id]
 
@@ -258,7 +274,7 @@ class PipelineOrchestrator:
         job.started_at = datetime.now(timezone.utc)
         job.status = "running"
         track = self._tracks[job.track_id]
-        
+
         # Default options if not provided (e.g. reprocessing)
         options = payload.options if payload else schemas.ProcessingOptions()
 
@@ -266,20 +282,20 @@ class PipelineOrchestrator:
             audio_path = await self._run_stage(
                 job, "ingest", self._stage_ingest, track, payload
             )
-            
+
             if options.analysis:
                 await self._run_stage(
                     job, "analysis", self._stage_analysis, track, audio_path
                 )
-            
+
             if options.separation:
                 await self._run_stage(
                     job, "separation", self._stage_separation, track, audio_path
                 )
-            
+
             if options.loop_slicing:
                 await self._run_stage(job, "loop", self._stage_loop, track, audio_path)
-            
+
             await self._run_stage(
                 job, "project", self._stage_project, track, audio_path
             )
@@ -312,6 +328,10 @@ class PipelineOrchestrator:
             stage.status = "done"
             stage.progress = 1.0
             stage.detail = stage.detail or "Completed"
+
+            # Persist track state changes after each stage
+            db.save_track(track)
+
             return result
         except Exception as exc:  # pylint: disable=broad-except
             stage.status = "error"
@@ -341,19 +361,26 @@ class PipelineOrchestrator:
         def _download() -> Path:
             if "://" in source:
                 import yt_dlp
+
                 try:
-                    with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True}) as ydl:
+                    with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True}) as ydl:
                         info = ydl.extract_info(source, download=False)
                         if info:
                             track.title = info.get("title", track.title)
-                            track.artist = info.get("artist") or info.get("uploader", track.artist)
+                            track.artist = info.get("artist") or info.get(
+                                "uploader", track.artist
+                            )
                 except Exception:
                     pass
                 return self._downloader.download(source)
-            source_path = Path(source).expanduser().resolve()
-            if not source_path.exists():
-                raise FileNotFoundError(f"Input file not found: {source_path}")
-            return source_path
+            # Check if it's a URL without protocol (e.g., youtu.be/xxx)
+            if source.startswith(
+                ("youtu.be/", "youtube.com/", "soundcloud.com/", "bandcamp.com/")
+            ):
+                return self._downloader.download(f"https://{source}")
+            # Text query - use yt-dlp search to find and download top result
+            search_query = f"ytsearch1:{source}"
+            return self._downloader.download(search_query)
 
         audio_path = _download()
 
@@ -551,6 +578,11 @@ class PipelineOrchestrator:
                         energy=None,
                     ),
                 )
+
+            # Persist loops to DB
+            for loop_rec in results:
+                db.save_loop(track.track_id, loop_rec)
+
             return results
 
         loop_records = _generate()
@@ -723,7 +755,7 @@ class PipelineOrchestrator:
         record = loop_map.get(loop_id)
         if record and record.path.exists():
             return record.path
-            
+
         track = self.get_track(track_id)
         if not track.loops_dir:
             raise FileNotFoundError("No loops generated yet")
@@ -743,8 +775,9 @@ class PipelineOrchestrator:
 
         def _generate():
             from app.services.processing.sample_extractor import get_sample_extractor
+
             xtp = get_sample_extractor()
-            
+
             # Use sample extractor to do the bounce
             out_path = xtp.extract_custom_sample(
                 track_path=track.original_path,
@@ -752,35 +785,38 @@ class PipelineOrchestrator:
                 end_time=end_time,
                 artist=track.artist or "Unknown",
                 title=track.title,
-                extract_stems=len(stems) > 0
+                extract_stems=len(stems) > 0,
             )
-            
+
             # Record it
             import time
+
             loop_id = f"custom-{int(time.time())}"
             if track.loops_dir:
                 dest = track.loops_dir / f"{loop_id}.wav"
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 import shutil
+
                 shutil.copy(out_path, dest)
                 out_path = dest
 
             return LoopRecord(
                 id=loop_id,
-                label=f"Custom Loop ({end_time-start_time:.1f}s)",
+                label=f"Custom Loop ({end_time - start_time:.1f}s)",
                 path=out_path,
                 start_bar=0,
                 bar_count=0,
                 stem="custom",
                 bpm=track.bpm or 120.0,
                 musical_key=track.musical_key,
-                energy=0.5
+                energy=0.5,
             ).to_preview(track.track_id)
 
         try:
             return await asyncio.to_thread(_generate)
         except Exception as exc:
             import logging
+
             logging.error(f"Custom loop failed: {exc}")
             raise KeyError("Failed to slice custom loop")
 

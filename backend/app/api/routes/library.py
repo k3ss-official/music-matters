@@ -20,10 +20,12 @@ from app.api.schemas import (
 from pydantic import BaseModel
 from app.services.pipeline import pipeline
 
+
 class CustomLoopRequest(BaseModel):
     start_time: float
     end_time: float
     stems: list[str] = []
+
 
 router = APIRouter(prefix="/library", tags=["library"])
 
@@ -81,7 +83,9 @@ async def refresh_track(track_id: str) -> JobResponse:
 
 
 @router.get("/tracks/{track_id}/loops", response_model=list[LoopPreview])
-async def track_loops(track_id: str, bar_length: int | None = Query(default=None, ge=1, le=32)) -> list[LoopPreview]:
+async def track_loops(
+    track_id: str, bar_length: int | None = Query(default=None, ge=1, le=32)
+) -> list[LoopPreview]:
     try:
         track_uuid = UUID(track_id)
     except ValueError as exc:
@@ -94,7 +98,9 @@ async def track_loops(track_id: str, bar_length: int | None = Query(default=None
 
 
 @router.post("/tracks/{track_id}/loops/reslice", response_model=list[LoopPreview])
-async def reslice_loops(track_id: str, payload: LoopResliceRequest) -> list[LoopPreview]:
+async def reslice_loops(
+    track_id: str, payload: LoopResliceRequest
+) -> list[LoopPreview]:
     try:
         track_uuid = UUID(track_id)
     except ValueError as exc:
@@ -131,10 +137,36 @@ async def create_custom_loop(track_id: str, payload: CustomLoopRequest) -> LoopP
 
     try:
         return await pipeline.extract_custom_loop(
-            track_uuid, 
-            start_time=payload.start_time, 
+            track_uuid,
+            start_time=payload.start_time,
             end_time=payload.end_time,
-            stems=payload.stems
+            stems=payload.stems,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.get("/tracks/{track_id}/phrases")
+async def get_smart_phrases(track_id: str):
+    """Get smart phrase suggestions (chorus, drop, intro, outro) for a track."""
+    from pathlib import Path
+
+    try:
+        track_uuid = UUID(track_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    try:
+        track = pipeline.get_track(track_uuid)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    audio_path = track.original_path
+    if not audio_path or not Path(audio_path).exists():
+        raise HTTPException(status_code=404, detail="Audio file not found")
+
+    from app.services.analysis.sota_analyzer import get_sota_analyzer
+
+    analyzer = get_sota_analyzer()
+    phrases = analyzer.detect_smart_phrases(Path(audio_path))
+    return phrases

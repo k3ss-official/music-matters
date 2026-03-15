@@ -37,8 +37,10 @@ export function SearchIngest({ onFileUpload, onUrlSubmit, loading }: SearchInges
             onUrlSubmit(inputVal.trim(), getOptions());
             setInputVal('');
         } else {
-            // Stub search mode for now
-            alert('Search mode is coming soon! For now, paste a URL or upload a file.');
+            // Search mode - send text query to backend via onUrlSubmit
+            // Backend will use yt-dlp to search and download the top result
+            onUrlSubmit(inputVal.trim(), getOptions());
+            setInputVal('');
         }
     };
 
