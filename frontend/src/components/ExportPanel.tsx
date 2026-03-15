@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DownloadCloud, Layers, Music2 } from 'lucide-react';
+import { DownloadCloud, Layers, Music2, Loader2, CheckCircle2 } from 'lucide-react';
 import * as api from '../services/api';
 
 interface ExportPanelProps {
@@ -21,6 +21,8 @@ export function ExportPanel({
 }: ExportPanelProps) {
     const [format, setFormat] = useState('WAV');
     const [exporting, setExporting] = useState(false);
+    const [abletonLoading, setAbletonLoading] = useState(false);
+    const [abletonSuccess, setAbletonSuccess] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
     const handleExportLoop = async () => {
@@ -55,20 +57,42 @@ export function ExportPanel({
     };
 
     const handleExportAbleton = async () => {
+        if (!trackId || abletonLoading) return;
+        setAbletonLoading(true);
+        setExporting(true);
+        setErrorMsg(null);
+        setAbletonSuccess(false);
         try {
-            setExporting(true);
-            setErrorMsg(null);
-            const result = await api.exportToAbleton(trackId, selectedStems, regionStart, regionEnd);
-            if (result.download_url) {
-                window.open(result.download_url, '_blank');
-            }
+            const { blob, filename } = await api.downloadAbletonExport(
+                trackId,
+                selectedStems.length > 0 ? selectedStems : ['mixdown'],
+                regionStart,
+                regionEnd,
+            );
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            setAbletonSuccess(true);
+            setTimeout(() => setAbletonSuccess(false), 3000);
         } catch (e: any) {
-            console.error(e);
-            setErrorMsg(e.message || 'Ableton export failed');
+            console.error('Ableton export failed', e);
+            setErrorMsg(
+                e instanceof api.ApiError
+                    ? `Export failed (${e.status}): ${e.detail}`
+                    : e?.message || 'Ableton export failed',
+            );
         } finally {
             setExporting(false);
+            setAbletonLoading(false);
         }
     };
+
+    const abletonDisabled = disabled || abletonLoading || exporting || !trackId || regionEnd <= regionStart;
 
     const lengthS = Math.max(0, regionEnd - regionStart).toFixed(3);
 
@@ -126,12 +150,27 @@ export function ExportPanel({
             </button>
 
             <button
-                disabled={disabled || exporting || selectedStems.length === 0 || regionEnd <= regionStart}
+                disabled={abletonDisabled}
                 onClick={handleExportAbleton}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-bold text-xs text-[#22c55e] bg-[#22c55e]/10 border border-[#22c55e]/30 hover:bg-[#22c55e]/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-bold text-xs transition-colors ${
+                    abletonSuccess
+                        ? 'text-[#00ff88] bg-[#00ff88]/10 border border-[#00ff88]/30'
+                        : 'text-[#22c55e] bg-[#22c55e]/10 border border-[#22c55e]/30 hover:bg-[#22c55e]/20'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
             >
-                <Music2 size={16} /> Export to Ableton (.als)
+                {abletonLoading ? (
+                    <><Loader2 size={15} className="animate-spin" /><span>Exporting...</span></>
+                ) : abletonSuccess ? (
+                    <><CheckCircle2 size={15} /><span>Downloaded!</span></>
+                ) : (
+                    <><Music2 size={16} /><span>Export to Ableton (.als)</span></>
+                )}
             </button>
+            {!disabled && selectedStems.length === 0 && trackId && (
+                <p className="text-[10px] text-gray-600 text-center">
+                    No stems selected — all available stems will be used
+                </p>
+            )}
         </div>
     );
 }
