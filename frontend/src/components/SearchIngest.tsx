@@ -1,14 +1,16 @@
 import React, { useState, useRef } from 'react';
-import { UploadCloud, Search, Link as LinkIcon } from 'lucide-react';
+import { UploadCloud, Search, Link as LinkIcon, List } from 'lucide-react';
 import type { ProcessingMode, ProcessingOptions } from '../types';
+import { batchIngest } from '../services/api';
 
 interface SearchIngestProps {
     onFileUpload: (file: File, options: ProcessingOptions) => Promise<void>;
     onUrlSubmit: (url: string, options: ProcessingOptions) => Promise<void>;
+    onBatchSubmit?: (count: number) => void;
     loading?: boolean;
 }
 
-export function SearchIngest({ onFileUpload, onUrlSubmit, loading }: SearchIngestProps) {
+export function SearchIngest({ onFileUpload, onUrlSubmit, onBatchSubmit, loading }: SearchIngestProps) {
     const [inputVal, setInputVal] = useState('');
     const [mode, setMode] = useState<ProcessingMode>('full');
     const [customOptions, setCustomOptions] = useState<ProcessingOptions>({
@@ -17,6 +19,11 @@ export function SearchIngest({ onFileUpload, onUrlSubmit, loading }: SearchInges
         loopSlicing: true,
         mastering: false,
     });
+    const [tab, setTab] = useState<'single' | 'batch'>('single');
+    const [batchText, setBatchText] = useState('');
+    const [batchLoading, setBatchLoading] = useState(false);
+    const [batchError, setBatchError] = useState<string | null>(null);
+    const [batchResult, setBatchResult] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const getOptions = (): ProcessingOptions => {
@@ -53,8 +60,66 @@ export function SearchIngest({ onFileUpload, onUrlSubmit, loading }: SearchInges
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
+    const handleBatchSubmit = async () => {
+        const queries = batchText.split('\n').map(q => q.trim()).filter(Boolean);
+        if (queries.length === 0) return;
+        setBatchLoading(true);
+        setBatchError(null);
+        setBatchResult(null);
+        try {
+            const result = await batchIngest(queries, getOptions());
+            setBatchResult(`Queued ${result.total} track${result.total !== 1 ? 's' : ''}`);
+            setBatchText('');
+            if (onBatchSubmit) onBatchSubmit(result.total);
+        } catch (e: any) {
+            setBatchError(e?.response?.data?.detail || e?.message || 'Batch failed');
+        } finally {
+            setBatchLoading(false);
+        }
+    };
+
     return (
         <div className="bg-[#12121a] border border-white/5 rounded-lg overflow-hidden flex flex-col">
+            {/* Tab switcher */}
+            <div className="flex border-b border-white/5 text-[10px] font-bold uppercase tracking-wider">
+                <button
+                    onClick={() => setTab('single')}
+                    className={`flex-1 py-2.5 transition-colors ${tab === 'single' ? 'bg-[#1a1a26] text-[#00d4ff] border-b-2 border-[#00d4ff]' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}
+                >
+                    <Search size={11} className="inline mr-1" />Single
+                </button>
+                <button
+                    onClick={() => setTab('batch')}
+                    className={`flex-1 py-2.5 transition-colors ${tab === 'batch' ? 'bg-[#1a1a26] text-[#8b5cf6] border-b-2 border-[#8b5cf6]' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}
+                >
+                    <List size={11} className="inline mr-1" />Batch
+                </button>
+            </div>
+
+            {tab === 'batch' && (
+                <div className="flex flex-col p-4 gap-3">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">One query per line (max 50)</label>
+                    <textarea
+                        rows={6}
+                        value={batchText}
+                        onChange={e => { setBatchText(e.target.value); setBatchError(null); setBatchResult(null); }}
+                        disabled={batchLoading}
+                        placeholder={"Artist - Track\nhttps://youtu.be/...\ndrums loop 90bpm"}
+                        className="w-full bg-black/40 text-sm text-white px-3 py-2 rounded border border-white/10 focus:border-[#8b5cf6]/50 outline-none resize-none placeholder-gray-600 font-mono"
+                    />
+                    {batchError && <p className="text-[#ff3b5c] text-xs">{batchError}</p>}
+                    {batchResult && <p className="text-[#00ff88] text-xs font-bold">{batchResult}</p>}
+                    <button
+                        onClick={handleBatchSubmit}
+                        disabled={batchLoading || !batchText.trim()}
+                        className="w-full py-2.5 rounded-lg font-bold text-xs text-[#8b5cf6] bg-[#8b5cf6]/10 border border-[#8b5cf6]/30 hover:bg-[#8b5cf6]/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                        {batchLoading ? 'Queuing...' : `Queue ${batchText.split('\n').filter(l => l.trim()).length} Tracks`}
+                    </button>
+                </div>
+            )}
+
+            {tab === 'single' && (
             <form onSubmit={handleSubmit} className="flex flex-col p-4 border-b border-white/5 bg-[#1a1a26]/50">
                 <label className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Ingest / Search</label>
                 <div className="flex bg-black/40 rounded border border-white/10 overflow-hidden focus-within:border-[#00d4ff]/50 transition-colors">
