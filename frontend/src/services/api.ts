@@ -21,6 +21,28 @@ import type {
   LoopPreview
 } from '../types';
 
+
+// ---------------------------------------------------------------------------
+// Typed error helper
+// ---------------------------------------------------------------------------
+export class ApiError extends Error {
+    constructor(
+        public readonly status: number,
+        public readonly detail: string,
+        public readonly raw?: unknown,
+    ) {
+        super(detail);
+        this.name = 'ApiError';
+    }
+}
+
+function handleAxiosError(err: unknown): never {
+    const axErr = err as import('axios').AxiosError<{ detail?: string }>;
+    const status = axErr.response?.status ?? 0;
+    const detail = axErr.response?.data?.detail || (err as any)?.message || 'Unknown error';
+    throw new ApiError(status, detail, err);
+}
+
 const API_BASE = '/api';
 
 const api = axios.create({
@@ -78,6 +100,90 @@ export const createCustomLoop = async (trackId: string, startTime: number, endTi
     stems
   });
   return response.data;
+};
+
+
+// ---------------------------------------------------------------------------
+// Batch ingest
+// ---------------------------------------------------------------------------
+export const batchIngest = async (
+    queries: string[],
+    options?: import('../types').ProcessingOptions,
+    collection?: string,
+): Promise<{ jobs: Array<{ job_id: string; track_id: string }>; total: number }> => {
+    try {
+        const response = await api.post('/ingest/batch', {
+            queries,
+            options: options ? {
+                analysis: options.analysis,
+                separation: options.separation,
+                loop_slicing: options.loopSlicing,
+                mastering: options.mastering,
+            } : undefined,
+            collection,
+        });
+        return response.data;
+    } catch (err) {
+        handleAxiosError(err);
+    }
+};
+
+// ---------------------------------------------------------------------------
+// MIDI mapping
+// ---------------------------------------------------------------------------
+export interface MidiPadMapping {
+    note: number;
+    channel: number;
+    row: number;
+    col: number;
+    function: string;
+    label: string;
+    color_idle: number;
+    color_active: number;
+    group: 'stem_lane' | 'phrase' | 'transport';
+}
+
+export interface MidiMappingResponse {
+    device: string;
+    grid: string;
+    total_pads: number;
+    note_layout: string;
+    mappings: MidiPadMapping[];
+}
+
+export const getApcMiniMk2Mapping = async (): Promise<MidiMappingResponse> => {
+    try {
+        const response = await api.get('/midi/apc-mini-mk2/mapping');
+        return response.data;
+    } catch (err) {
+        handleAxiosError(err);
+    }
+};
+
+// ---------------------------------------------------------------------------
+// Ableton export — triggers a real browser file download
+// ---------------------------------------------------------------------------
+export const downloadAbletonExport = async (
+    trackId: string,
+    stems: string[],
+    startTime: number = 0,
+    endTime: number = 0,
+): Promise<{ blob: Blob; filename: string }> => {
+    try {
+        const metaResp = await api.post('/export/ableton', {
+            track_id: trackId,
+            stems,
+            start_time: startTime,
+            end_time: endTime,
+        });
+        const meta = metaResp.data as { success: boolean; output_file: string; download_url?: string };
+        const downloadUrl = meta.download_url || `/api/download-file?path=${encodeURIComponent(meta.output_file)}`;
+        const fileResp = await api.get(downloadUrl, { responseType: 'blob' });
+        const filename = (meta.output_file.split('/').pop() || meta.output_file.split('\\').pop() || 'project.als') as string;
+        return { blob: fileResp.data as Blob, filename };
+    } catch (err) {
+        handleAxiosError(err);
+    }
 };
 
 export interface SmartPhrase {
