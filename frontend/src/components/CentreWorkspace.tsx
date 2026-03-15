@@ -37,6 +37,8 @@ export function CentreWorkspace({
     const [loadingPhrases, setLoadingPhrases] = React.useState(false);
     const [phrasesError, setPhrasesError] = React.useState<string | null>(null);
     const [saveSuccess, setSaveSuccess] = React.useState(false);
+    const [phrasesError, setPhrasesError] = React.useState<string | null>(null);
+    const [saveSuccess, setSaveSuccess] = React.useState(false);
 
     React.useEffect(() => {
         if (trackId && waveformReady) {
@@ -184,18 +186,41 @@ export function CentreWorkspace({
                 </div>
 
                 {/* Smart Phrases */}
-                {smartPhrases.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-4">
-                        {smartPhrases.map((phrase, idx) => (
-                            <button
-                                key={idx}
-                                onClick={() => handleSmartPhrase(phrase)}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold border transition-all hover:scale-105 ${getPhraseColor(phrase.type)}`}
-                            >
-                                <Zap size={10} />
-                                {getPhraseLabel(phrase.type)} ({phrase.bar_count}b)
-                            </button>
-                        ))}
+                {(loadingPhrases || smartPhrases.length > 0 || phrasesError) && (
+                    <div className="mb-4">
+                        {/* Loading skeleton */}
+                        {loadingPhrases && (
+                            <div className="flex flex-wrap gap-2">
+                                {[1,2,3,4].map(i => <div key={i} className="h-7 w-16 rounded-full bg-white/5 animate-pulse" />)}
+                            </div>
+                        )}
+                        {/* Error */}
+                        {phrasesError && !loadingPhrases && (
+                            <div className="flex items-center gap-2 text-[10px] text-[#ff3b5c]/80">
+                                <AlertCircle size={11} />
+                                <span>{phrasesError}</span>
+                                <button onClick={() => setPhrasesError(null)} className="ml-auto opacity-60 hover:opacity-100">×</button>
+                            </div>
+                        )}
+                        {/* Phrase buttons */}
+                        {!loadingPhrases && smartPhrases.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                                {smartPhrases.map((phrase, idx) => (
+                                    <button
+                                        key={idx}
+                                        onClick={() => handleSmartPhrase(phrase)}
+                                        title={`Bar ${phrase.start_bar} · ${phrase.bar_count} bars · confidence ${Math.round((phrase.confidence ?? 0) * 100)}%`}
+                                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold border transition-all hover:scale-105 active:scale-95 ${getPhraseColor(phrase.type)}`}
+                                    >
+                                        <Zap size={10} />
+                                        {getPhraseLabel(phrase.type)} ({phrase.bar_count}b)
+                                        {phrase.confidence !== undefined && (
+                                            <span className="ml-0.5 opacity-55 font-mono">{Math.round(phrase.confidence * 100)}%</span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
 
