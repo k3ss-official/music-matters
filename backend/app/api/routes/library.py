@@ -161,12 +161,31 @@ async def get_smart_phrases(track_id: str):
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
-    audio_path = track.original_path
-    if not audio_path or not Path(audio_path).exists():
-        raise HTTPException(status_code=404, detail="Audio file not found")
+    audio_path = track.metadata.get("source_path") or track.original_path
+    if audio_path is None:
+        raise HTTPException(status_code=404, detail="No audio path")
 
-    from app.services.analysis.sota_analyzer import get_sota_analyzer
+    # Convert to string if Path object
+    if hasattr(audio_path, "__fspath__"):
+        audio_path = audio_path.__fspath__()
 
-    analyzer = get_sota_analyzer()
-    phrases = analyzer.detect_smart_phrases(Path(audio_path))
-    return phrases
+    audio_path = Path(audio_path)
+
+    if not audio_path.exists():
+        raise HTTPException(
+            status_code=404, detail=f"Audio file not found: {audio_path}"
+        )
+
+    try:
+        from app.services.analysis.sota_analyzer import get_sota_analyzer
+
+        analyzer = get_sota_analyzer()
+        phrases = analyzer.detect_smart_phrases(audio_path)
+        return phrases
+    except Exception as e:
+        import traceback
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Analysis error: {str(e)}: {traceback.format_exc()}",
+        )

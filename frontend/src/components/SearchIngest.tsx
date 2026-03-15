@@ -162,6 +162,7 @@ export function SearchIngest({ onFileUpload, onUrlSubmit, onBatchSubmit, loading
                     </button>
                 </div>
             </form>
+            )}
 
             <div className="p-4 bg-[#12121a]">
                 <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-2 block">Processing Mode</label>

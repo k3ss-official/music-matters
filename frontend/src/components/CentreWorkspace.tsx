@@ -37,8 +37,6 @@ export function CentreWorkspace({
     const [loadingPhrases, setLoadingPhrases] = React.useState(false);
     const [phrasesError, setPhrasesError] = React.useState<string | null>(null);
     const [saveSuccess, setSaveSuccess] = React.useState(false);
-    const [phrasesError, setPhrasesError] = React.useState<string | null>(null);
-    const [saveSuccess, setSaveSuccess] = React.useState(false);
 
     React.useEffect(() => {
         if (trackId && waveformReady) {

@@ -1090,7 +1090,7 @@ class SOTAAudioAnalyzer:
         phrases = []
 
         try:
-            y, sr = librosa.load(str(file_path), sr=22050, mono=True)
+            y, sr = librosa.load(str(file_path), sr=22050, mono=True, duration=120.0)
             duration = float(len(y)) / sr
 
             onset_env = librosa.onset.onset_strength(y=y, sr=sr, aggregate=np.median)
@@ -1099,68 +1099,93 @@ class SOTAAudioAnalyzer:
             onset_times = librosa.frames_to_time(
                 np.arange(len(onset_env)), sr=sr, hop_length=512
             )
-            energy_times = librosa.frames_to_time(
-                np.arange(len(energy)), sr=sr, hop_length=512
-            )
 
-            onset_env_norm = (onset_env - onset_env.min()) / (
-                onset_env.max() - onset_env.min() + 1e-8
-            )
-            energy_norm = (energy - energy.min()) / (energy.max() - energy.min() + 1e-8)
+            # Simple normalization
+            onset_max = np.max(onset_env) if len(onset_env) > 0 else 1
+            energy_max = np.max(energy) if len(energy) > 0 else 1
+
+            onset_env_norm = onset_env / (onset_max + 1e-8)
+            energy_norm = energy / (energy_max + 1e-8)
 
             combined = 0.5 * onset_env_norm + 0.5 * energy_norm
 
             smooth_combined = gaussian_filter1d(combined, sigma=10)
 
-            peaks, properties = signal.find_peaks(
-                smooth_combined, height=0.5, distance=20, prominence=0.1
-            )
-
-            peak_times = onset_times[peaks]
+            # Find peaks with lower threshold
+            if len(smooth_combined) > 0:
+                height_threshold = max(np.percentile(smooth_combined, 70), 0.2)
+                peaks, properties = signal.find_peaks(
+                    smooth_combined,
+                    height=height_threshold,
+                    distance=15,
+                    prominence=0.03,
+                )
+            else:
+                peaks = np.array([])
 
             tempo, beats = librosa.beat.beat_track(y=y, sr=sr)
             beat_times = librosa.frames_to_time(beats, sr=sr)
-            downbeats = beat_times[::4] if len(beat_times) >= 4 else beat_times
+            downbeats = (
+                [float(b) for b in beat_times[::4]]
+                if len(beat_times) >= 4
+                else [float(b) for b in beat_times]
+            )
 
-            for peak_time in peak_times:
-                closest_downbeat = min(downbeats, key=lambda x: abs(x - peak_time))
+            if not downbeats:
+                downbeats = [0.0]
 
-                phrase_type = "chorus"
-                if peak_time < duration * 0.1:
-                    phrase_type = "intro"
-                elif peak_time > duration * 0.85:
-                    phrase_type = "outro"
-                elif peak_time < duration * 0.3:
-                    phrase_type = "verse"
-                else:
+            for i, peak_idx in enumerate(peaks):
+                try:
+                    peak_time = float(onset_times[peak_idx])
+                    if peak_time < 0 or peak_time > duration:
+                        continue
+
+                    # Find closest downbeat
+                    closest_idx = min(
+                        range(len(downbeats)),
+                        key=lambda j: abs(downbeats[j] - peak_time),
+                    )
+                    closest_downbeat = downbeats[closest_idx]
+
                     phrase_type = "chorus"
+                    if peak_time < duration * 0.1:
+                        phrase_type = "intro"
+                    elif peak_time > duration * 0.85:
+                        phrase_type = "outro"
+                    elif peak_time < duration * 0.3:
+                        phrase_type = "verse"
 
-                bar_count = 8
-                for bars in bar_options:
-                    if closest_downbeat + (bars * 60 / tempo) < duration:
-                        bar_count = bars
+                    bar_count = 8
+                    for bars in bar_options:
+                        if closest_downbeat + (bars * 60 / tempo) < duration:
+                            bar_count = bars
 
-                phrases.append(
-                    {
-                        "type": phrase_type,
-                        "start_time": float(closest_downbeat),
-                        "end_time": float(
-                            min(closest_downbeat + (bar_count * 60 / tempo), duration)
-                        ),
-                        "start_bar": int(np.searchsorted(downbeats, closest_downbeat))
-                        + 1,
-                        "bar_count": bar_count,
-                        "confidence": float(
-                            properties["peak_heights"][list(peaks).index(peak_time)]
-                        ),
-                        "energy": float(
-                            smooth_combined[peaks[list(peak_times).index(peak_time)]]
-                        ),
-                    }
-                )
+                    confidence = (
+                        float(properties["peak_heights"][i])
+                        if i < len(properties.get("peak_heights", []))
+                        else 0.5
+                    )
 
-            phrases = sorted(phrases, key=lambda x: x["start_time"])
+                    phrases.append(
+                        {
+                            "type": phrase_type,
+                            "start_time": float(closest_downbeat),
+                            "end_time": float(
+                                min(
+                                    closest_downbeat + (bar_count * 60 / tempo),
+                                    duration,
+                                )
+                            ),
+                            "start_bar": closest_idx + 1,
+                            "bar_count": bar_count,
+                            "confidence": confidence,
+                            "energy": confidence,
+                        }
+                    )
+                except Exception:
+                    continue
 
+            # Remove duplicates
             unique_phrases = []
             for p in phrases:
                 is_duplicate = False
@@ -1174,8 +1199,10 @@ class SOTAAudioAnalyzer:
                 if not is_duplicate:
                     unique_phrases.append(p)
 
+            phrases = sorted(unique_phrases, key=lambda x: x["start_time"])[:8]
+
             return {
-                "phrases": unique_phrases[:8],
+                "phrases": phrases,
                 "duration": duration,
                 "bpm": float(tempo),
             }

@@ -15,6 +15,7 @@ DB_PATH = settings.MUSIC_LIBRARY / "library.db"
 
 class DatabaseService:
     """SQLite Persistence layer for Music Matters tracks and loops."""
+
     _local = threading.local()
 
     def __init__(self, db_path: Path = DB_PATH):
@@ -25,7 +26,9 @@ class DatabaseService:
     def _get_conn(self) -> sqlite3.Connection:
         if not hasattr(self._local, "conn"):
             # isolation_level=None for autocommit mode
-            conn = sqlite3.connect(str(self.db_path), isolation_level=None, check_same_thread=False)
+            conn = sqlite3.connect(
+                str(self.db_path), isolation_level=None, check_same_thread=False
+            )
             conn.row_factory = sqlite3.Row
             self._local.conn = conn
         return self._local.conn
@@ -72,7 +75,6 @@ class DatabaseService:
         except Exception:
             pass  # Column already exists
 
-
     def save_track(self, track) -> None:
         """Upsert a TrackRecord."""
         conn = self._get_conn()
@@ -110,8 +112,8 @@ class DatabaseService:
                 str(track.loops_dir) if track.loops_dir else None,
                 json.dumps(track.metadata or {}),
                 json.dumps(track.stems or []),
-                json.dumps(track.loops or [])
-            )
+                json.dumps(track.loops or []),
+            ),
         )
 
     def load_all_tracks(self) -> Dict[UUID, Any]:
@@ -121,22 +123,24 @@ class DatabaseService:
         cursor = conn.execute("SELECT * FROM tracks")
         tracks = {}
         for row in cursor.fetchall():
-            track_id = UUID(row['track_id'])
+            track_id = UUID(row["track_id"])
             tracks[track_id] = {
                 "track_id": track_id,
-                "slug": row['slug'],
-                "title": row['title'],
-                "artist": row['artist'],
-                "status": row['status'],
-                "created_at": datetime.fromisoformat(row['created_at']),
-                "bpm": row['bpm'],
-                "musical_key": row['musical_key'],
-                "original_path": Path(row['original_path']) if row['original_path'] else None,
-                "stems_dir": Path(row['stems_dir']) if row['stems_dir'] else None,
-                "loops_dir": Path(row['loops_dir']) if row['loops_dir'] else None,
-                "metadata": json.loads(row['metadata']) if row['metadata'] else {},
-                "stems": json.loads(row['stems']) if row['stems'] else [],
-                "loops": json.loads(row['loops']) if row['loops'] else []
+                "slug": row["slug"],
+                "title": row["title"],
+                "artist": row["artist"],
+                "status": row["status"],
+                "created_at": datetime.fromisoformat(row["created_at"]),
+                "bpm": row["bpm"],
+                "musical_key": row["musical_key"],
+                "original_path": Path(row["original_path"])
+                if row["original_path"]
+                else None,
+                "stems_dir": Path(row["stems_dir"]) if row["stems_dir"] else None,
+                "loops_dir": Path(row["loops_dir"]) if row["loops_dir"] else None,
+                "metadata": json.loads(row["metadata"]) if row["metadata"] else {},
+                "stems": json.loads(row["stems"]) if row["stems"] else [],
+                "loops": json.loads(row["loops"]) if row["loops"] else [],
             }
         return tracks
 
@@ -174,8 +178,8 @@ class DatabaseService:
                 loop.bpm,
                 loop.musical_key,
                 loop.energy,
-                json.dumps(getattr(loop, 'tags', []) or []),
-            )
+                json.dumps(getattr(loop, "tags", []) or []),
+            ),
         )
 
     def load_all_loops(self) -> Dict[UUID, Dict[str, Any]]:
@@ -184,21 +188,22 @@ class DatabaseService:
         cursor = conn.execute("SELECT * FROM loop_records")
         loops = {}
         for row in cursor.fetchall():
-            tid = UUID(row['track_id'])
+            tid = UUID(row["track_id"])
             if tid not in loops:
                 loops[tid] = {}
-            loops[tid][row['id']] = {
-                "id": row['id'],
-                "label": row['label'],
-                "path": Path(row['path']),
-                "start_bar": row['start_bar'],
-                "bar_count": row['bar_count'],
-                "stem": row['stem'],
-                "bpm": row['bpm'],
-                "musical_key": row['musical_key'],
-                "energy": row['energy'],
-                "tags": json.loads(row['tags']) if row.get('tags') else [],
+            loops[tid][row["id"]] = {
+                "id": row["id"],
+                "label": row["label"],
+                "path": Path(row["path"]),
+                "start_bar": row["start_bar"],
+                "bar_count": row["bar_count"],
+                "stem": row["stem"],
+                "bpm": row["bpm"],
+                "musical_key": row["musical_key"],
+                "energy": row["energy"],
+                "tags": json.loads(row["tags"]) if row["tags"] else [],
             }
         return loops
+
 
 db = DatabaseService()
