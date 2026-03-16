@@ -361,6 +361,23 @@ class PipelineOrchestrator:
         stage.progress = 0.1
 
         def _download() -> Path:
+            # Check if it's a local file first
+            source_path = Path(source).expanduser().resolve()
+
+            # Handle macOS path mapping (/Users -> /Volumes/deep-1t/Users)
+            if not source_path.exists() and str(source_path).startswith("/Users/"):
+                # Replace /Users/k3ss with /Volumes/deep-1t/Users/k3ss
+                alt_path_str = str(source_path).replace(
+                    "/Users/", "/Volumes/deep-1t/Users/", 1
+                )
+                alt_path = Path(alt_path_str)
+                if alt_path.exists():
+                    source_path = alt_path
+
+            if source_path.exists():
+                return source_path
+
+            # It's a URL or search query
             if "://" in source:
                 import yt_dlp
 
@@ -523,12 +540,12 @@ class PipelineOrchestrator:
         stage.progress = 1.0
         return audio_path
 
-
     @staticmethod
     def _compute_energy(audio: "np.ndarray", sr: int) -> float:
         """Compute normalised RMS energy 0.0-1.0."""
         import math
         import librosa
+
         rms = librosa.feature.rms(y=audio)[0]
         mean_rms = float(rms.mean())
         if mean_rms <= 0:
@@ -600,7 +617,9 @@ class PipelineOrchestrator:
                 file_path = loops_dir / f"{loop_id}.wav"
                 sf.write(file_path, slice_audio, sr)
                 slice_energy = PipelineOrchestrator._compute_energy(slice_audio, sr)
-                loop_tags = PipelineOrchestrator._auto_tags(slice_energy, bpm, track.musical_key)
+                loop_tags = PipelineOrchestrator._auto_tags(
+                    slice_energy, bpm, track.musical_key
+                )
                 results.append(
                     LoopRecord(
                         id=loop_id,
