@@ -1,148 +1,332 @@
-import React from 'react';
-import { Play, Save, Magnet } from 'lucide-react';
+/**
+ * LoopEditorToolbar — production loop editing controls
+ *
+ * Features:
+ *  - In/Out point display (MM:SS.ms) — editable inline
+ *  - Loop length display (bars + beats)
+ *  - Nudge start/end by 1 beat back/fwd — pushes to WaveSurfer via syncRegion
+ *  - Quantize-to-bar button — snaps start/end to nearest bar
+ *  - Bar-length presets: 1/2/4/8/16/32 bars (snaps start to nearest bar, extends end)
+ *  - Save Loop button — calls onSaveLoop
+ *  - Copy Region (steal) button
+ */
+import React, { useCallback, useState, useRef } from 'react';
+import {
+    ChevronLeft,
+    ChevronRight,
+    Save,
+    Scissors,
+    Grid3x3,
+} from 'lucide-react';
+import type { WaveformHandle } from './WaveformCanvas';
 
-interface LoopEditorToolbarProps {
+export interface LoopEditorToolbarProps {
+    waveformRef: React.RefObject<WaveformHandle>;
     regionStart: number;
     regionEnd: number;
-    bpm: number | null;
-    onUpdateRegion: (start: number, end: number) => void;
-    onPreviewToggle: () => void;
-    onSaveLoop: () => void;
-    previewing?: boolean;
-    saving?: boolean;
-    snapEnabled?: boolean;
-    onSnapToggle?: () => void;
+    duration: number;
+    bpm?: number | null;
+    onRegionChange: (start: number, end: number) => void;
+    onSaveLoop?: (start: number, end: number) => void;
+    onStealRegion?: (start: number, end: number) => void;
 }
 
-export function LoopEditorToolbar({
+// Format seconds → MM:SS.ms
+function fmtTime(s: number): string {
+    if (!isFinite(s) || s < 0) s = 0;
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    const ms = Math.floor((s % 1) * 1000);
+    return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
+}
+
+// Parse MM:SS.ms string → seconds (returns NaN on failure)
+function parseTime(str: string): number {
+    const match = str.match(/^(\d+):(\d{2})\.(\d{1,3})$/);
+    if (!match) return NaN;
+    const [, m, s, ms] = match;
+    return parseInt(m) * 60 + parseInt(s) + parseInt(ms.padEnd(3, '0')) / 1000;
+}
+
+// Length in bars + beats string, e.g. "4 bars 2 beats"
+function fmtBarBeats(seconds: number, bpm: number | null | undefined): string {
+    if (!bpm || bpm <= 0) return `${seconds.toFixed(2)}s`;
+    const beatDur = 60 / bpm;
+    const totalBeats = seconds / beatDur;
+    const bars = Math.floor(totalBeats / 4);
+    const beats = Math.round(totalBeats % 4);
+    if (bars === 0) return `${beats} beat${beats !== 1 ? 's' : ''}`;
+    if (beats === 0) return `${bars} bar${bars !== 1 ? 's' : ''}`;
+    return `${bars}b ${beats}bt`;
+}
+
+// Snap a time to the nearest bar boundary
+function snapToBar(time: number, bpm: number): number {
+    const beatDur = 60 / bpm;
+    const barDur = beatDur * 4;
+    return Math.round(time / barDur) * barDur;
+}
+
+// Bar preset options
+const BAR_PRESETS = [1, 2, 4, 8, 16, 32] as const;
+
+export const LoopEditorToolbar: React.FC<LoopEditorToolbarProps> = ({
+    waveformRef,
     regionStart,
     regionEnd,
+    duration,
     bpm,
-    onUpdateRegion,
-    onPreviewToggle,
+    onRegionChange,
     onSaveLoop,
-    previewing = false,
-    saving = false,
-    snapEnabled = true,
-    onSnapToggle,
-}: LoopEditorToolbarProps) {
-    const formatTime = (seconds: number) => {
-        return seconds.toFixed(3);
-    };
+    onStealRegion,
+}) => {
+    const [editingStart, setEditingStart] = useState(false);
+    const [editingEnd, setEditingEnd] = useState(false);
+    const [startInput, setStartInput] = useState('');
+    const [endInput, setEndInput] = useState('');
 
-    const nudgeStart = (ms: number) => {
-        const newStart = Math.max(0, regionStart + ms / 1000);
-        if (newStart < regionEnd) {
-            onUpdateRegion(newStart, regionEnd);
-        }
-    };
+    const beatDur = bpm ? 60 / bpm : null;
+    const barDur = beatDur ? beatDur * 4 : null;
+    const loopLength = regionEnd - regionStart;
 
-    const nudgeEnd = (ms: number) => {
-        const newEnd = regionEnd + ms / 1000;
-        if (newEnd > regionStart) {
-            onUpdateRegion(regionStart, newEnd);
-        }
-    };
+    // Push new region values to both React state and WaveSurfer
+    const applyRegion = useCallback((s: number, e: number) => {
+        const clampedS = Math.max(0, Math.min(s, duration));
+        const clampedE = Math.max(clampedS + 0.1, Math.min(e, duration));
+        onRegionChange(clampedS, clampedE);
+        waveformRef.current?.syncRegion(clampedS, clampedE);
+    }, [duration, onRegionChange, waveformRef]);
 
-    const setLength = (bars: number) => {
+    // ── Nudge ─────────────────────────────────────────────────────────────────
+    const nudgeStep = beatDur ? beatDur : 0.25; // 1 beat or 0.25s fallback
+
+    const nudgeStartBack = useCallback(() => {
+        applyRegion(regionStart - nudgeStep, regionEnd);
+    }, [regionStart, regionEnd, nudgeStep, applyRegion]);
+
+    const nudgeStartFwd = useCallback(() => {
+        applyRegion(Math.min(regionStart + nudgeStep, regionEnd - 0.1), regionEnd);
+    }, [regionStart, regionEnd, nudgeStep, applyRegion]);
+
+    const nudgeEndBack = useCallback(() => {
+        applyRegion(regionStart, Math.max(regionEnd - nudgeStep, regionStart + 0.1));
+    }, [regionStart, regionEnd, nudgeStep, applyRegion]);
+
+    const nudgeEndFwd = useCallback(() => {
+        applyRegion(regionStart, regionEnd + nudgeStep);
+    }, [regionStart, regionEnd, nudgeStep, applyRegion]);
+
+    // ── Quantize to bar ───────────────────────────────────────────────────────
+    const quantizeToBar = useCallback(() => {
         if (!bpm) return;
-        const beatDuration = 60 / bpm;
-        const barDuration = beatDuration * 4;
-        const newEnd = regionStart + barDuration * bars;
-        onUpdateRegion(regionStart, newEnd);
-    };
+        const s = snapToBar(regionStart, bpm);
+        const e = snapToBar(regionEnd, bpm);
+        applyRegion(s, e > s ? e : s + (barDur || 4));
+    }, [regionStart, regionEnd, bpm, barDur, applyRegion]);
 
-    const lengthS = regionEnd - regionStart;
+    // ── Bar presets ───────────────────────────────────────────────────────────
+    const applyBarPreset = useCallback((bars: number) => {
+        if (!bpm || !barDur) return;
+        const snappedStart = snapToBar(regionStart, bpm);
+        const newEnd = snappedStart + barDur * bars;
+        applyRegion(snappedStart, newEnd);
+    }, [regionStart, bpm, barDur, applyRegion]);
+
+    // ── Inline time editing ───────────────────────────────────────────────────
+    const commitStartEdit = useCallback(() => {
+        const t = parseTime(startInput);
+        if (!isNaN(t)) applyRegion(t, regionEnd);
+        setEditingStart(false);
+    }, [startInput, regionEnd, applyRegion]);
+
+    const commitEndEdit = useCallback(() => {
+        const t = parseTime(endInput);
+        if (!isNaN(t)) applyRegion(regionStart, t);
+        setEditingEnd(false);
+    }, [endInput, regionStart, applyRegion]);
+
+    // ── Save / Steal ──────────────────────────────────────────────────────────
+    const handleSave = useCallback(() => {
+        onSaveLoop?.(regionStart, regionEnd);
+    }, [regionStart, regionEnd, onSaveLoop]);
+
+    const handleSteal = useCallback(() => {
+        onStealRegion?.(regionStart, regionEnd);
+    }, [regionStart, regionEnd, onStealRegion]);
 
     return (
-        <div className="bg-[#12121a] p-4 border-t border-white/5 flex flex-col gap-4 text-sm text-gray-300">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                        <span className="opacity-70 text-xs font-semibold uppercase tracking-wider">Start</span>
-                        <div className="flex items-center gap-1">
-                            <button onClick={() => nudgeStart(-100)} className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 opacity-70">{"<<"}</button>
-                            <button onClick={() => nudgeStart(-10)} className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 opacity-70">{"<"}</button>
-                            <span className="font-mono bg-black/50 px-3 py-1.5 rounded min-w-[80px] text-center border border-white/10 text-white">
-                                {formatTime(regionStart)}
-                            </span>
-                            <button onClick={() => nudgeStart(10)} className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 opacity-70">{">"}</button>
-                            <button onClick={() => nudgeStart(100)} className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 opacity-70">{">>"}</button>
-                        </div>
-                    </div>
+        <div className="w-full bg-[#10101e] border-t border-white/5 px-4 py-2 flex items-center gap-4 flex-wrap select-none">
 
-                    <div className="flex items-center gap-2">
-                        <span className="opacity-70 text-xs font-semibold uppercase tracking-wider">End</span>
-                        <div className="flex items-center gap-1">
-                            <button onClick={() => nudgeEnd(-100)} className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 opacity-70">{"<<"}</button>
-                            <button onClick={() => nudgeEnd(-10)} className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 opacity-70">{"<"}</button>
-                            <span className="font-mono bg-black/50 px-3 py-1.5 rounded min-w-[80px] text-center border border-white/10 text-white">
-                                {formatTime(regionEnd)}
-                            </span>
-                            <button onClick={() => nudgeEnd(10)} className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 opacity-70">{">"}</button>
-                            <button onClick={() => nudgeEnd(100)} className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 opacity-70">{">>"}</button>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                    <span className="opacity-70 text-xs font-semibold uppercase tracking-wider">Length</span>
-                    <span className="font-mono text-[#00d4ff] bg-[#00d4ff]/10 px-3 py-1.5 rounded border border-[#00d4ff]/30">
-                        {formatTime(lengthS)}s
-                    </span>
-                </div>
+            {/* ── IN point ─────────────────────────────────────────────────── */}
+            <div className="flex items-center gap-1">
+                <span className="text-[10px] font-mono text-white/30 uppercase tracking-widest w-5">IN</span>
+                <button
+                    onClick={nudgeStartBack}
+                    title="Nudge IN back 1 beat"
+                    className="w-6 h-6 flex items-center justify-center rounded bg-white/5
+                               hover:bg-white/10 text-white/40 hover:text-white transition-colors"
+                >
+                    <ChevronLeft size={12} />
+                </button>
+                {editingStart ? (
+                    <input
+                        autoFocus
+                        value={startInput}
+                        onChange={e => setStartInput(e.target.value)}
+                        onBlur={commitStartEdit}
+                        onKeyDown={e => { if (e.key === 'Enter') commitStartEdit(); if (e.key === 'Escape') setEditingStart(false); }}
+                        className="w-[88px] bg-[#1a1a2e] border border-[#00d4ff]/40 rounded px-2 py-0.5
+                                   font-mono text-[12px] text-[#00d4ff] focus:outline-none text-center"
+                        placeholder="00:00.000"
+                    />
+                ) : (
+                    <button
+                        onClick={() => { setStartInput(fmtTime(regionStart)); setEditingStart(true); }}
+                        title="Click to edit IN point"
+                        className="font-mono text-[12px] text-[#00d4ff] tabular-nums bg-[#0d0d1a]
+                                   px-2 py-0.5 rounded border border-white/10 hover:border-[#00d4ff]/40
+                                   transition-colors w-[88px] text-center"
+                    >
+                        {fmtTime(regionStart)}
+                    </button>
+                )}
+                <button
+                    onClick={nudgeStartFwd}
+                    title="Nudge IN forward 1 beat"
+                    className="w-6 h-6 flex items-center justify-center rounded bg-white/5
+                               hover:bg-white/10 text-white/40 hover:text-white transition-colors"
+                >
+                    <ChevronRight size={12} />
+                </button>
             </div>
 
-            <div className="flex items-center justify-between border-t border-white/5 pt-4">
-                <div className="flex items-center gap-2">
-                    <span className="opacity-70 text-xs mr-2">Quick Lengths (Bars):</span>
-                    {[1, 2, 4, 8].map(bars => (
-                        <button
-                            key={bars}
-                            disabled={!bpm}
-                            onClick={() => setLength(bars)}
-                            className="px-3 py-1 rounded-full text-xs font-medium border border-white/10 bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                        >
-                            {bars} Bar{bars > 1 ? 's' : ''}
-                        </button>
-                    ))}
-                    {!bpm && <span className="text-xs text-[#ff3b5c]/70 ml-2">(Requires BPM Analysis)</span>}
-                </div>
-
-                <div className="flex items-center gap-2">
-                    {onSnapToggle && (
-                        <button
-                            onClick={onSnapToggle}
-                            className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-bold transition-all ${snapEnabled
-                                ? 'bg-[#00d4ff]/20 text-[#00d4ff] border border-[#00d4ff]/50'
-                                : 'bg-white/5 text-gray-400 border border-white/10'
-                            }`}
-                        >
-                            <Magnet size={12} /> Snap {snapEnabled ? 'On' : 'Off'}
-                        </button>
-                    )}
-                    <button
-                        onClick={onSaveLoop}
-                        disabled={saving}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold bg-[#22c55e]/20 text-[#22c55e] border border-[#22c55e]/50 hover:bg-[#22c55e]/30 transition-all disabled:opacity-50"
-                    >
-                        <Save size={14} /> {saving ? 'Saving...' : 'Save Loop'}
-                    </button>
-                    <button
-                        onClick={onPreviewToggle}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm transition-all ${previewing
-                                ? 'bg-[#ff3b5c]/20 text-[#ff3b5c] border border-[#ff3b5c]/50 shadow-[0_0_10px_rgba(255,59,92,0.3)]'
-                                : 'bg-[#8b5cf6]/20 text-[#8b5cf6] border border-[#8b5cf6]/50 shadow-[0_0_10px_rgba(139,92,246,0.2)] hover:bg-[#8b5cf6]/30'
-                            }`}
-                    >
-                        {previewing ? 'Stop Preview' : (
-                            <>
-                                <Play size={14} fill="currentColor" /> Preview Loop
-                            </>
-                        )}
-                    </button>
-                </div>
+            {/* ── Loop length ──────────────────────────────────────────────── */}
+            <div className="flex flex-col items-center justify-center min-w-[60px]">
+                <span className="font-mono text-[13px] text-white/70 tabular-nums">
+                    {loopLength.toFixed(2)}s
+                </span>
+                <span className="font-mono text-[10px] text-[#8b5cf6]/70 tracking-wide">
+                    {fmtBarBeats(loopLength, bpm)}
+                </span>
             </div>
+
+            {/* ── OUT point ────────────────────────────────────────────────── */}
+            <div className="flex items-center gap-1">
+                <button
+                    onClick={nudgeEndBack}
+                    title="Nudge OUT back 1 beat"
+                    className="w-6 h-6 flex items-center justify-center rounded bg-white/5
+                               hover:bg-white/10 text-white/40 hover:text-white transition-colors"
+                >
+                    <ChevronLeft size={12} />
+                </button>
+                {editingEnd ? (
+                    <input
+                        autoFocus
+                        value={endInput}
+                        onChange={e => setEndInput(e.target.value)}
+                        onBlur={commitEndEdit}
+                        onKeyDown={e => { if (e.key === 'Enter') commitEndEdit(); if (e.key === 'Escape') setEditingEnd(false); }}
+                        className="w-[88px] bg-[#1a1a2e] border border-[#00ff88]/40 rounded px-2 py-0.5
+                                   font-mono text-[12px] text-[#00ff88] focus:outline-none text-center"
+                        placeholder="00:00.000"
+                    />
+                ) : (
+                    <button
+                        onClick={() => { setEndInput(fmtTime(regionEnd)); setEditingEnd(true); }}
+                        title="Click to edit OUT point"
+                        className="font-mono text-[12px] text-[#00ff88] tabular-nums bg-[#0d0d1a]
+                                   px-2 py-0.5 rounded border border-white/10 hover:border-[#00ff88]/40
+                                   transition-colors w-[88px] text-center"
+                    >
+                        {fmtTime(regionEnd)}
+                    </button>
+                )}
+                <button
+                    onClick={nudgeEndFwd}
+                    title="Nudge OUT forward 1 beat"
+                    className="w-6 h-6 flex items-center justify-center rounded bg-white/5
+                               hover:bg-white/10 text-white/40 hover:text-white transition-colors"
+                >
+                    <ChevronRight size={12} />
+                </button>
+                <span className="text-[10px] font-mono text-white/30 uppercase tracking-widest w-6">OUT</span>
+            </div>
+
+            {/* ── Divider ──────────────────────────────────────────────────── */}
+            <div className="w-px h-6 bg-white/10" />
+
+            {/* ── Quantize to bar ──────────────────────────────────────────── */}
+            <button
+                onClick={quantizeToBar}
+                disabled={!bpm}
+                title="Snap IN and OUT to nearest bar"
+                className={`
+                    flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono
+                    tracking-wider transition-colors focus:outline-none
+                    ${bpm
+                        ? 'bg-[#8b5cf6]/15 hover:bg-[#8b5cf6]/25 text-[#8b5cf6] border border-[#8b5cf6]/30'
+                        : 'bg-white/5 text-white/20 border border-white/5 cursor-not-allowed'}
+                `}
+            >
+                <Grid3x3 size={11} />
+                Q
+            </button>
+
+            {/* ── Bar presets ──────────────────────────────────────────────── */}
+            <div className="flex items-center gap-1">
+                <span className="text-[10px] font-mono text-white/25 uppercase tracking-widest mr-1">BARS</span>
+                {BAR_PRESETS.map(bars => (
+                    <button
+                        key={bars}
+                        onClick={() => applyBarPreset(bars)}
+                        disabled={!bpm}
+                        title={`Set loop to ${bars} bar${bars !== 1 ? 's' : ''}`}
+                        className={`
+                            w-7 h-7 flex items-center justify-center rounded
+                            font-mono text-[11px] transition-colors focus:outline-none
+                            ${bpm
+                                ? 'bg-white/5 hover:bg-[#00d4ff]/15 text-white/50 hover:text-[#00d4ff] border border-white/10 hover:border-[#00d4ff]/30'
+                                : 'bg-white/3 text-white/15 border border-white/5 cursor-not-allowed'}
+                        `}
+                    >
+                        {bars}
+                    </button>
+                ))}
+            </div>
+
+            {/* ── Spacer ───────────────────────────────────────────────────── */}
+            <div className="flex-1" />
+
+            {/* ── Steal (copy region audio) ─────────────────────────────────── */}
+            <button
+                onClick={handleSteal}
+                title="Steal — copy this region"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded
+                           bg-[#ff3b5c]/10 hover:bg-[#ff3b5c]/20
+                           text-[#ff3b5c] border border-[#ff3b5c]/25
+                           font-mono text-[11px] tracking-wider
+                           transition-colors focus:outline-none"
+            >
+                <Scissors size={11} />
+                STEAL
+            </button>
+
+            {/* ── Save loop ────────────────────────────────────────────────── */}
+            <button
+                onClick={handleSave}
+                title="Save this loop"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded
+                           bg-[#00ff88]/10 hover:bg-[#00ff88]/20
+                           text-[#00ff88] border border-[#00ff88]/25
+                           font-mono text-[11px] tracking-wider
+                           transition-colors focus:outline-none"
+            >
+                <Save size={11} />
+                SAVE LOOP
+            </button>
         </div>
     );
-}
+};
+
+export default LoopEditorToolbar;
