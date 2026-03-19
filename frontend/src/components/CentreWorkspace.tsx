@@ -1,16 +1,34 @@
-import React from 'react';
+/**
+ * CentreWorkspace — production waveform workspace
+ *
+ * Wires together:
+ *  - WaveformCanvas (WaveSurfer v7, bidirectional region sync)
+ *  - TransportBar (play/pause/stop/loop, time, volume, zoom, snap)
+ *  - LoopEditorToolbar (IN/OUT nudge, quantize, bar presets, save/steal)
+ *  - Smart Phrase row (click to jump region)
+ *  - Save loop / steal region → API calls
+ */
+import React, { useRef, useState, useCallback, useEffect } from 'react';
 import type { TrackDetailResponse } from '../types';
-import { WaveformCanvas } from './WaveformCanvas';
+import WaveformCanvas, { WaveformHandle } from './WaveformCanvas';
+import { TransportBar } from './TransportBar';
 import { LoopEditorToolbar } from './LoopEditorToolbar';
-import { getTrackAudioUrl, createCustomLoop, getSmartPhrases, type SmartPhrase } from '../services/api';
-import { Zap, Loader2, AlertCircle, X } from 'lucide-react';
+import {
+    getTrackAudioUrl,
+    createCustomLoop,
+    getSmartPhrases,
+    type SmartPhrase,
+} from '../services/api';
+import { Zap, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 interface CentreWorkspaceProps {
     trackId: string | null;
     trackDetail: TrackDetailResponse | null;
+    /** Controlled region state (owned here, lifted to parent via onUpdateRegion) */
     regionStart: number;
     regionEnd: number;
     onUpdateRegion: (start: number, end: number) => void;
+    /** Optional pass-through refs for parent access (legacy compatibility) */
     wavesurferRef?: React.MutableRefObject<any>;
     regionsRef?: React.MutableRefObject<any>;
     waveformReady: boolean;
@@ -18,6 +36,39 @@ interface CentreWorkspaceProps {
     errorMsg?: string | null;
 }
 
+// ── Phrase display helpers ─────────────────────────────────────────────────
+const PHRASE_LABELS: Record<string, string> = {
+    intro: 'Intro', outro: 'Outro', verse: 'Verse', chorus: 'Chorus',
+    drop: 'Drop', bridge: 'Bridge', breakdown: 'Breakdown', build: 'Build',
+    'pre-chorus': 'Pre-Ch', hook: 'Hook', instrumental: 'Inst',
+};
+const PHRASE_COLORS: Record<string, string> = {
+    intro: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    outro: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+    verse: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+    chorus: 'bg-pink-500/20 text-pink-400 border-pink-500/30',
+    drop: 'bg-red-500/20 text-red-400 border-red-500/30',
+    bridge: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    breakdown: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+    build: 'bg-teal-500/20 text-teal-400 border-teal-500/30',
+    'pre-chorus': 'bg-fuchsia-500/20 text-fuchsia-400 border-fuchsia-500/30',
+    hook: 'bg-rose-500/20 text-rose-400 border-rose-500/30',
+    instrumental: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
+};
+
+function phraseLabel(t: string): string {
+    return PHRASE_LABELS[t] ?? (t.charAt(0).toUpperCase() + t.slice(1));
+}
+function phraseColor(t: string): string {
+    return PHRASE_COLORS[t] ?? 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+}
+function confidenceDot(c: number) {
+    if (c >= 0.85) return 'bg-[#00ff88]';
+    if (c >= 0.6) return 'bg-yellow-400';
+    return 'bg-red-400';
+}
+
+// ── Component ─────────────────────────────────────────────────────────────
 export function CentreWorkspace({
     trackId,
     trackDetail,
@@ -28,229 +79,269 @@ export function CentreWorkspace({
     regionsRef,
     waveformReady,
     setWaveformReady,
-    errorMsg
+    errorMsg: externalError,
 }: CentreWorkspaceProps) {
-    const [previewing, setPreviewing] = React.useState(false);
-    const [saving, setSaving] = React.useState(false);
-    const [snapEnabled, setSnapEnabled] = React.useState(true);
-    const [smartPhrases, setSmartPhrases] = React.useState<SmartPhrase[]>([]);
-    const [loadingPhrases, setLoadingPhrases] = React.useState(false);
-    const [phrasesError, setPhrasesError] = React.useState<string | null>(null);
-    const [saveSuccess, setSaveSuccess] = React.useState(false);
+    // ── Waveform ref ─────────────────────────────────────────────────────
+    const waveformRef = useRef<WaveformHandle>(null);
 
-    React.useEffect(() => {
-        if (trackId && waveformReady) {
-            setPhrasesError(null);
-            setLoadingPhrases(true);
-            getSmartPhrases(trackId)
-                .then(resp => setSmartPhrases(resp.phrases || []))
-                .catch((err: any) => {
-                    setSmartPhrases([]);
-                    setPhrasesError(err?.response?.data?.detail || err?.message || 'Failed to load phrases');
-                })
-                .finally(() => setLoadingPhrases(false));
-        }
+    // ── Transport state ──────────────────────────────────────────────────
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [isLooping, setIsLooping] = useState(false);
+    const [currentTime, setCurrentTime] = useState(0);
+    const [duration, setDuration] = useState(0);
+    const [volume, setVolume] = useState(0.8);
+    const [snapEnabled, setSnapEnabled] = useState(true);
+
+    // ── Error / save state ───────────────────────────────────────────────
+    const [loadError, setLoadError] = useState<string | null>(null);
+    const [saving, setSaving] = useState(false);
+    const [saveSuccess, setSaveSuccess] = useState(false);
+
+    // ── Smart phrases ────────────────────────────────────────────────────
+    const [smartPhrases, setSmartPhrases] = useState<SmartPhrase[]>([]);
+    const [loadingPhrases, setLoadingPhrases] = useState(false);
+    const [phrasesError, setPhrasesError] = useState<string | null>(null);
+
+    const bpm: number | null = trackDetail?.bpm ?? null;
+    const downbeats: number[] = trackDetail?.downbeats ?? [];
+
+    // ── Audio URL ────────────────────────────────────────────────────────
+    const audioUrl = trackId ? getTrackAudioUrl(trackId) : null;
+
+    // ── Reset on track change ────────────────────────────────────────────
+    useEffect(() => {
+        setIsPlaying(false);
+        setIsLooping(false);
+        setCurrentTime(0);
+        setDuration(0);
+        setLoadError(null);
+        setSaveSuccess(false);
+    }, [trackId]);
+
+    // ── Load smart phrases ────────────────────────────────────────────────
+    useEffect(() => {
+        if (!trackId || !waveformReady) return;
+        setPhrasesError(null);
+        setLoadingPhrases(true);
+        getSmartPhrases(trackId)
+            .then(resp => setSmartPhrases(resp.phrases || []))
+            .catch((err: any) => {
+                setSmartPhrases([]);
+                setPhrasesError(err?.response?.data?.detail || err?.message || 'Failed to load phrases');
+            })
+            .finally(() => setLoadingPhrases(false));
+    }, [trackId, waveformReady]);
+
+    useEffect(() => {
         if (!trackId) {
             setSmartPhrases([]);
             setPhrasesError(null);
         }
-    }, [trackId, waveformReady]);
+    }, [trackId]);
 
-    const handleSmartPhrase = (phrase: SmartPhrase) => {
-        onUpdateRegion(phrase.start_time, phrase.end_time);
-    };
+    // ── Volume → WaveSurfer ───────────────────────────────────────────────
+    useEffect(() => {
+        waveformRef.current?.setVolume(volume);
+    }, [volume]);
 
-    const getPhraseLabel = (type: string) => {
-        const labels: Record<string, string> = {
-            intro: 'Intro',
-            outro: 'Outro',
-            verse: 'Verse',
-            chorus: 'Chorus',
-            drop: 'Drop',
-            bridge: 'Bridge',
-            breakdown: 'Breakdown',
-            build: 'Build',
-            'pre-chorus': 'Pre-Ch',
-            hook: 'Hook',
-            instrumental: 'Inst',
-        };
-        return labels[type] || type.charAt(0).toUpperCase() + type.slice(1);
-    };
+    // ── Loop toggle: if turning loop ON while playing, switch to region ───
+    const handleToggleLoop = useCallback(() => {
+        setIsLooping(prev => {
+            const next = !prev;
+            const w = waveformRef.current;
+            if (w && isPlaying) {
+                if (next) {
+                    // Switch to region loop
+                    w.stopRegion();
+                    w.playRegion();
+                }
+                // Turning off: just let full track keep playing
+            }
+            return next;
+        });
+    }, [isPlaying]);
 
-    const getPhraseColor = (type: string) => {
-        const colors: Record<string, string> = {
-            intro: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-            outro: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-            verse: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-            chorus: 'bg-pink-500/20 text-pink-400 border-pink-500/30',
-            drop: 'bg-red-500/20 text-red-400 border-red-500/30',
-            bridge: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-            breakdown: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-            build: 'bg-teal-500/20 text-teal-400 border-teal-500/30',
-            'pre-chorus': 'bg-fuchsia-500/20 text-fuchsia-400 border-fuchsia-500/30',
-            hook: 'bg-rose-500/20 text-rose-400 border-rose-500/30',
-            instrumental: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
-        };
-        return colors[type] || 'bg-gray-500/20 text-gray-400 border-gray-500/30';
-    };
+    // ── Region change (from toolbar nudge / preset) ───────────────────────
+    const handleRegionChange = useCallback((s: number, e: number) => {
+        onUpdateRegion(s, e);
+        // If currently looping, reset playhead to new start
+        if (isLooping && waveformRef.current?.isPlaying()) {
+            waveformRef.current.syncRegion(s, e);
+        }
+    }, [onUpdateRegion, isLooping]);
 
-    const handleSaveLoop = async () => {
+    // ── Save loop → API ───────────────────────────────────────────────────
+    const handleSaveLoop = useCallback(async (start: number, end: number) => {
         if (!trackId || saving) return;
         setSaving(true);
         setSaveSuccess(false);
         try {
             const allStems = trackDetail?.stems || ['drums', 'bass', 'other', 'vocals'];
-            await createCustomLoop(trackId, regionStart, regionEnd, allStems);
+            await createCustomLoop(trackId, start, end, allStems);
             setSaveSuccess(true);
-            setTimeout(() => setSaveSuccess(false), 2500);
+            setTimeout(() => setSaveSuccess(false), 3000);
         } catch (err) {
             console.error('Failed to save loop:', err);
         } finally {
             setSaving(false);
         }
-    };
+    }, [trackId, trackDetail, saving]);
 
-    React.useEffect(() => {
-        // Sync previewing state with actual wavesurfer play state, and bound checking
-        if (previewing && wavesurferRef?.current) {
-            const ws = wavesurferRef.current;
-            ws.play(regionStart, regionEnd);
+    // ── Steal region ─────────────────────────────────────────────────────
+    const handleStealRegion = useCallback((start: number, end: number) => {
+        // For now: stop and seek to start of region, ready to export
+        waveformRef.current?.stopRegion();
+        // Trigger save as well
+        handleSaveLoop(start, end);
+    }, [handleSaveLoop]);
 
-            const process = () => {
-                if (ws.getCurrentTime() >= regionEnd - 0.05) {
-                    ws.play(regionStart, regionEnd);
-                }
-            };
-            ws.on('audioprocess', process);
-            return () => {
-                ws.un('audioprocess', process);
-                ws.pause();
-            };
-        }
-    }, [previewing, regionStart, regionEnd, wavesurferRef]);
+    // ── Smart phrase → set region ─────────────────────────────────────────
+    const handleSmartPhrase = useCallback((phrase: SmartPhrase) => {
+        onUpdateRegion(phrase.start_time, phrase.end_time);
+        waveformRef.current?.syncRegion(phrase.start_time, phrase.end_time);
+        waveformRef.current?.seek(phrase.start_time);
+    }, [onUpdateRegion]);
 
-    if (!trackId) {
+    // ── No track loaded ───────────────────────────────────────────────────
+    if (!trackId || !trackDetail) {
         return (
-            <div className="h-full flex flex-col items-center justify-center text-gray-500 bg-[#12121a] border border-white/5 rounded-xl shadow-2xl overflow-hidden p-8 text-center gap-4">
-                <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="opacity-20">
-                    <path d="M9 18V5l12-2v13"></path>
-                    <circle cx="6" cy="18" r="3"></circle>
-                    <circle cx="18" cy="16" r="3"></circle>
-                </svg>
-                <div>
-                    <h2 className="text-xl font-bold text-gray-300 mb-2">No Track Selected</h2>
-                    <p className="text-sm opacity-60">Upload a file or select a track from your library to begin editing.</p>
-                </div>
+            <div className="flex-1 flex items-center justify-center bg-[#0a0a0f] text-white/20 text-sm font-mono tracking-wider uppercase">
+                Select a track to begin
             </div>
         );
     }
 
-    const audioUrl = getTrackAudioUrl(trackId);
-
     return (
-        <div className="h-full flex flex-col bg-[#12121a] border border-white/5 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.5)] overflow-hidden">
-            {/* Top Bar */}
-            <div className="px-6 py-5 border-b border-white/5 flex items-center justify-between">
-                <div>
-                    <h2 className="text-2xl font-bold text-white truncate max-w-xl mb-1">
-                        {trackDetail ? trackDetail.title : 'Loading Track...'}
-                    </h2>
-                    <p className="text-sm text-gray-500 font-medium">
-                        {trackDetail ? trackDetail.artist || 'Unknown Artist' : '---'}
-                    </p>
-                </div>
-            </div>
+        <div className="flex flex-col flex-1 min-h-0 bg-[#0a0a0f] overflow-hidden">
 
-            {/* Main Waveform Area */}
-            <div className="flex-1 p-6 flex flex-col bg-black/20">
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-4">
-                        <h3 className="text-sm font-bold uppercase tracking-wider text-[#00d4ff]">Slice Workspace</h3>
-                        {smartPhrases.length > 0 && (
-                            <div className="flex items-center gap-1">
-                                <Zap size={12} className="text-yellow-400" />
-                                <span className="text-[10px] text-yellow-400 font-medium uppercase">Smart</span>
-                            </div>
-                        )}
-                    </div>
-                    {/* Waveform tools */}
-                    <div className="flex items-center gap-1">
-                        {['Zoom In', 'Zoom Out', 'Fit'].map(lbl => (
-                            <button key={lbl} className="px-2 py-1 bg-white/5 hover:bg-white/10 text-[10px] text-gray-400 font-bold uppercase rounded border border-white/5">
-                                {lbl}
-                            </button>
-                        ))}
-                    </div>
-                </div>
+            {/* ── Transport bar ──────────────────────────────────────────── */}
+            <TransportBar
+                waveformRef={waveformRef}
+                isPlaying={isPlaying}
+                isLooping={isLooping}
+                currentTime={currentTime}
+                duration={duration}
+                volume={volume}
+                bpm={bpm}
+                snapEnabled={snapEnabled}
+                onToggleLoop={handleToggleLoop}
+                onVolumeChange={vol => {
+                    setVolume(vol);
+                    waveformRef.current?.setVolume(vol);
+                }}
+                onSnapToggle={() => setSnapEnabled(prev => !prev)}
+            />
 
-                {/* Smart Phrases */}
-                {(loadingPhrases || smartPhrases.length > 0 || phrasesError) && (
-                    <div className="mb-4">
-                        {/* Loading skeleton */}
-                        {loadingPhrases && (
-                            <div className="flex flex-wrap gap-2">
-                                {[1,2,3,4].map(i => <div key={i} className="h-7 w-16 rounded-full bg-white/5 animate-pulse" />)}
-                            </div>
-                        )}
-                        {/* Error */}
-                        {phrasesError && !loadingPhrases && (
-                            <div className="flex items-center gap-2 text-[10px] text-[#ff3b5c]/80">
-                                <AlertCircle size={11} />
-                                <span>{phrasesError}</span>
-                                <button onClick={() => setPhrasesError(null)} className="ml-auto opacity-60 hover:opacity-100">×</button>
-                            </div>
-                        )}
-                        {/* Phrase buttons */}
-                        {!loadingPhrases && smartPhrases.length > 0 && (
-                            <div className="flex flex-wrap gap-2">
-                                {smartPhrases.map((phrase, idx) => (
-                                    <button
-                                        key={idx}
-                                        onClick={() => handleSmartPhrase(phrase)}
-                                        title={`Bar ${phrase.start_bar} · ${phrase.bar_count} bars · confidence ${Math.round((phrase.confidence ?? 0) * 100)}%`}
-                                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold border transition-all hover:scale-105 active:scale-95 ${getPhraseColor(phrase.type)}`}
-                                    >
-                                        <Zap size={10} />
-                                        {getPhraseLabel(phrase.type)} ({phrase.bar_count}b)
-                                        {phrase.confidence !== undefined && (
-                                            <span className="ml-0.5 opacity-55 font-mono">{Math.round(phrase.confidence * 100)}%</span>
-                                        )}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
+            {/* ── Waveform ───────────────────────────────────────────────── */}
+            <div className="flex-1 min-h-0 relative px-0 overflow-x-auto">
+                {/* External error banner */}
+                {(externalError || loadError) && (
+                    <div className="flex items-center gap-2 px-4 py-2 bg-[#ff3b5c]/10 border-b border-[#ff3b5c]/20 text-[#ff3b5c] text-xs font-mono">
+                        <AlertCircle size={12} />
+                        {externalError || loadError}
                     </div>
                 )}
 
-                <div className="flex-1 bg-[#0a0a0f] border border-white/5 rounded-lg overflow-hidden shadow-inner relative flex flex-col justify-center min-h-[220px]">
-                    <WaveformCanvas
-                        audioUrl={audioUrl}
-                        wavesurferRef={wavesurferRef}
-                        regionsRef={regionsRef}
-                        onReady={() => setWaveformReady(true)}
-                        onRegionUpdate={onUpdateRegion}
-                        downbeats={trackDetail?.metadata?.beat_grid?.downbeats || []}
-                        bpm={trackDetail?.bpm || null}
-                        snapEnabled={snapEnabled}
-                    />
-                </div>
-            </div>
+                {/* Save success toast */}
+                {saveSuccess && (
+                    <div className="absolute top-2 right-4 z-30 flex items-center gap-2
+                                    bg-[#00ff88]/15 border border-[#00ff88]/30 text-[#00ff88]
+                                    px-3 py-2 rounded-lg text-xs font-mono tracking-wider shadow-xl">
+                        <CheckCircle2 size={12} />
+                        Loop saved
+                    </div>
+                )}
 
-            {/* Loop Editor Toolbar */}
-            {waveformReady && (
-                <LoopEditorToolbar
+                {/* Saving indicator */}
+                {saving && (
+                    <div className="absolute top-2 right-4 z-30 flex items-center gap-2
+                                    bg-[#8b5cf6]/15 border border-[#8b5cf6]/30 text-[#8b5cf6]
+                                    px-3 py-2 rounded-lg text-xs font-mono tracking-wider shadow-xl">
+                        <Loader2 size={12} className="animate-spin" />
+                        Saving...
+                    </div>
+                )}
+
+                <WaveformCanvas
+                    ref={waveformRef}
+                    audioUrl={audioUrl}
+                    downbeats={downbeats}
+                    bpm={bpm}
+                    snapEnabled={snapEnabled}
                     regionStart={regionStart}
                     regionEnd={regionEnd}
-                    bpm={trackDetail?.bpm || null}
-                    onUpdateRegion={onUpdateRegion}
-                    onPreviewToggle={() => setPreviewing(!previewing)}
-                    onSaveLoop={handleSaveLoop}
-                    previewing={previewing}
-                    saving={saving}
-                    snapEnabled={snapEnabled}
-                    onSnapToggle={() => setSnapEnabled(!snapEnabled)}
+                    wavesurferRef={wavesurferRef}
+                    regionsRef={regionsRef}
+                    onReady={dur => {
+                        setDuration(dur);
+                        setWaveformReady(true);
+                    }}
+                    onError={(err) => {
+                        setLoadError(err.message);
+                        setWaveformReady(false);
+                    }}
+                    onRegionUpdate={(s, e) => {
+                        onUpdateRegion(s, e);
+                    }}
+                    onTimeUpdate={setCurrentTime}
+                    onPlayStateChange={setIsPlaying}
                 />
+            </div>
+
+            {/* ── Loop editor toolbar ────────────────────────────────────── */}
+            <LoopEditorToolbar
+                waveformRef={waveformRef}
+                regionStart={regionStart}
+                regionEnd={regionEnd}
+                duration={duration}
+                bpm={bpm}
+                onRegionChange={handleRegionChange}
+                onSaveLoop={handleSaveLoop}
+                onStealRegion={handleStealRegion}
+            />
+
+            {/* ── Smart phrases ──────────────────────────────────────────── */}
+            {(loadingPhrases || smartPhrases.length > 0 || phrasesError) && (
+                <div className="px-4 py-2 bg-[#0d0d18] border-t border-white/5 flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-1 mr-1">
+                        <Zap size={11} className="text-[#8b5cf6]" />
+                        <span className="text-[10px] font-mono text-white/30 uppercase tracking-widest">
+                            Phrases
+                        </span>
+                    </div>
+
+                    {loadingPhrases && (
+                        <div className="flex items-center gap-1.5 text-white/25 text-xs">
+                            <Loader2 size={11} className="animate-spin" />
+                            <span className="font-mono text-[10px]">Detecting...</span>
+                        </div>
+                    )}
+
+                    {phrasesError && (
+                        <span className="text-[10px] text-red-400/60 font-mono">{phrasesError}</span>
+                    )}
+
+                    {smartPhrases.map((phrase, i) => (
+                        <button
+                            key={i}
+                            onClick={() => handleSmartPhrase(phrase)}
+                            title={`${phrase.phrase_type} · ${phrase.start_time.toFixed(2)}s–${phrase.end_time.toFixed(2)}s · ${Math.round((phrase.confidence ?? 0) * 100)}% confidence`}
+                            className={`
+                                flex items-center gap-1.5 px-2 py-0.5 rounded border text-[11px] font-mono
+                                transition-all hover:scale-105 active:scale-95 cursor-pointer
+                                ${phraseColor(phrase.phrase_type)}
+                            `}
+                        >
+                            <span
+                                className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${confidenceDot(phrase.confidence ?? 0)}`}
+                            />
+                            {phraseLabel(phrase.phrase_type)}
+                        </button>
+                    ))}
+                </div>
             )}
         </div>
     );
 }
+
+export default CentreWorkspace;
