@@ -1,5 +1,26 @@
 # Music Matters
 
+A local-first DJ and producer automation platform. Ingest audio, analyse structure, separate stems with Demucs/MLX, slice beat-aligned loops, and export to Ableton Live.
+
+## Quickstart (60 seconds)
+
+```bash
+git clone https://github.com/k3ss-official/music-matters.git
+cd music-matters
+chmod +x start.sh
+./start.sh
+```
+
+That's it. The script:
+- Creates a Python virtualenv and installs backend deps
+- Runs `npm install` for the frontend
+- Starts FastAPI on **http://localhost:8010**
+- Starts Vite on **http://localhost:5173**
+- Stop with `Ctrl+C`
+
+> **Requirements:** Python 3.10+, Node.js 18+, FFmpeg (`brew install ffmpeg`)
+
+
 A local-first DJ and producer automation platform. Ingest audio from YouTube or local files, analyse structure, separate stems with Demucs, slice beat-aligned loops, and export directly to Ableton Live.
 
 ## What it does
