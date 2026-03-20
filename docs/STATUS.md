@@ -1,349 +1,449 @@
-STATUS.md
-You are my elite local executor for music-matters.
+# Music Matters — AI Handover Brief
 
-You just proposed the 6-step plan. I approve it fully — proceed.
+> **For the next AI agent picking this up.**
+> Read this entire document before touching any code.
+> Everything you need to know is here.
 
-Rules:
-- Execute ONE step at a time.
-- After each step: output exact code changes (as git diff format if possible), any terminal commands run, and the result/success confirmation.
-- Pause after each step and wait for my explicit "NEXT" before moving to the next one.
-- Respect AGENTS.md: no audio file commits, use conda env music-matters, keep tone fast.
-- If any error: debug inline and retry once before pausing.
-- MAX 600 credits total across all steps — stop and report if approaching 500.
-
-Start with Step 1 only (SQLite persistence).
-Output:
-- Code/files created or modified (full content or diff)
-- Any terminal commands you ran
-- Success confirmation or error
-Then STOP and wait for "NEXT".
-<<COMPLETE>>
-<<RESPONSE>>
-Analyzed
- 
- 
- 
- 
-Edited
-+24-0
-Ran command
-
-```
-~/…/music-matters $ python -m py_compile backend/app/services/db.py backend/app/services/pipeline.py
-```
-
-Exit code 0
-Error during tool execution
- 
- 
-Ran command
-
-```
-~/…/music-matters $ curl -s http://localhost:8010/api/status/heartbeat | jq .
-```
-
-Exit code 0
-Ran command
-
-```
-~/…/music-matters $ curl -I http://localhost:8010/api/status/heartbeat
-```
-
-```
-curl: (7) Failed to connect to localhost port 8010 after 0 ms: Couldn't connect to server
-```
-
-Exit code 7
-Ran command
-
-```
-~/…/music-matters $ ps aux | grep uvicorn
-```
-
-```
-k3ss             32356   0.0  0.0 441884000   1424 s020  S+    6:00PM   0:00.00 grep uvicorn
-```
-
-Exit code 0
-Running background command
-
-```
-backend $ conda run -n music-matters --no-capture-output python -m uvicorn app.main:app --port 8010 --reload
-```
-
-```
-INFO:     Will watch for changes in these directories: ['/Volumes/deep-1t/Users/k3ss/projects/music-matters/backend']
-INFO:     Uvicorn running on http://127.0.0.1:8010 (Press CTRL+C to quit)
-INFO:     Started reloader process [32653] using StatReload
-Process SpawnProcess-1:
-Traceback (most recent call last):
-  File "/opt/homebrew/Caskroom/miniforge/base/envs/music-matters/lib/python3.11/multiprocessing/process.py", line 314, in _bootstrap
-    self.run()
-  File "/opt/homebrew/Caskroom/miniforge/base/envs/music-matters/lib/python3.11/multiprocessing/process.py", line 108, in run
-    self._target(*self._args, **self._kwargs)
-  File "/opt/homebrew/Caskroom/miniforge/base/envs/music-matters/lib/python3.11/site-packages/uvicorn/_subprocess.py", line 80, in subprocess_started
-    target(sockets=sockets)
-  File "/opt/homebrew/Caskroom/miniforge/base/envs/music-matters/lib/python3.11/site-packages/uvicorn/server.py", line 75, in run
-    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/homebrew/Caskroom/miniforge/base/envs/music-matters/lib/python3.11/site-packages/uvicorn/_compat.py", line 30, in asyncio_run
-    return runner.run(main)
-           ^^^^^^^^^^^^^^^^
-  File "/opt/homebrew/Caskroom/miniforge/base/envs/music-matters/lib/python3.11/asyncio/runners.py", line 118, in run
-    return self._loop.run_until_complete(task)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/homebrew/Caskroom/miniforge/base/envs/music-matters/lib/python3.11/asyncio/base_events.py", line 654, in run_until_complete
-    return future.result()
-           ^^^^^^^^^^^^^^^
-  File "/opt/homebrew/Caskroom/miniforge/base/envs/music-matters/lib/python3.11/site-packages/uvicorn/server.py", line 79, in serve
-    await self._serve(sockets)
-  File "/opt/homebrew/Caskroom/miniforge/base/envs/music-matters/lib/python3.11/site-packages/uvicorn/server.py", line 86, in _serve
-    config.load()
-  File "/opt/homebrew/Caskroom/miniforge/base/envs/music-matters/lib/python3.11/site-packages/uvicorn/config.py", line 441, in load
-    self.loaded_app = import_from_string(self.app)
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/homebrew/Caskroom/miniforge/base/envs/music-matters/lib/python3.11/site-packages/uvicorn/importer.py", line 19, in import_from_string
-    module = importlib.import_module(module_str)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/homebrew/Caskroom/miniforge/base/envs/music-matters/lib/python3.11/importlib/__init__.py", line 126, in import_module
-    return _bootstrap._gcd_import(name[level:], package, level)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1147, in _find_and_load_unlocked
-  File "<frozen importlib._bootstrap>", line 690, in _load_unlocked
-  File "<frozen importlib._bootstrap_external>", line 940, in exec_module
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-  File "/Volumes/deep-1t/Users/k3ss/projects/music-matters/backend/app/main.py", line 20, in <module>
-    from app.api.router import api_router
-  File "/Volumes/deep-1t/Users/k3ss/projects/music-matters/backend/app/api/router.py", line 7, in <module>
-    from app.api.routes import (
-  File "/Volumes/deep-1t/Users/k3ss/projects/music-matters/backend/app/api/routes/__init__.py", line 3, in <module>
-    from . import ingest, jobs, library, status
-  File "/Volumes/deep-1t/Users/k3ss/projects/music-matters/backend/app/api/routes/ingest.py", line 14, in <module>
-    from app.services.pipeline import pipeline
-  File "/Volumes/deep-1t/Users/k3ss/projects/music-matters/backend/app/services/pipeline.py", line 20, in <module>
-    from app.services.db import db
-  File "/Volumes/deep-1t/Users/k3ss/projects/music-matters/backend/app/services/db.py", line 16, in <module>
-    class DatabaseService:
-  File "/Volumes/deep-1t/Users/k3ss/projects/music-matters/backend/app/services/db.py", line 110, in DatabaseService
-    def load_all_tracks(self) -> Dict[UUID, Any]:
-                                            ^^^
-NameError: name 'Any' is not defined
-WARNING:  StatReload detected changes in 'app/services/db.py'. Reloading...
-INFO:     Started server process [32698]
-INFO:     Waiting for application startup.
-2026-03-15 18:00:54,078 - app.main - INFO - 🎧 Music Matters v2.0.0 starting...
-2026-03-15 18:00:54,078 - app.main - INFO - 📁 Music Library: ~/Music Matters
-2026-03-15 18:00:54,078 - app.main - INFO - 🎛️  Demucs Model: htdemucs_6s on mps
-2026-03-15 18:00:54,079 - app.main - INFO - 🔬 SOTA Analysis: True
-2026-03-15 18:00:54,079 - app.main - INFO - 👆 Fingerprinting: True
-2026-03-15 18:00:54,079 - app.main - INFO - ✅ Music Matters ready!
-INFO:     Application startup complete.
-```
-
- 
- 
-Edited
-+1-1
-Checked command status
-I have completed Step 1: SQLite Persistence Storage.
-🛠 Technical Changes
-1. Created
-backend/app/services/db.py
-Implemented a centralized
-DatabaseService using sqlite3.
- 
-
-* Schema: Two tables:
-  tracks (metadata, BPM, key, paths, stems/loops JSON) and loop_records (individual bar slices).
-
-* Persistence: Uses UPSERT logic (via INSERT ... ON CONFLICT) to ensure track updates during the pipeline are atomic.
-
-* Hydration: Provides
-  load_all_tracks() and
-  load_all_loops() for re-syncing the in-memory state on boot.
-
-2. Modified
-backend/app/services/pipeline.py
-
-* Boot Hydration: Updated PipelineOrchestrator.__init__ to load all existing tracks and loops from library.db into memory.
-
-* Auto-Save Hooks:
-
-  * queue_ingest: Saves initial metadata immediately.
-
-  * _run_stage: Persists the
-    TrackRecord after every successful stage (ingest → analysis → separation), ensuring state isn't lost if the daemon crashes mid-pipeline.
-
-  * _stage_loop: Automatically commits generated loop records to the database.
-
-* Deletion Sync:
-  delete_track now clears the database entry alongside the filesystem scrub.
-
-🚀 Verification
-
-* Uvicorn Status: Restarted and verified healthy.
-
-* Schema Validation: Database library.db successfully initialized in ~/Music Matters/.
-
-* Integrity Check: python -m py_compile passed for all modified logic.
-
-Terminal Command Run:
-
-```
-bash
-```
-
-conda run -n music-matters --no-capture-output python -m uvicorn app.main:app --port 8010 --reload
-Ready for the next phase. STOP. Wait for "NEXT"
-<<REPORT>>
-Step 1 complete — solid execution from your coder.
-Quick review of what landed:
-
-New backend/app/services/db.py: Clean DatabaseService class with sqlite3 (no ORM bloat), tables for tracks + loop_records, UPSERT logic, load_all_* hydration methods.
-pipeline.py updates:
-__init__ now hydrates from DB on boot.
-Auto-save hooks after every stage (ingest, analysis, separation, loop slicing).
-delete_track syncs DB + filesystem.
-
-Uvicorn restarted cleanly → app starts, logs "Music Matters ready!", no crashes.
-py_compile passed → no syntax errors.
-
-This fixes the volatile state gap perfectly. Repo is now more resilient.
-<<NEXT STEP>>
->>
 ---
-## Step 2: Basic Text Search Implementation
 
-**Status:** <<COMPLETE>>
+## What This Project Is
 
-### Changes
+**Music Matters** is a local-first DJ and producer automation platform built for Apple Silicon (M4).
+It is a FastAPI + React/TypeScript application that lets a DJ:
 
-**frontend/src/components/SearchIngest.tsx**
-- Replaced search stub with actual implementation
-- Text queries now routed through `onUrlSubmit` to backend
+1. **Ingest** — search YouTube by text query or paste a direct URL; yt-dlp downloads the track
+2. **Analyse** — auto-detect BPM, musical key (Krumhansl-Schmuckler + Camelot wheel), smart phrase detection (intro/verse/chorus/drop/bridge/breakdown/outro), beat grid, downbeats
+3. **Separate** — run Demucs stem separation (htdemucs_ft = 4 stems, htdemucs_6s = 6 stems: drums/bass/vocals/guitar/piano/other); uses `demucs-mlx` on Apple Silicon for ~73x realtime speed
+4. **Loop** — interactive waveform editor: drag to select regions, snap to beat grid, nudge IN/OUT points by 1 beat, quantize to bar, 1/2/4/8/16/32-bar presets, save loops to library
+5. **Steal** — save/export the selected region as a custom loop, trigger stem export
+6. **Export** — generate Ableton `.als` project with stems pre-placed on session grid tracks
 
-**backend/app/services/pipeline.py**
-- Added detection for text queries (non-URL, non-file-path)
-- Prepends `ytsearch1:` to query for yt-dlp
-- Also handles protocol-less URLs (youtu.be/, youtube.com/, etc.)
+The user is `k3ss-official` (scousercheeky@gmail.com). The machine is an Apple M4 with a `/Volumes/MLX` volume dedicated to MLX model storage.
 
-### Verification
-- `python -m py_compile` ✓
-- `npm run build` ✓  
-- Backend health check: `curl localhost:8010/health` → `{"status":"ok"}`
+---
 
-### How It Works
-1. User types "Daft Punk One More Time"
-2. Frontend sends via `onUrlSubmit`
-3. Backend detects it's not a URL → prepends `ytsearch1:`
-4. yt-dlp fetches top YouTube result and downloads
+## Repository
 
-<<NEXT>>
-Great work — Step 2 landed cleanly.
-Quick verification of what your coder just did:
+```
+https://github.com/k3ss-official/music-matters
+Branch: main
+Latest commit: 9b13c6e — chore: add start.sh single-command launcher, .env.example, quickstart README
+```
 
-SearchIngest.tsx: Stub removed → text queries now flow through onUrlSubmit (same as URLs).
-pipeline.py: Smart detection added — non-URL/non-file text gets prefixed with ytsearch1: → yt-dlp grabs top result automatically.
-Clean compile (py_compile + npm run build both pass).
-Backend health check good.
-docs/STATUS.md updated with clear Step 2 block — repo history stays readable.
+### How to clone and run
 
-Repo state now
+```bash
+git clone https://github.com/k3ss-official/music-matters.git
+cd music-matters
+chmod +x start.sh
+./start.sh
+```
 
-Text search (YouTube top result) is functional end-to-end.
-SQLite persistence (Step 1) already solid.
-Next up: interactive regions + smart phrase snap (Steps 3 & 4) — this is the magic part you want (Traktor-style chorus catcher).
-<<NEXT STEP>>
-Step 3 smashed — excellent progress.
-Your Antigravity coder delivered a clean, functional upgrade:
+`start.sh` creates `backend/.venv`, installs Python deps, runs `npm install`, then starts:
+- FastAPI backend on **http://localhost:8010** (`--reload`)
+- Vite frontend on **http://localhost:5173** (proxies `/api` → backend)
 
-WaveformCanvas.tsx: Added downbeats, bpm, snapEnabled props + snapToGrid() logic that snaps region start/end to nearest downbeat when enabled.
-LoopEditorToolbar.tsx: New "Save Loop" button (green, calls backend /tracks/{track_id}/loops/custom), "Snap On/Off" toggle (magnet icon).
-CentreWorkspace.tsx: Wires everything — passes downbeats from trackDetail.metadata.beat_grid.downbeats, handles save state, toggle state, and API call via createCustomLoop.
-Verification: npm run build passes, backend health check good.
+Stop with `Ctrl+C`.
 
-This is the core interactive regions selector with beat snapping you wanted — drag/resize snaps to bars, preview works, save POSTs to backend.
-Repo state now
+Prerequisites: `python3`, `node`, `npm`, `ffmpeg` (`brew install ffmpeg`)
 
-SQLite persistence (Step 1)
-Text/URL search working (Step 2)
-Interactive regions + snap + save button (Step 3)
+---
 
-Next: Step 4 — Smart Phrase Auto-Snap Engine (the Traktor-style chorus catcher)
-<<NEXT STEP>>
-Step 4 landed clean — this is massive.
-Your coder just delivered the Traktor-style smart phrase auto-snap you described:
+## Tech Stack
 
-Backend (sota_analyzer.py): New detect_smart_phrases() method
-Combines librosa onset strength + energy envelope + madmom downbeats
-Detects high-energy musical phrases (chorus/drop) with clean start/end boundaries
-Returns phrases with type, start/end time, bar count, confidence, energy
+| Layer | Technology |
+|---|---|
+| Backend | FastAPI 0.115, Python 3.11, uvicorn |
+| Frontend | React 18, TypeScript 5.3, Vite 7 |
+| Styling | Tailwind CSS 3.4 |
+| Audio | WaveSurfer.js v7.12 (CRITICAL — v7 API, not v6) |
+| Icons | lucide-react 0.577 |
+| Stem separation | demucs-mlx (Apple Silicon MLX port) |
+| Audio analysis | librosa 0.10, numpy, scipy |
+| Download | yt-dlp |
+| Metadata | musicbrainzngs |
+| Persistence | SQLite via `backend/app/services/db.py` |
+| Export | Custom Ableton .als XML builder |
 
-API (library.py): New GET /library/tracks/{track_id}/phrases endpoint
-Frontend (api.ts): getSmartPhrases() call + types
-UI (CentreWorkspace.tsx):
-Fetches phrases on track load
-Renders color-coded buttons (Chorus pink, Drop red, Intro blue, etc.) with lightning icon
-Clicking auto-snaps region to perfect phrase boundaries (e.g. full “Don’t you want me baby” chorus, no bleed)
+---
 
+## Project Structure
 
-Verification: compile/build/health check all pass.
-Repo state now
+```
+music-matters/
+├── start.sh                        ← single-command dev launcher
+├── .env.example                    ← copy to .env if needed
+│
+├── backend/
+│   ├── app/
+│   │   ├── main.py                 ← FastAPI app, CORS, startup
+│   │   ├── config.py               ← settings (PORT=8010, DEMUCS_MODEL, etc.)
+│   │   ├── api/
+│   │   │   ├── router.py           ← registers all route modules
+│   │   │   ├── schemas.py          ← Pydantic request/response models
+│   │   │   └── routes/
+│   │   │       ├── ingest.py       ← POST /api/ingest/ingest, /api/ingest/batch
+│   │   │       ├── library.py      ← GET /api/library/tracks, /tracks/{id}, /tracks/{id}/phrases, /tracks/{id}/loops/custom
+│   │   │       ├── audio.py        ← GET /api/audio/tracks/{id}, /api/audio/stems/{id}/{stem}
+│   │   │       ├── analysis.py     ← analysis endpoints
+│   │   │       ├── export.py       ← POST /api/export/ableton
+│   │   │       ├── jobs.py         ← job queue status
+│   │   │       ├── midi.py         ← APC Mini MK2 8×8 grid mapping stub
+│   │   │       ├── search.py       ← search endpoints
+│   │   │       ├── status.py       ← GET /api/status/heartbeat
+│   │   │       ├── fingerprint.py  ← audio fingerprinting
+│   │   │       └── processing.py   ← processing pipeline triggers
+│   │   └── services/
+│   │       ├── db.py               ← SQLite DatabaseService, UPSERT, hydration on boot
+│   │       ├── pipeline.py         ← PipelineOrchestrator — ingest → analyse → separate → loop
+│   │       ├── library.py          ← in-memory track registry + DB sync
+│   │       ├── ableton_exporter.py ← builds .als zip (XML + stem files)
+│   │       ├── analysis/
+│   │       │   ├── audio_analyzer.py    ← BPM, key, beat grid, downbeats
+│   │       │   ├── sota_analyzer.py     ← smart phrase detection (onset + energy + downbeats)
+│   │       │   └── harmonic_mixer.py    ← Camelot wheel, mashup scoring
+│   │       ├── processing/
+│   │       │   ├── stem_separator.py    ← calls demucs-mlx
+│   │       │   ├── audio_processor.py   ← audio manipulation
+│   │       │   └── sample_extractor.py  ← loop slicing
+│   │       ├── search/
+│   │       │   ├── download_service.py  ← yt-dlp wrapper
+│   │       │   ├── metadata_service.py  ← MusicBrainz lookup
+│   │       │   └── track_finder.py      ← multi-source search orchestrator
+│   │       ├── fingerprint/
+│   │       │   └── audio_fingerprint.py ← fingerprint + similarity
+│   │       └── export/
+│   │           └── daw_exporter.py      ← Rekordbox/Serato/M3U export
+│   └── requirements.txt
+│
+├── frontend/
+│   ├── package.json                ← wavesurfer.js ^7.12.1, lucide-react, react 18, vite 7
+│   ├── vite.config.ts              ← port 5173, proxy /api → localhost:8010
+│   └── src/
+│       ├── App.tsx                 ← root layout, global state, polling loops
+│       ├── types.ts                ← all TypeScript interfaces
+│       ├── services/api.ts         ← all API calls (axios), ApiError class
+│       └── components/
+│           ├── WaveformCanvas.tsx      ← ★ REWRITTEN — see below
+│           ├── TransportBar.tsx        ← ★ NEW — see below
+│           ├── LoopEditorToolbar.tsx   ← ★ REWRITTEN — see below
+│           ├── CentreWorkspace.tsx     ← ★ REWRITTEN — see below
+│           ├── SearchIngest.tsx        ← URL + text ingest, batch tab
+│           ├── LibraryBrowser.tsx      ← track list, auto-tag chips
+│           ├── AnalysisPanel.tsx       ← BPM, key, phrase display
+│           ├── ExportPanel.tsx         ← Ableton export button + download
+│           ├── StemLanes.tsx           ← stem playback lanes
+│           ├── QueuePanel.tsx          ← job progress display
+│           └── ...
+│
+└── docs/
+    ├── STATUS.md               ← this file
+    ├── API-SPEC.md             ← full API reference
+    ├── ARCHITECTURE.md         ← system design
+    ├── PIPELINE.md             ← ingest → process pipeline detail
+    └── DEMUCS.md               ← stem separation notes
+```
 
-SQLite persistence
-Text/URL search
-Interactive regions + beat snap
-Smart phrase auto-snap (the killer feature you wanted)
+---
 
-Next: Step 5 — Ableton (.als) Export Builder
-<<NEXT STEP>>
-Step 5 smashed — Ableton export is now live in the repo.
-Quick review of what landed:
+## The Four Core Rewritten Components (★)
 
-New backend/app/services/ableton_exporter.py
-AbletonExporter class builds a valid .als structure (zip of XML files)
-Creates 8 audio tracks (Drums/Bass/Other/Vocals/Guitar/Piano/Synth/FX)
-Places clips on 8x8 session grid (ready for APC Mini MK2 mapping)
-Handles stem file copying + XML generation (project.xml + CollectionInfo)
+These four files were completely rewritten in the most recent major session. They are the heart of the waveform/loop workflow.
 
-Updated export.py
-POST /export/ableton endpoint
-Accepts track_id + stems list + optional start/end
-Returns download URL for the .als file
+### Critical: WaveSurfer v7 API
 
-Frontend (api.ts + ExportPanel.tsx)
-exportToAbleton() API call
-Green "Export to Ableton (.als)" button in ExportPanel
-Opens download URL in new tab on click
+The project uses **wavesurfer.js v7.12.1**. v7 removed the `play(startTime, endTime)` API. Any AI touching this code must know:
 
+```typescript
+// ❌ WRONG — does not exist in v7
+ws.play(region.start, region.end)
 
-Verification: compile/build/health check all pass.
-Repo state now
+// ✅ CORRECT — v7 pattern
+ws.setTime(region.start)
+ws.play()
+// loop via audioprocess event: if (currentTime >= region.end) ws.setTime(region.start)
+```
 
-SQLite persistence
-Text/URL search
-Interactive regions + beat snap
-Smart phrase auto-snap (chorus catcher)
-Ableton .als export (clips pre-placed on grid)
+---
 
-Final step: Step 6 — End-to-End Validation & Commit
-<<NEXT STEP>>
-Step 6 complete — repo is now handover-ready!
-Final local state recap (from your coder’s output):
+### `WaveformCanvas.tsx` — 467 lines
 
-All 6 steps executed successfully
-Full workflow committed:
-SQLite persistence (library.db survives restarts)
-Text search (non-URL queries → yt-dlp top result)
-Interactive regions selector (beat-snap drag/resize + preview + Save Loop button)
-Smart phrase auto-snap engine (Traktor-style chorus/drop catcher with onset + energy + downbeats)
-Ableton .als export (clips pre-placed on 8x8 grid, ZIP served via /export/ableton)
+The WaveSurfer v7 waveform component. Exposes an imperative `WaveformHandle` ref.
 
-Commit hash: 2fc52a4
-Message: feat: full workflow - persistence, search, interactive regions, smart phrases, Ableton export
-13 files changed (+1410 / -420 lines), no audio committed (AGENTS.md respected)
-Validation: compile/build/health checks passed, endpoints respond correctly
+**What it does:**
+- Initialises WaveSurfer with `RegionsPlugin` and `TimelinePlugin`
+- Draws a BPM grid overlay on a `<canvas>` (bar lines cyan, beat lines white/faint)
+- Beat snap: merges downbeats array + BPM-computed grid, 0.08s threshold
+- Bidirectional sync: `syncRegion(start, end)` pushes toolbar changes back to the live WaveSurfer region handle via `region.setOptions()`
+- Drag-to-create: `region-created` event fires on new drag; replaces any existing region
+- Loop playback via `audioprocess` event (not `play(start, end)`)
 
-Next: Push & hand over to Perplexity Computer
+**`WaveformHandle` interface (ref):**
+```typescript
+export interface WaveformHandle {
+    play(): void
+    pause(): void
+    stop(): void              // pause + setTime(0)
+    playRegion(): void        // setTime(region.start) + play + loop
+    stopRegion(): void        // pause + setTime(region.start)
+    seek(seconds: number): void
+    zoomIn(): void
+    zoomOut(): void
+    zoomFit(): void
+    setVolume(v: number): void
+    getDuration(): number
+    isPlaying(): boolean
+    syncRegion(start: number, end: number): void  // push external changes to WS region
+}
+```
+
+**Props:**
+```typescript
+interface WaveformCanvasProps {
+    audioUrl: string | null
+    onReady?: (duration: number) => void
+    onError?: (error: Error, url: string) => void
+    onRegionUpdate?: (start: number, end: number) => void
+    onTimeUpdate?: (currentTime: number) => void
+    onPlayStateChange?: (playing: boolean) => void
+    wavesurferRef?: React.MutableRefObject<WaveSurfer | null>
+    regionsRef?: React.MutableRefObject<any>
+    downbeats?: number[]           // from track analysis — used for snap grid
+    bpm?: number | null
+    snapEnabled?: boolean
+    regionStart?: number           // controlled — triggers syncRegion when changed
+    regionEnd?: number
+}
+```
+
+---
+
+### `TransportBar.tsx` — 256 lines
+
+New component. Sits above the waveform.
+
+**Controls:**
+- Stop button (Square icon) — calls `waveformRef.current.stop()`
+- Play/Pause button (large, purple when playing) — calls `play()` or `pause()`, or `playRegion()` if loop mode is on
+- Loop Region toggle (Repeat icon, green when active) — switches between full-track and region-loop playback
+- Playhead time display `MM:SS.ms` in cyan monospace
+- Duration display
+- BPM badge (from trackDetail)
+- SNAP toggle (cyan when on)
+- Zoom Out / Zoom Fit / Zoom In buttons (call `waveformRef` methods)
+- Volume slider + mute toggle
+
+**Props:** `waveformRef`, `isPlaying`, `isLooping`, `currentTime`, `duration`, `volume`, `bpm`, `snapEnabled`, `onToggleLoop`, `onVolumeChange`, `onSnapToggle`
+
+---
+
+### `LoopEditorToolbar.tsx` — 333 lines
+
+Sits below the waveform. The IN/OUT editor.
+
+**Controls:**
+- **IN** time display — click to edit inline (`MM:SS.ms` format, Enter to commit)
+- `◀ ▶` nudge buttons either side of IN and OUT — steps by 1 beat (falls back to 0.25s without BPM); calls `syncRegion()` so the waveform highlight actually moves
+- **Loop length** display in both seconds and bars+beats (e.g. "4 bars")
+- **OUT** time display — click to edit inline
+- **Q** quantize-to-bar button — snaps both IN and OUT to nearest bar boundary (disabled without BPM)
+- **Bar presets** — buttons for 1 / 2 / 4 / 8 / 16 / 32 bars; snaps start to nearest bar and sets end = start + (n × bar_duration)
+- **STEAL** button (red, Scissors icon) — saves the region + stops at IN point
+- **SAVE LOOP** button (green, Save icon) — calls `POST /api/library/tracks/{id}/loops/custom`
+
+**Key design:** All nudge and preset operations call `waveformRef.current.syncRegion(s, e)` AND `onRegionChange(s, e)` so the waveform highlight and React state both update together — this was the core bug in the previous version.
+
+---
+
+### `CentreWorkspace.tsx` — 348 lines
+
+The orchestrator. Owns all transport state.
+
+**State it owns:**
+- `isPlaying`, `isLooping` — play/loop state
+- `currentTime`, `duration` — from `onTimeUpdate` callback
+- `volume`, `snapEnabled` — passed to TransportBar
+
+**Wires:**
+- `waveformRef: React.RefObject<WaveformHandle>` — passed to all three child components
+- `regionStart / regionEnd` passed as controlled props into `WaveformCanvas` → triggers bidirectional sync
+- `onTimeUpdate` → `setCurrentTime` → TransportBar time display
+- `onPlayStateChange` → `setIsPlaying`
+- Smart phrases fetched from API on track load → displayed as clickable buttons below waveform (clicking calls `syncRegion()` + `seek()`)
+- Save loop → `POST /api/library/tracks/{id}/loops/custom` with stems list from `trackDetail`
+
+---
+
+## Design Tokens (use these — do not invent new colours)
+
+```css
+/* Backgrounds */
+#0a0a0f   /* darkest */
+#0d0d1a   /* transport bar, toolbar */
+#10101e   /* loop toolbar */
+#12121a   /* panels */
+#1a1a26   /* cards */
+
+/* Accents */
+#00d4ff   /* cyan — playhead, IN point, snap, zoom */
+#8b5cf6   /* purple — play button active, BPM */
+#00ff88   /* green — loop active, save, OUT point */
+#ff3b5c   /* red — steal, error */
+
+/* Text */
+white/70  /* primary */
+white/40  /* secondary */
+white/20  /* tertiary */
+```
+
+Tailwind dark theme throughout. Fonts: monospace for time/BPM displays (`font-mono`, `tabular-nums`, `tracking-widest uppercase` for labels).
+
+---
+
+## API Endpoints (key ones)
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/health` | Health check |
+| `GET` | `/api/status/heartbeat` | Heartbeat |
+| `POST` | `/api/ingest/ingest` | Ingest single track (URL or text query) |
+| `POST` | `/api/ingest/batch` | Batch ingest (array of sources) |
+| `GET` | `/api/library/tracks` | List all tracks |
+| `GET` | `/api/library/tracks/{id}` | Track detail (BPM, key, stems, loops, metadata) |
+| `GET` | `/api/library/tracks/{id}/phrases` | Smart phrase detection results |
+| `POST` | `/api/library/tracks/{id}/loops/custom` | Save custom loop `{start_time, end_time, stems}` |
+| `GET` | `/api/audio/tracks/{id}` | Serve original audio file |
+| `GET` | `/api/audio/stems/{id}/{stem_name}` | Serve a stem file |
+| `POST` | `/api/export/ableton` | Generate + download `.als` project |
+| `GET` | `/api/midi/apc-mini-mk2/mapping` | APC Mini MK2 8×8 grid mapping |
+
+API docs (Swagger): `http://localhost:8010/api/docs`
+
+---
+
+## What Has Been Built (Completed Work)
+
+### Phase 1 — Foundation (original codebase)
+- FastAPI backend with full service architecture
+- React frontend with dark DJ theme
+- SQLite persistence (`db.py`) — UPSERT, hydration on boot, survives restarts
+- Track ingest pipeline: text query → `ytsearch1:` → yt-dlp → file on disk
+- Audio analysis: BPM, key detection, beat grid, downbeats
+- Smart phrase detection (`sota_analyzer.py`): onset + energy + downbeats → chorus/drop/intro/verse/bridge etc. with confidence scores
+- Stem separation: `demucs-mlx` integration (`htdemucs_ft` 4-stem, `htdemucs_6s` 6-stem)
+- Ableton `.als` export: stems on 8-track session grid
+- APC Mini MK2 MIDI mapping stub
+- Batch ingest endpoint
+- Auto-tagging (energy, tags) on loop slices
+- E2E smoke test suite (`backend/tests/test_e2e.py`)
+- `start.sh` single-command launcher
+- Full documentation set
+
+### Phase 2 — Waveform Engine Rewrite (most recent session)
+Complete ground-up rewrite of the 4 core UI components:
+- Fixed all broken WaveSurfer v7 API calls (the root cause of play/stop not working)
+- Fixed region highlight not resizing (toolbar nudges now call `syncRegion()`)
+- Fixed drag-to-create (was only hooking existing region drag, not new drag)
+- Added BPM quantize grid overlay on canvas
+- Added beat snap with threshold (merges downbeats + BPM-computed grid)
+- Added bidirectional sync (toolbar → WaveSurfer region, not one-way)
+- Built TransportBar from scratch (Play/Pause/Stop/Loop, time display, volume, zoom, snap)
+- Built LoopEditorToolbar with bar presets, inline time editing, quantize button
+- Rewired CentreWorkspace to own all transport state correctly
+
+---
+
+## What Is Outstanding
+
+### Immediate / High Priority
+
+| # | Task | Notes |
+|---|---|---|
+| 1 | **First-run local test** | User has not yet cloned and run the new code on their M4. The `start.sh` script is ready. First run will verify backend boots, frontend compiles, waveform loads. |
+| 2 | **demucs-mlx verification** | `requirements.txt` has demucs commented out (`# demucs==4.0.1`). The user uses `demucs-mlx` from their MLX volume. Confirm the backend's `stem_separator.py` calls `demucs-mlx` CLI correctly, not the PyTorch `demucs` package. |
+| 3 | **Audio URL resolution** | `GET /api/audio/tracks/{id}` — verify the path resolution works on the user's machine. The track files are on `/Volumes/deep-1t/Users/k3ss/...`. Config path in `config.py` needs to match. |
+| 4 | **Smart phrase endpoint wiring** | `CentreWorkspace.tsx` calls `getSmartPhrases(trackId)` — verify `GET /api/library/tracks/{id}/phrases` returns the right shape. `SmartPhrase` type: `{phrase_type, start_time, end_time, confidence}`. |
+
+### MLX Upgrade Pipeline (planned, not started)
+
+Based on research done before this session, the following upgrades are ready to implement when the user returns:
+
+| Tool | What it replaces/adds | Install |
+|---|---|---|
+| **BeatNet** | Replace `librosa.beat.beat_track()` — returns beats AND downbeats, handles tempo changes, CRNN + particle filter | `pip install BeatNet` |
+| **mlx-audio-separator** | MelBand-Roformer for vocals (12.6 SDR vs demucs ~9 SDR), BS-Roformer for instrumentals (16.5 SDR) | `pip install mlx-audio-separator` |
+| **SAM Audio (Meta, MLX port)** | Text-prompted separation: `descriptions=["kick drum"]` — extracts any sound by description | `pip install -U mlx-audio` → `mlx-community/sam-audio-small` |
+| **basic-pitch (Spotify)** | Audio → MIDI transcription from any stem, polyphonic, runs CoreML on Neural Engine | `pip install basic-pitch` |
+| **mlx-whisper** | Lyric + timestamp extraction from vocal stems | `pip install mlx-whisper` → `mlx-community/whisper-large-v3-turbo` |
+| **ACE-Step 1.5** | Full music GENERATION from text prompts (BPM, key, style), cover generation, vocal→BGM, MIT licensed | `git clone github.com/ace-step/ACE-Step-1.5` |
+| **demucs-mlx fp16** | Use `mlx-community/demucs-mlx-fp16` for faster preview separations | `--hf-repo mlx-community/demucs-mlx-fp16` |
+
+A full 14-page intel brief on all of these is saved as `mlx-music-intel.pdf` (was shared with user, not committed to repo).
+
+### `/Volumes/MLX` Cache Setup (not yet done)
+
+```bash
+echo 'export HF_HOME=/Volumes/MLX/hf-cache' >> ~/.zshrc
+echo 'export TRANSFORMERS_CACHE=/Volumes/MLX/hf-cache' >> ~/.zshrc
+```
+
+Recommended `/Volumes/MLX/` folder structure:
+```
+/Volumes/MLX/
+├── demucs/htdemucs_ft/        ← fp32 archival
+├── demucs/htdemucs_6s-fp16/   ← fp16 speed
+├── roformer/mel-band-vocals/  ← MelBand-Roformer vocals
+├── roformer/bs-viperx-1297/   ← instrumental SDR 16.5
+├── whisper/large-v3-turbo/
+├── sam-audio/sam-audio-small/
+└── hf-cache/                  ← HuggingFace download cache
+```
+
+### Longer Term (from ROADMAP.md)
+- Real-time MIDI controller support (APC Mini MK2 — stub exists, implementation pending)
+- Redis job queue (replace in-memory queue)
+- Tauri desktop app wrapper (scaffolding exists in `frontend/src-tauri/`, not built)
+- Docker Compose setup
+- Test coverage >80%
+
+---
+
+## Known Issues / Watch Out For
+
+1. **`Any` import in db.py** — An earlier session had a `NameError: name 'Any' is not defined` in `db.py` line 110. This was fixed. If you see it again, add `from typing import Any` at the top of the file.
+
+2. **Demucs commented out in requirements.txt** — Intentional. The user runs `demucs-mlx` from their conda/MLX env, not the pip package. Do not uncomment unless you know what you're doing.
+
+3. **WaveSurfer v7 — no `play(start, end)`** — Covered above. If any component is calling `ws.play(start, end)`, that is a bug. Use `setTime()` + `play()` + `audioprocess` loop.
+
+4. **Path on user's machine** — Tracks are stored under `~/Music Matters/` by default (see `config.py`). The user's machine has a `/Volumes/deep-1t/` external drive. Audio path resolution may need adjustment on first run.
+
+5. **Tauri scaffolding** — `frontend/src-tauri/` is scaffolded but not in active use. Do not try to build the Tauri app unless specifically asked. `npm run dev` (Vite only) is the correct dev command.
+
+---
+
+## Commit History (last 5)
+
+```
+9b13c6e  chore: add start.sh single-command launcher, .env.example, quickstart README
+127048d  feat: production waveform engine — WaveSurfer v7, transport bar, bidirectional region sync, quantize grid
+3859ff9  feat: production waveform engine — (TransportBar push)
+88330a7  feat: production waveform engine — (LoopEditorToolbar push)
+3a4026ac feat: production waveform engine — (WaveformCanvas push)
+```
+
+---
+
+## Tone & Working Style
+
+- The user is a DJ/producer, not a developer. Explain decisions in musical terms when possible.
+- Work at pace. Don't over-explain. Ship working code.
+- Credit budget awareness: user specified `MAX 1800 CREDITS TOTAL` in early sessions. Always estimate cost before multi-step plans.
+- Push to GitHub via `gh api --method PUT repos/k3ss-official/music-matters/contents/{path}` with `api_credentials=["github"]` in bash tool.
+- All pushes go to `main`. No branching unless asked.
+- No audio files committed (`.gitignore` enforces this).
+- Design tokens above are law. Don't introduce new colours.
+
+---
+
+*Last updated: 20 March 2026 — compiled by Perplexity Computer*
