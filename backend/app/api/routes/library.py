@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from fastapi.responses import FileResponse
 
 from app.api.schemas import (
@@ -56,7 +56,7 @@ async def track_detail(track_id: str) -> TrackDetailResponse:
         raise HTTPException(status_code=404, detail=str(exc))
 
 
-@router.delete("/tracks/{track_id}", status_code=204)
+@router.delete("/tracks/{track_id}", status_code=204, response_class=Response)
 async def delete_track(track_id: str) -> None:
     try:
         track_uuid = UUID(track_id)
