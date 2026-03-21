@@ -17,6 +17,7 @@ from app.api.routes import (
     audio,
 )
 from app.api.routes import midi
+from app.api.routes import generate
 
 api_router = APIRouter()
 
@@ -32,3 +33,4 @@ api_router.include_router(status.router)
 api_router.include_router(ingest.router)
 api_router.include_router(audio.router)
 api_router.include_router(midi.router)
+api_router.include_router(generate.router)

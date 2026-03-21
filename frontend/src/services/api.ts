@@ -190,10 +190,10 @@ export interface SmartPhrase {
   type: string;
   start_time: number;
   end_time: number;
-  start_bar: number;
-  bar_count: number;
-  confidence: number;
-  energy: number;
+  confidence?: number;
+  start_bar?: number;
+  bar_count?: number;
+  energy?: number;
 }
 
 export interface SmartPhrasesResponse {
@@ -266,6 +266,56 @@ export const getStemAudioUrl = (trackId: string, stemName: string): string => {
 // File download helper
 export const getDownloadUrl = (filePath: string): string => {
   return `${API_BASE}/download-file?path=${encodeURIComponent(filePath)}`;
+};
+
+// MIDI export (basic-pitch, CoreML / Neural Engine)
+export const downloadStemMidi = async (trackId: string, stemName: string): Promise<{ blob: Blob; filename: string }> => {
+    try {
+        const resp = await api.post(
+            `/library/tracks/${trackId}/stems/${encodeURIComponent(stemName)}/midi`,
+            {},
+            { responseType: 'blob' },
+        );
+        const filename = `${trackId}_${stemName}.mid`;
+        return { blob: resp.data as Blob, filename };
+    } catch (err) {
+        handleAxiosError(err);
+    }
+};
+
+// SAM Audio surgical extraction (text-prompted)
+export const surgicalExtract = async (trackId: string, description: string): Promise<{ blob: Blob; filename: string }> => {
+    try {
+        const resp = await api.post(
+            `/library/tracks/${trackId}/extract`,
+            { description },
+            { responseType: 'blob' },
+        );
+        const label = description.replace(/\s+/g, '_').slice(0, 40);
+        const filename = `${trackId}_${label}.wav`;
+        return { blob: resp.data as Blob, filename };
+    } catch (err) {
+        handleAxiosError(err);
+    }
+};
+
+// ACE-Step music generation
+export interface GenerateRequest {
+    prompt: string;
+    duration?: number;
+    bpm?: number | null;
+    key?: string | null;
+    guidance_scale?: number;
+    infer_steps?: number;
+}
+
+export const generateAceStep = async (payload: GenerateRequest): Promise<{ blob: Blob; filename: string }> => {
+    try {
+        const resp = await api.post('/generate/ace-step', payload, { responseType: 'blob' });
+        return { blob: resp.data as Blob, filename: 'generation.wav' };
+    } catch (err) {
+        handleAxiosError(err);
+    }
 };
 
 export default api;

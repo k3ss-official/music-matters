@@ -2,10 +2,10 @@
 
 ## Snapshot
 - **Mission:** Automate ingest → stem separation → loop prep so DJs focus on selection, not grunt work.
-- **Repo root:** `/Volumes/deep-1t/Users/k3ss/projects/music-matters`
+- **Repo root:** `~/k3ss-official/music-matters`
 - **Stack:** Python 3.12 · FastAPI · Librosa · Demucs v4 (MPS) · Pydantic Settings.
 - **Conda env:** `music-matters`
-- **Key services:** Local file system (`~/Music Matters`), Demucs models.
+- **Key services:** Local file system (`~/music-matters`), Demucs models.
 
 ## Directives
 - Keep the tone razor-sharp; this project feeds live sets.

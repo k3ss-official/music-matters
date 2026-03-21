@@ -50,8 +50,10 @@ export interface WaveformCanvasProps {
     onPlayStateChange?: (playing: boolean) => void;
     wavesurferRef?: React.MutableRefObject<WaveSurfer | null>;
     regionsRef?: React.MutableRefObject<any>;
-    /** Downbeat timestamps for snap-to-grid */
+    /** Downbeat timestamps for snap-to-grid and grid overlay (real bar boundaries from allin1) */
     downbeats?: number[];
+    /** Chord timeline from allin1 for overlay display */
+    chords?: Array<{ start: number; end: number; chord: string }>;
     /** BPM for quantize grid overlay and bar-snap */
     bpm?: number | null;
     /** Whether beat-snap is enabled */
@@ -104,6 +106,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             wavesurferRef,
             regionsRef,
             downbeats = [],
+            chords = [],
             bpm = null,
             snapEnabled = true,
             regionStart,
@@ -126,12 +129,14 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
         const activeRegionRef = useRef<any>(null);
         const snapEnabledRef = useRef(snapEnabled);
         const downbeatsRef = useRef(downbeats);
+        const chordsRef = useRef(chords);
         const bpmRef = useRef(bpm);
         const regionLoopRef = useRef(false); // whether we're looping the region
         const rafRef = useRef<number | null>(null);
 
         snapEnabledRef.current = snapEnabled;
         downbeatsRef.current = downbeats;
+        chordsRef.current = chords;
         bpmRef.current = bpm;
 
         // ── Snap helper ───────────────────────────────────────────────────────
@@ -148,11 +153,11 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             return snapToNearest(time, grid, SNAP_THRESHOLD_S);
         }, []);
 
-        // ── Draw BPM grid overlay ─────────────────────────────────────────────
+        // ── Draw BPM grid + real downbeats overlay ────────────────────────────
         const drawGrid = useCallback(() => {
             const canvas = gridCanvasRef.current;
             const ws = wsRef.current;
-            if (!canvas || !ws || !bpmRef.current) return;
+            if (!canvas || !ws) return;
             const ctx = canvas.getContext('2d');
             if (!ctx) return;
             const W = canvas.offsetWidth;
@@ -163,24 +168,40 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
 
             const dur = ws.getDuration();
             if (!dur) return;
-            const beatDur = 60 / bpmRef.current;
-            const barDur = beatDur * 4;
 
-            let beat = 0;
-            let beatIdx = 0;
-            while (beat < dur) {
-                const x = Math.round((beat / dur) * W);
-                const isBar = beatIdx % 4 === 0;
-                ctx.beginPath();
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x, H);
-                ctx.strokeStyle = isBar
-                    ? 'rgba(0,212,255,0.20)'
-                    : 'rgba(255,255,255,0.06)';
-                ctx.lineWidth = isBar ? 1 : 0.5;
-                ctx.stroke();
-                beat += beatDur;
-                beatIdx++;
+            // 1. BPM-estimated beats (faint, as a background grid)
+            if (bpmRef.current) {
+                const beatDur = 60 / bpmRef.current;
+                let beat = 0;
+                let beatIdx = 0;
+                while (beat < dur) {
+                    const x = Math.round((beat / dur) * W);
+                    const isBar = beatIdx % 4 === 0;
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, H);
+                    ctx.strokeStyle = isBar
+                        ? 'rgba(0,212,255,0.12)'
+                        : 'rgba(255,255,255,0.04)';
+                    ctx.lineWidth = isBar ? 1 : 0.5;
+                    ctx.stroke();
+                    beat += beatDur;
+                    beatIdx++;
+                }
+            }
+
+            // 2. Real downbeats from allin1 (bright — actual bar boundaries)
+            if (downbeatsRef.current.length > 0) {
+                for (const db of downbeatsRef.current) {
+                    if (db < 0 || db > dur) continue;
+                    const x = Math.round((db / dur) * W);
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, H);
+                    ctx.strokeStyle = 'rgba(0,212,255,0.45)';
+                    ctx.lineWidth = 1.5;
+                    ctx.stroke();
+                }
             }
         }, []);
 
@@ -341,10 +362,10 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             };
         }, [audioUrl]);
 
-        // ── Re-draw grid when BPM or duration changes ─────────────────────────
+        // ── Re-draw grid when BPM, downbeats, or duration changes ────────────
         useEffect(() => {
             drawGrid();
-        }, [bpm, duration, drawGrid]);
+        }, [bpm, downbeats, duration, drawGrid]);
 
         // ── Bidirectional sync: when toolbar changes region, push to WaveSurfer ─
         useEffect(() => {
@@ -456,6 +477,33 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
 
                         {/* Waveform */}
                         <div ref={containerRef} className="w-full relative z-[2]" />
+
+                        {/* Chord timeline — proportional colour bar */}
+                        {chords.length > 0 && duration > 0 && (
+                            <div className="relative w-full h-[18px] bg-[#08080f] flex overflow-hidden">
+                                {chords.map((c, i) => {
+                                    const left = (c.start / duration) * 100;
+                                    const width = ((c.end - c.start) / duration) * 100;
+                                    return (
+                                        <div
+                                            key={i}
+                                            title={c.chord}
+                                            className="absolute h-full flex items-center justify-center overflow-hidden"
+                                            style={{
+                                                left: `${left}%`,
+                                                width: `${width}%`,
+                                                background: 'rgba(139,92,246,0.15)',
+                                                borderRight: '1px solid rgba(139,92,246,0.2)',
+                                            }}
+                                        >
+                                            <span className="text-[9px] font-mono text-purple-300/70 truncate px-0.5 select-none">
+                                                {c.chord}
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </>
                 )}
             </div>

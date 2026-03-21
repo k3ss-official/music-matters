@@ -14,6 +14,7 @@ class ProcessingOptions(BaseModel):
     separation: bool = True
     loop_slicing: bool = True
     mastering: bool = False
+    separation_mode: str = "fast"  # "fast" = demucs-mlx | "vocal_quality" = MelBand-Roformer
 
 class IngestRequest(BaseModel):
     source: HttpUrl | str = Field(..., description="URL or local path to ingest")

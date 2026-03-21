@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Play, Square, Volume2, VolumeX } from 'lucide-react';
-import { getStemAudioUrl } from '../services/api';
+import { Play, Square, Volume2, VolumeX, Music } from 'lucide-react';
+import { getStemAudioUrl, downloadStemMidi } from '../services/api';
 
 interface StemLanesProps {
     trackId: string;
@@ -85,6 +85,7 @@ interface StemLaneProps {
 function StemLane({ trackId, stemName, isSelected, onToggle }: StemLaneProps) {
     const [playing, setPlaying] = useState(false);
     const [muted, setMuted] = useState(false);
+    const [midiLoading, setMidiLoading] = useState(false);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const color = STEM_COLORS[stemName.toLowerCase()] || '#ffffff';
 
@@ -118,6 +119,25 @@ function StemLane({ trackId, stemName, isSelected, onToggle }: StemLaneProps) {
         }
     };
 
+    const handleMidi = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (midiLoading) return;
+        setMidiLoading(true);
+        try {
+            const { blob, filename } = await downloadStemMidi(trackId, stemName);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('MIDI export failed:', err);
+        } finally {
+            setMidiLoading(false);
+        }
+    };
+
     return (
         <div
             onClick={onToggle}
@@ -142,6 +162,14 @@ function StemLane({ trackId, stemName, isSelected, onToggle }: StemLaneProps) {
                     className="p-1.5 rounded hover:bg-black/30 transition-colors text-gray-400 hover:text-white"
                 >
                     {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                </button>
+                <button
+                    onClick={handleMidi}
+                    disabled={midiLoading}
+                    title="Export stem to MIDI (basic-pitch)"
+                    className="p-1.5 rounded hover:bg-black/30 transition-colors text-gray-400 hover:text-[#00ff88] disabled:opacity-40"
+                >
+                    <Music size={14} className={midiLoading ? 'animate-pulse' : ''} />
                 </button>
                 <button
                     onClick={togglePlay}

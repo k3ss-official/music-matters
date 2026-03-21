@@ -292,7 +292,8 @@ class PipelineOrchestrator:
 
             if options.separation:
                 await self._run_stage(
-                    job, "separation", self._stage_separation, track, audio_path
+                    job, "separation", self._stage_separation, track, audio_path,
+                    options.separation_mode,
                 )
 
             if options.loop_slicing:
@@ -448,13 +449,53 @@ class PipelineOrchestrator:
         stage: StageState,
         track: TrackRecord,
         audio_path: Path,
+        separation_mode: str = "fast",
     ) -> Path:
-        stage.detail = "Running demucs-mlx separation (htdemucs_6s)"
+        stage.detail = f"Running separation (mode={separation_mode})"
         stage.progress = 0.1
         stems_dir = self._stems_dir(track.slug)
         stems_dir.mkdir(parents=True, exist_ok=True)
 
         def _separate() -> Dict[str, Path]:
+            # --- Tier 2: MelBand-Roformer (SDR 12.6, vocal quality mode) ---
+            if separation_mode == "vocal_quality":
+                try:
+                    import tempfile
+                    from mlx_audio_separator import Separator as RoformerSep
+
+                    stage.detail = "Roformer: loading MelBand-Roformer vocal model"
+                    stage.progress = 0.2
+                    sep = RoformerSep(
+                        output_dir=str(stems_dir),
+                        output_format="WAV",
+                    )
+                    sep.load_model("model_bs_roformer_ep_317_sdr_12.9755.ckpt")
+
+                    stage.detail = "Roformer: separating vocals"
+                    stage.progress = 0.4
+                    output_files = sep.separate(str(audio_path))
+
+                    # output_files: list of stem paths written to stems_dir
+                    stem_map: Dict[str, Path] = {}
+                    for fpath in output_files:
+                        p = Path(fpath)
+                        # Roformer names are like "trackname_(Vocals).wav"
+                        raw = p.stem.lower()
+                        if "vocal" in raw:
+                            stem_map["vocals"] = p
+                        elif "instrumental" in raw or "no_vocal" in raw or "minus" in raw:
+                            stem_map["instrumental"] = p
+                        else:
+                            stem_map[raw.split("_(")[-1].rstrip(")")] = p
+
+                    stage.progress = 0.9
+                    return stem_map
+
+                except Exception as exc:  # pylint: disable=broad-except
+                    logger.warning("Roformer failed (%s), falling back to demucs-mlx", exc)
+                    stage.detail = f"Roformer failed, falling back: {str(exc)[:60]}"
+                    stage.progress = 0.3
+
             # --- Tier 1: demucs-mlx (native Apple Silicon MLX, ~73× realtime on M4) ---
             try:
                 from demucs_mlx import Separator, save_audio
@@ -885,6 +926,19 @@ class PipelineOrchestrator:
                 fallback = fallback / slug
             fallback.mkdir(parents=True, exist_ok=True)
             return fallback
+
+    def get_stem_path(self, track_id: UUID, stem_name: str) -> Path:
+        """Return the filesystem path for a named stem WAV file."""
+        record = self._tracks.get(track_id)
+        if record is None:
+            raise KeyError(f"Track {track_id} not found")
+        stems_dir = record.stems_dir or self._stems_dir(record.slug)
+        # stem_name may come with or without .wav extension
+        for suffix in (stem_name, f"{stem_name}.wav"):
+            candidate = stems_dir / suffix
+            if candidate.exists():
+                return candidate
+        raise FileNotFoundError(f"Stem '{stem_name}' not found in {stems_dir}")
 
     def _derive_title(self, source: str) -> str:
         if "://" in source:

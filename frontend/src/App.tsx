@@ -11,6 +11,7 @@ import { CentreWorkspace } from './components/CentreWorkspace';
 import { AnalysisPanel } from './components/AnalysisPanel';
 import { StemLanes } from './components/StemLanes';
 import { ExportPanel } from './components/ExportPanel';
+import { GeneratePanel } from './components/GeneratePanel';
 import type WaveSurfer from 'wavesurfer.js';
 
 function App() {
@@ -246,6 +247,11 @@ function App() {
             regionEnd={regionEnd}
             onExportComplete={navigateToLoop}
             disabled={!selectedTrackId || !waveformReady || detailLoading}
+          />
+
+          <GeneratePanel
+            bpm={trackDetail?.bpm}
+            musicalKey={trackDetail?.musical_key}
           />
         </aside>
 

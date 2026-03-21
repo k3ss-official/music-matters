@@ -103,7 +103,9 @@ export function CentreWorkspace({
     const [phrasesError, setPhrasesError] = useState<string | null>(null);
 
     const bpm: number | null = trackDetail?.bpm ?? null;
-    const downbeats: number[] = trackDetail?.downbeats ?? [];
+    const downbeats: number[] = (trackDetail?.metadata?.downbeats as number[]) ?? [];
+    const chords: Array<{ start: number; end: number; chord: string }> =
+        (trackDetail?.metadata?.chords as any[]) ?? [];
 
     // ── Audio URL ────────────────────────────────────────────────────────
     const audioUrl = trackId ? getTrackAudioUrl(trackId) : null;
@@ -124,7 +126,7 @@ export function CentreWorkspace({
         setPhrasesError(null);
         setLoadingPhrases(true);
         getSmartPhrases(trackId)
-            .then(resp => setSmartPhrases(resp.phrases || []))
+            .then(resp => setSmartPhrases(Array.isArray(resp) ? resp : (resp.phrases || [])))
             .catch((err: any) => {
                 setSmartPhrases([]);
                 setPhrasesError(err?.response?.data?.detail || err?.message || 'Failed to load phrases');
@@ -266,6 +268,7 @@ export function CentreWorkspace({
                     ref={waveformRef}
                     audioUrl={audioUrl}
                     downbeats={downbeats}
+                    chords={chords}
                     bpm={bpm}
                     snapEnabled={snapEnabled}
                     regionStart={regionStart}
@@ -325,17 +328,17 @@ export function CentreWorkspace({
                         <button
                             key={i}
                             onClick={() => handleSmartPhrase(phrase)}
-                            title={`${phrase.phrase_type} · ${phrase.start_time.toFixed(2)}s–${phrase.end_time.toFixed(2)}s · ${Math.round((phrase.confidence ?? 0) * 100)}% confidence`}
+                            title={`${phrase.type} · ${phrase.start_time.toFixed(2)}s–${phrase.end_time.toFixed(2)}s · ${Math.round((phrase.confidence ?? 0) * 100)}% confidence`}
                             className={`
                                 flex items-center gap-1.5 px-2 py-0.5 rounded border text-[11px] font-mono
                                 transition-all hover:scale-105 active:scale-95 cursor-pointer
-                                ${phraseColor(phrase.phrase_type)}
+                                ${phraseColor(phrase.type)}
                             `}
                         >
                             <span
                                 className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${confidenceDot(phrase.confidence ?? 0)}`}
                             />
-                            {phraseLabel(phrase.phrase_type)}
+                            {phraseLabel(phrase.type)}
                         </button>
                     ))}
                 </div>
