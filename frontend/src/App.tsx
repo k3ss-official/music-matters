@@ -214,7 +214,7 @@ function App() {
         </aside>
 
         {/* CENTRE WORKSPACE (flex-grow) */}
-        <section className="flex-1 p-6 overflow-y-auto hide-scrollbar relative z-0 min-w-[500px]">
+        <section className="flex-1 flex flex-col overflow-hidden relative z-0 min-w-[500px]">
           <CentreWorkspace
             trackId={selectedTrackId}
             trackDetail={trackDetail}
@@ -225,6 +225,8 @@ function App() {
             regionsRef={regionsRef}
             waveformReady={waveformReady}
             setWaveformReady={setWaveformReady}
+            detailLoading={detailLoading}
+            activeJob={selectedTrackId ? Object.values(activeJobs).find(j => j.trackId === selectedTrackId) ?? null : null}
           />
         </section>
 

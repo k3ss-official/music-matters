@@ -60,10 +60,17 @@ fi
 PYTHON="$VENV_DIR/bin/python"
 PIP="$VENV_DIR/bin/pip"
 
-log "Installing / updating backend dependencies..."
-"$PIP" install --quiet --upgrade pip
-"$PIP" install --quiet -r "$BACKEND_DIR/requirements.txt"
-ok "Backend dependencies ready"
+# Only reinstall if requirements.txt is newer than the venv marker
+MARKER="$VENV_DIR/.deps_installed"
+if [ ! -f "$MARKER" ] || [ "$BACKEND_DIR/requirements.txt" -nt "$MARKER" ]; then
+    log "Installing / updating backend dependencies..."
+    "$PIP" install --quiet --upgrade pip
+    "$PIP" install --quiet -r "$BACKEND_DIR/requirements.txt"
+    touch "$MARKER"
+    ok "Backend dependencies ready"
+else
+    ok "Backend dependencies up to date (skipping install)"
+fi
 
 # ── Node modules ─────────────────────────────────────────────────────────────
 if [ ! -d "$FRONTEND_DIR/node_modules" ]; then

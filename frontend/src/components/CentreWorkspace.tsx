@@ -9,7 +9,7 @@
  *  - Save loop / steal region → API calls
  */
 import React, { useRef, useState, useCallback, useEffect } from 'react';
-import type { TrackDetailResponse } from '../types';
+import type { TrackDetailResponse, JobProgress } from '../types';
 import WaveformCanvas, { WaveformHandle } from './WaveformCanvas';
 import { TransportBar } from './TransportBar';
 import { LoopEditorToolbar } from './LoopEditorToolbar';
@@ -34,6 +34,8 @@ interface CentreWorkspaceProps {
     waveformReady: boolean;
     setWaveformReady: (ready: boolean) => void;
     errorMsg?: string | null;
+    detailLoading?: boolean;
+    activeJob?: JobProgress | null;
 }
 
 // ── Phrase display helpers ─────────────────────────────────────────────────
@@ -80,6 +82,8 @@ export function CentreWorkspace({
     waveformReady,
     setWaveformReady,
     errorMsg: externalError,
+    detailLoading,
+    activeJob,
 }: CentreWorkspaceProps) {
     // ── Waveform ref ─────────────────────────────────────────────────────
     const waveformRef = useRef<WaveformHandle>(null);
@@ -205,7 +209,7 @@ export function CentreWorkspace({
     }, [onUpdateRegion]);
 
     // ── No track loaded ───────────────────────────────────────────────────
-    if (!trackId || !trackDetail) {
+    if (!trackId) {
         return (
             <div className="flex-1 flex items-center justify-center bg-[#0a0a0f] text-white/20 text-sm font-mono tracking-wider uppercase">
                 Select a track to begin
@@ -213,8 +217,103 @@ export function CentreWorkspace({
         );
     }
 
+    // ── Loading track detail ──────────────────────────────────────────────
+    if (detailLoading || !trackDetail) {
+        return (
+            <div className="flex-1 flex flex-col items-center justify-center bg-[#0a0a0f] gap-4">
+                <Loader2 size={28} className="animate-spin text-[#00d4ff]" />
+                <span className="text-[#00d4ff]/60 font-mono text-xs uppercase tracking-widest">
+                    Loading track…
+                </span>
+            </div>
+        );
+    }
+
+    const STAGE_LABELS: Record<string, string> = {
+        ingest: 'Ingesting', analysis: 'Analysing', separation: 'Separating stems',
+        loop: 'Slicing loops', project: 'Finalising',
+    };
+    const STAGE_COLOR: Record<string, string> = {
+        ingest: '#00d4ff', analysis: '#8b5cf6', separation: '#00ff88',
+        loop: '#f59e0b', project: '#00d4ff',
+    };
+
     return (
         <div className="flex flex-col flex-1 min-h-0 bg-[#0a0a0f] overflow-hidden">
+
+            {/* ── Pipeline job progress ───────────────────────────────────── */}
+            {activeJob && activeJob.status !== 'completed' && (
+                <div className="border-b border-white/5 bg-[#0d0d18] px-4 py-2 flex flex-col gap-1.5 shrink-0">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            {activeJob.status === 'running' && (
+                                <Loader2 size={11} className="animate-spin text-[#00d4ff]" />
+                            )}
+                            {activeJob.status === 'failed' && (
+                                <AlertCircle size={11} className="text-[#ff3b5c]" />
+                            )}
+                            <span className="text-[10px] font-mono uppercase tracking-widest text-white/40">
+                                {activeJob.status === 'failed'
+                                    ? 'Pipeline failed'
+                                    : activeJob.currentStage
+                                        ? STAGE_LABELS[activeJob.currentStage] ?? activeJob.currentStage
+                                        : 'Processing…'}
+                            </span>
+                        </div>
+                        <span className="text-[10px] font-mono text-white/25">
+                            {Math.round((activeJob.progress ?? 0) * 100)}%
+                        </span>
+                    </div>
+
+                    {/* Stage pills */}
+                    <div className="flex items-center gap-1 flex-wrap">
+                        {activeJob.stages.map(stage => (
+                            <div
+                                key={stage.id}
+                                title={stage.detail ?? stage.label}
+                                className={`flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-mono uppercase tracking-wide border transition-all ${
+                                    stage.status === 'done'
+                                        ? 'bg-[#00ff88]/10 text-[#00ff88] border-[#00ff88]/20'
+                                        : stage.status === 'running'
+                                        ? 'bg-[#00d4ff]/10 text-[#00d4ff] border-[#00d4ff]/30 animate-pulse'
+                                        : stage.status === 'error'
+                                        ? 'bg-[#ff3b5c]/10 text-[#ff3b5c] border-[#ff3b5c]/20'
+                                        : 'bg-white/5 text-white/25 border-white/5'
+                                }`}
+                            >
+                                {stage.status === 'running' && <Loader2 size={7} className="animate-spin" />}
+                                {stage.status === 'done' && <CheckCircle2 size={7} />}
+                                {stage.status === 'error' && <AlertCircle size={7} />}
+                                {stage.label}
+                                {stage.status === 'running' && stage.progress > 0 && (
+                                    <span className="opacity-60">
+                                        {Math.round(stage.progress * 100)}%
+                                    </span>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Progress bar */}
+                    <div className="h-0.5 bg-white/5 rounded-full overflow-hidden">
+                        <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                                width: `${Math.round((activeJob.progress ?? 0) * 100)}%`,
+                                background: activeJob.status === 'failed' ? '#ff3b5c' : `linear-gradient(90deg, #00d4ff, #8b5cf6)`,
+                            }}
+                        />
+                    </div>
+
+                    {/* Detail text */}
+                    {activeJob.detail && activeJob.status !== 'failed' && (
+                        <p className="text-[9px] text-white/25 font-mono truncate">{activeJob.detail}</p>
+                    )}
+                    {activeJob.status === 'failed' && activeJob.detail && (
+                        <p className="text-[9px] text-[#ff3b5c]/70 font-mono truncate">{activeJob.detail}</p>
+                    )}
+                </div>
+            )}
 
             {/* ── Transport bar ──────────────────────────────────────────── */}
             <TransportBar
