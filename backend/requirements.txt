@@ -20,9 +20,9 @@ scipy>=1.17.1
 # allin1 pulls in: torch, demucs, natten, madmom (transitive)
 # natten_compat.py shim patches natten>=0.20 API for allin1 1.1.0.
 
-# Stem Separation — install separately to avoid CI timeouts:
-#   pip install demucs
-# demucs==4.0.1
+# Stem Separation — Step 3: demucs-mlx (native Apple Silicon MLX, ~73× RT on M4)
+#   pip install demucs-mlx
+# Also installs: mlx, mlx-audio-io, mlx-metal, mlx-spectro
 
 # Download & Metadata
 yt-dlp==2025.1.15

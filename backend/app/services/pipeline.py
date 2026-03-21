@@ -449,47 +449,41 @@ class PipelineOrchestrator:
         track: TrackRecord,
         audio_path: Path,
     ) -> Path:
-        stage.detail = "Running Demucs separation"
+        stage.detail = "Running demucs-mlx separation (htdemucs_6s)"
         stage.progress = 0.1
         stems_dir = self._stems_dir(track.slug)
+        stems_dir.mkdir(parents=True, exist_ok=True)
 
         def _separate() -> Dict[str, Path]:
-            from app.services.processing.stem_separator import (
-                StemSeparator as DemucsService,
-            )
-
-            # Try full Demucs separation
+            # --- Tier 1: demucs-mlx (native Apple Silicon MLX, ~73× realtime on M4) ---
             try:
-                stage.detail = "Demucs processing (this may take a few minutes)"
+                from demucs_mlx import Separator, save_audio
+
+                stage.detail = "demucs-mlx: loading htdemucs_6s model"
+                stage.progress = 0.2
+                sep = Separator(model="htdemucs_6s", shifts=1, overlap=0.25)
+
+                stage.detail = "demucs-mlx: separating stems"
                 stage.progress = 0.3
+                _, stems = sep.separate_audio_file(audio_path)
+                # stems: {"drums": ndarray, "bass": ndarray, "vocals": ndarray,
+                #         "guitar": ndarray, "piano": ndarray, "other": ndarray}
 
-                demucs = DemucsService(self._library.config)
-                output_dir = demucs.separate(
-                    input_path=audio_path,
-                    output_root=stems_dir.parent,
-                    force=False,
-                    jobs=1,
-                )
+                stem_map: Dict[str, Path] = {}
+                for stem_name, audio in stems.items():
+                    out_path = stems_dir / f"{stem_name}.wav"
+                    save_audio(audio, out_path, sep.samplerate, bits_per_sample=24)
+                    stem_map[stem_name] = out_path
 
-                # Collect generated stems
-                stem_map = {}
-                if output_dir.exists():
-                    for stem_file in output_dir.iterdir():
-                        if stem_file.suffix in (".wav", ".mp3"):
-                            stem_name = stem_file.stem
-                            target = stems_dir / stem_file.name
-                            if not target.exists():
-                                shutil.copy2(stem_file, target)
-                            stem_map[stem_name] = target
+                stage.progress = 0.9
+                return stem_map
 
-                if stem_map:
-                    return stem_map
-
-            except Exception as e:  # pylint: disable=broad-except
-                stage.detail = f"Demucs failed, using HPSS fallback: {str(e)[:50]}"
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning("demucs-mlx failed (%s), falling back to HPSS", exc)
+                stage.detail = f"demucs-mlx failed, using HPSS fallback: {str(exc)[:60]}"
                 stage.progress = 0.5
 
-            # Fallback to HPSS if Demucs fails
+            # --- Fallback: librosa HPSS (harmonic/percussive split only) ---
             info = sf.info(str(audio_path))
             sr = int(info.samplerate)
             data, _ = sf.read(str(audio_path), dtype="float32")
@@ -520,7 +514,7 @@ class PipelineOrchestrator:
         track.stems_dir = stems_dir
         track.stems = [path.name for path in stem_map.values()]
         track.status = "stems_ready"
-        stage.detail = f"{len(stem_map)} stems ready"
+        stage.detail = f"{len(stem_map)} stems ready ({', '.join(stem_map.keys())})"
         stage.progress = 1.0
         return audio_path
 
