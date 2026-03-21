@@ -417,42 +417,26 @@ class PipelineOrchestrator:
         track: TrackRecord,
         audio_path: Path,
     ) -> Dict[str, Any]:
-        stage.detail = "Running beat + key detection"
+        stage.detail = "Running allin1 analysis (beats · key · chords · structure)"
         stage.progress = 0.2
 
         def _compute() -> Dict[str, Any]:
-            import librosa
-
-            info = sf.info(str(audio_path))
-            duration = info.frames / float(info.samplerate)
-
-            # Load audio for analysis
-            y, sr = librosa.load(str(audio_path), sr=None, mono=True, duration=120.0)
-
-            # BPM detection
-            tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
-            bpm = float(tempo)
-
-            # Key detection (simplified - use chromagram)
-            chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
-            key_idx = int(chroma.mean(axis=1).argmax())
-            keys = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-            key = keys[key_idx]
-
-            return {
-                "bpm": bpm,
-                "key": key,
-                "duration": duration,
-                "sample_rate": info.samplerate,
-            }
+            from app.services.analysis.mlx_analyzer import analyze_track
+            return analyze_track(audio_path)
 
         analysis = _compute()
 
         stage.progress = 1.0
-        stage.detail = f"BPM {analysis['bpm']:.1f} · Key {analysis['key']}"
+        bpm = analysis["bpm"]
+        key = analysis["key"]
+        n_beats = len(analysis.get("beats", []))
+        n_segs = len(analysis.get("segments", []))
+        stage.detail = (
+            f"BPM {bpm:.1f} · Key {key} · {n_beats} beats · {n_segs} sections"
+        )
 
-        track.bpm = analysis["bpm"]
-        track.musical_key = analysis["key"]
+        track.bpm = bpm
+        track.musical_key = key
         track.metadata.update(analysis)
         track.status = "analysed"
 

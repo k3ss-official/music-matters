@@ -178,12 +178,17 @@ async def get_smart_phrases(track_id: str):
             status_code=404, detail=f"Audio file not found: {audio_path}"
         )
 
-    try:
-        from app.services.analysis.sota_analyzer import get_sota_analyzer
+    # Prefer pre-computed allin1 segments stored during ingest analysis
+    track_record = pipeline._tracks.get(track_uuid)
+    if track_record and track_record.metadata.get("segments"):
+        return track_record.metadata["segments"]
 
-        analyzer = get_sota_analyzer()
-        phrases = analyzer.detect_smart_phrases(audio_path)
-        return phrases
+    # Fall back: run allin1 on demand
+    try:
+        from app.services.analysis.mlx_analyzer import analyze_track
+
+        result = analyze_track(audio_path)
+        return result.get("segments", [])
     except Exception as e:
         import traceback
 
