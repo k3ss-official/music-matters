@@ -56,8 +56,8 @@ async def track_detail(track_id: str) -> TrackDetailResponse:
         raise HTTPException(status_code=404, detail=str(exc))
 
 
-@router.delete("/tracks/{track_id}", status_code=204, response_class=Response)
-async def delete_track(track_id: str) -> None:
+@router.delete("/tracks/{track_id}")
+async def delete_track(track_id: str) -> Response:
     try:
         track_uuid = UUID(track_id)
     except ValueError as exc:
@@ -67,6 +67,8 @@ async def delete_track(track_id: str) -> None:
         pipeline.delete_track(track_uuid)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+
+    return Response(status_code=204)
 
 
 @router.post("/tracks/{track_id}/refresh", response_model=JobResponse, status_code=202)
