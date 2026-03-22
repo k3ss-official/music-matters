@@ -102,6 +102,11 @@ cleanup() {
 }
 trap cleanup SIGINT SIGTERM
 
+# Kill anything already on these ports so restarts are clean
+lsof -ti :8010 | xargs kill -9 2>/dev/null || true
+lsof -ti :5173 | xargs kill -9 2>/dev/null || true
+sleep 1
+
 # ── Start backend ─────────────────────────────────────────────────────────────
 log "Starting FastAPI backend on http://localhost:8010 ..."
 cd "$BACKEND_DIR"
@@ -109,10 +114,9 @@ cd "$BACKEND_DIR"
     --host 0.0.0.0 \
     --port 8010 \
     --reload \
-    --log-level warning &
+    --log-level warning 2>&1 | sed "s/^/${CYAN}[backend]${RESET} /" &
 BACKEND_PID=$!
 
-# Give it a moment to bind
 sleep 2
 if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
     err "Backend failed to start — check for port conflicts or import errors"
@@ -124,7 +128,7 @@ ok "API docs         →  http://localhost:8010/docs"
 # ── Start frontend ────────────────────────────────────────────────────────────
 log "Starting Vite frontend on http://localhost:5173 ..."
 cd "$FRONTEND_DIR"
-npm run dev -- --host &
+npm run dev -- --host 2>&1 | sed "s/^/${GREEN}[frontend]${RESET} /" &
 FRONTEND_PID=$!
 
 sleep 2
@@ -144,5 +148,19 @@ echo -e "${GREEN}  Stop:  Ctrl+C${RESET}"
 echo -e "${GREEN}═══════════════════════════════════════════════${RESET}"
 echo ""
 
-# ── Keep alive ────────────────────────────────────────────────────────────────
-wait
+# ── Keep alive (restart frontend if it dies) ─────────────────────────────────
+while true; do
+    if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+        warn "Backend died — restarting..."
+        cd "$BACKEND_DIR"
+        "$PYTHON" -m uvicorn app.main:app --host 0.0.0.0 --port 8010 --reload --log-level warning 2>&1 | sed "s/^/${CYAN}[backend]${RESET} /" &
+        BACKEND_PID=$!
+    fi
+    if ! kill -0 "$FRONTEND_PID" 2>/dev/null; then
+        warn "Frontend died — restarting..."
+        cd "$FRONTEND_DIR"
+        npm run dev -- --host 2>&1 | sed "s/^/${GREEN}[frontend]${RESET} /" &
+        FRONTEND_PID=$!
+    fi
+    sleep 5
+done
