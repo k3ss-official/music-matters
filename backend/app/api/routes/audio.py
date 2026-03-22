@@ -49,22 +49,8 @@ async def get_track_audio(track_id: str) -> FileResponse:
 async def get_stem_audio(track_id: str, stem_name: str) -> FileResponse:
     try:
         track_uuid = UUID(track_id)
-        track = pipeline.get_track(track_uuid)
-
-        stem_path_str = track.provenance.get("stems", {}).get(stem_name)
-        if not stem_path_str:
-            # Fallback path logic if not in provenance
-            stem_path = (
-                pipeline._library.get_track_dir(track_uuid)
-                / "stems"
-                / f"{stem_name}.wav"
-            )
-        else:
-            stem_path = Path(stem_path_str)
-
-        if not stem_path.exists():
-            raise HTTPException(status_code=404, detail="Stem file not found on disk")
-
+        # get_stem_path searches stems_dir with .wav fallback — handles "drums" and "drums.wav"
+        stem_path = pipeline.get_stem_path(track_uuid, stem_name)
         return FileResponse(
             stem_path, media_type="audio/wav", headers={"Accept-Ranges": "bytes"}
         )
@@ -72,3 +58,5 @@ async def get_stem_audio(track_id: str, stem_name: str) -> FileResponse:
         raise HTTPException(status_code=400, detail="Invalid track ID")
     except KeyError:
         raise HTTPException(status_code=404, detail="Track not found")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Stem '{stem_name}' not found")

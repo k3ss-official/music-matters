@@ -17,13 +17,14 @@ import {
     Play,
     Pause,
     Square,
-    Repeat,
     Volume2,
     VolumeX,
     ZoomIn,
     ZoomOut,
     Maximize2,
     AlignJustify,
+    SkipBack,
+    SkipForward,
 } from 'lucide-react';
 import type { WaveformHandle } from './WaveformCanvas';
 
@@ -113,6 +114,17 @@ export const TransportBar: React.FC<TransportBarProps> = ({
         >
             {/* ── Playback buttons ─────────────────────────────────────────── */}
             <div className="flex items-center gap-1">
+                {/* Skip to start */}
+                <button
+                    onClick={() => waveformRef.current?.seek(0)}
+                    title="Skip to start"
+                    className="w-7 h-7 flex items-center justify-center rounded bg-white/5
+                               hover:bg-white/10 text-white/40 hover:text-white
+                               transition-colors focus:outline-none"
+                >
+                    <SkipBack size={13} />
+                </button>
+
                 {/* Stop */}
                 <button
                     onClick={handleStop}
@@ -139,19 +151,31 @@ export const TransportBar: React.FC<TransportBarProps> = ({
                     {isPlaying ? <Pause size={16} /> : <Play size={16} className="ml-0.5" />}
                 </button>
 
+                {/* Skip to end */}
+                <button
+                    onClick={() => { const d = waveformRef.current?.getDuration(); if (d) waveformRef.current?.seek(d); }}
+                    title="Skip to end"
+                    className="w-7 h-7 flex items-center justify-center rounded bg-white/5
+                               hover:bg-white/10 text-white/40 hover:text-white
+                               transition-colors focus:outline-none"
+                >
+                    <SkipForward size={13} />
+                </button>
+
                 {/* Loop Region toggle */}
                 <button
                     onClick={handleLoopToggle}
-                    title="Loop Region"
+                    title={isLooping ? 'Loop ON — click to disable' : 'Loop OFF — click to enable'}
                     className={`
-                        w-8 h-8 flex items-center justify-center rounded
-                        transition-colors focus:outline-none
+                        flex items-center justify-center px-2.5 h-8 rounded
+                        font-mono text-[11px] font-bold tracking-widest
+                        transition-all focus:outline-none
                         ${isLooping
-                            ? 'bg-[#00ff88]/20 text-[#00ff88] border border-[#00ff88]/40 shadow-sm shadow-[#00ff88]/20'
-                            : 'bg-white/5 hover:bg-white/10 text-white/40 hover:text-white/70'}
+                            ? 'bg-[#00ff88]/20 text-[#00ff88] border border-[#00ff88]/50 shadow-[0_0_8px_rgba(0,255,136,0.25)]'
+                            : 'bg-white/5 hover:bg-white/10 text-white/35 hover:text-white/70 border border-white/10'}
                     `}
                 >
-                    <Repeat size={14} />
+                    LOOP
                 </button>
             </div>
 

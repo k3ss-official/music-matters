@@ -1,5 +1,42 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Component } from 'react';
 import './index.css';
+
+// ── Error boundary to catch render crashes (black-screen diagnosis) ──────────
+class ErrorBoundary extends Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(err: Error) {
+    return { error: err };
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="flex-1 flex flex-col items-center justify-center bg-[#0a0a0f] p-8 gap-4">
+          <div className="text-[#ff3b5c] font-mono text-sm font-bold uppercase tracking-widest">
+            Render Error
+          </div>
+          <pre className="text-[#ff3b5c]/70 text-xs font-mono bg-[#ff3b5c]/5 border border-[#ff3b5c]/20 rounded p-4 max-w-full overflow-auto whitespace-pre-wrap">
+            {this.state.error.message}
+            {'\n'}
+            {this.state.error.stack}
+          </pre>
+          <button
+            onClick={() => this.setState({ error: null })}
+            className="px-4 py-2 bg-[#ff3b5c]/20 text-[#ff3b5c] border border-[#ff3b5c]/30 rounded text-xs font-bold"
+          >
+            Dismiss
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 import type { TrackSummary, JobProgress, ProcessingOptions, TrackDetailResponse, LoopPreview } from './types';
 import * as api from './services/api';
@@ -11,6 +48,8 @@ import { CentreWorkspace } from './components/CentreWorkspace';
 import { AnalysisPanel } from './components/AnalysisPanel';
 import { StemLanes } from './components/StemLanes';
 import { ExportPanel } from './components/ExportPanel';
+import { ExportDialog } from './components/ExportDialog';
+import { ShortcutLegend } from './components/ShortcutLegend';
 import { GeneratePanel } from './components/GeneratePanel';
 import type WaveSurfer from 'wavesurfer.js';
 
@@ -18,6 +57,40 @@ function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [tracks, setTracks] = useState<TrackSummary[]>([]);
   const [activeJobs, setActiveJobs] = useState<Record<string, JobProgress>>({});
+
+  // ── Sidebar widths ────────────────────────────────────────────────────────
+  const [leftWidth, setLeftWidth] = useState<number>(() =>
+    parseInt(localStorage.getItem('leftSidebarWidth') || '280', 10));
+  const [rightWidth, setRightWidth] = useState<number>(() =>
+    parseInt(localStorage.getItem('rightSidebarWidth') || '320', 10));
+
+  const startDragLeft = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = leftWidth;
+    const onMove = (ev: PointerEvent) => {
+      const w = Math.min(400, Math.max(200, startW + ev.clientX - startX));
+      setLeftWidth(w);
+      localStorage.setItem('leftSidebarWidth', String(w));
+    };
+    const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  const startDragRight = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = rightWidth;
+    const onMove = (ev: PointerEvent) => {
+      const w = Math.min(400, Math.max(200, startW - (ev.clientX - startX)));
+      setRightWidth(w);
+      localStorage.setItem('rightSidebarWidth', String(w));
+    };
+    const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
 
   // Selection State
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
@@ -31,6 +104,14 @@ function App() {
   const [selectedStems, setSelectedStems] = useState<string[]>([]);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const regionsRef = useRef<any>(null);
+
+  // Playback state (needed for StemLanes VU animation)
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+
+  // Modal state
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [shortcutLegendOpen, setShortcutLegendOpen] = useState(false);
 
   // Health check
   useEffect(() => {
@@ -162,8 +243,29 @@ function App() {
     );
   };
 
-  const navigateToLoop = (loop: LoopPreview) => {
-    alert(`Export complete! Loop ID: ${loop.id}`);
+  const handleRequestSeparation = async () => {
+    if (!selectedTrackId) return;
+    try {
+      const data = await api.refreshTrack(selectedTrackId);
+      addJobToQueue(data.job_id, selectedTrackId);
+    } catch (e) {
+      console.error('Failed to start separation', e);
+    }
+  };
+
+  // Global `?` key → shortcut legend
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === '?' && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
+        setShortcutLegendOpen(v => !v);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  const navigateToLoop = (_loop: LoopPreview) => {
+    // Export complete — nothing to navigate in current UI
   };
 
   return (
@@ -183,7 +285,7 @@ function App() {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] uppercase font-bold tracking-widest border transition-colors ${isConnected
             ? 'bg-[#00ff88]/10 text-[#00ff88] border-[#00ff88]/30'
             : 'bg-[#ff3b5c]/10 text-[#ff3b5c] border-[#ff3b5c]/30'
@@ -191,14 +293,25 @@ function App() {
             <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-[#00ff88] animate-pulse' : 'bg-[#ff3b5c]'}`} />
             {isConnected ? 'Backend Online' : 'Backend Offline'}
           </div>
+          {/* Shortcut legend button */}
+          <button
+            onClick={() => setShortcutLegendOpen(v => !v)}
+            title="Keyboard shortcuts (?)"
+            className="w-7 h-7 flex items-center justify-center rounded-full
+                       bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20
+                       text-white/40 hover:text-white/80 font-bold text-[12px] font-mono
+                       transition-colors"
+          >
+            ?
+          </button>
         </div>
       </header>
 
       {/* 3-ZONE LAYOUT */}
       <main className="flex-1 overflow-hidden flex text-sm">
 
-        {/* LEFT SIDEBAR (280px) */}
-        <aside className="w-[280px] bg-[#0a0a0f] border-r border-white/5 flex flex-col p-4 gap-4 overflow-y-auto hide-scrollbar z-10 shrink-0">
+        {/* LEFT SIDEBAR — resizable */}
+        <aside style={{ width: leftWidth }} className="bg-[#0a0a0f] border-r border-white/5 flex flex-col p-4 gap-4 overflow-y-auto hide-scrollbar z-10 shrink-0 relative">
           <SearchIngest
             onFileUpload={handleFileUpload}
             onUrlSubmit={handleUrlSubmit}
@@ -211,10 +324,16 @@ function App() {
             selectedTrackId={selectedTrackId}
             loading={tracks.length === 0}
           />
+          {/* Resize handle */}
+          <div
+            onPointerDown={startDragLeft}
+            className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-[#00d4ff]/30 transition-colors z-20"
+          />
         </aside>
 
         {/* CENTRE WORKSPACE (flex-grow) */}
         <section className="flex-1 flex flex-col overflow-hidden relative z-0 min-w-[500px]">
+          <ErrorBoundary>
           <CentreWorkspace
             trackId={selectedTrackId}
             trackDetail={trackDetail}
@@ -227,11 +346,20 @@ function App() {
             setWaveformReady={setWaveformReady}
             detailLoading={detailLoading}
             activeJob={selectedTrackId ? Object.values(activeJobs).find(j => j.trackId === selectedTrackId) ?? null : null}
+            onPlayStateChange={setIsPlaying}
+            onTimeUpdate={setCurrentTime}
+            onOpenExportDialog={() => setExportDialogOpen(true)}
           />
+          </ErrorBoundary>
         </section>
 
-        {/* RIGHT SIDEBAR (320px) */}
-        <aside className="w-[320px] bg-[#0a0a0f] border-l border-white/5 flex flex-col p-4 gap-4 overflow-y-auto hide-scrollbar z-10 shrink-0">
+        {/* RIGHT SIDEBAR — resizable */}
+        <aside style={{ width: rightWidth }} className="bg-[#0a0a0f] border-l border-white/5 flex flex-col p-4 gap-4 overflow-y-auto hide-scrollbar z-10 shrink-0 relative">
+          {/* Resize handle */}
+          <div
+            onPointerDown={startDragRight}
+            className="absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-[#00d4ff]/30 transition-colors z-20"
+          />
           <AnalysisPanel loading={detailLoading} trackDetail={trackDetail} />
 
           <StemLanes
@@ -239,7 +367,10 @@ function App() {
             availableStems={trackDetail?.stems || []}
             selectedStems={selectedStems}
             onToggleStemSelection={toggleStemSelection}
+            onRequestSeparation={handleRequestSeparation}
             loading={detailLoading}
+            isPlaying={isPlaying}
+            currentTime={currentTime}
           />
 
           <ExportPanel
@@ -248,6 +379,7 @@ function App() {
             regionStart={regionStart}
             regionEnd={regionEnd}
             onExportComplete={navigateToLoop}
+            onOpenDialog={() => setExportDialogOpen(true)}
             disabled={!selectedTrackId || !waveformReady || detailLoading}
           />
 
@@ -258,6 +390,24 @@ function App() {
         </aside>
 
       </main>
+
+      {/* ── Export Dialog ─────────────────────────────────────────────── */}
+      <ExportDialog
+        isOpen={exportDialogOpen}
+        onClose={() => setExportDialogOpen(false)}
+        trackId={selectedTrackId || ''}
+        trackTitle={trackDetail?.title}
+        availableStems={trackDetail?.stems || []}
+        initialSelectedStems={selectedStems}
+        regionStart={regionStart}
+        regionEnd={regionEnd}
+      />
+
+      {/* ── Shortcut Legend ───────────────────────────────────────────── */}
+      <ShortcutLegend
+        isOpen={shortcutLegendOpen}
+        onClose={() => setShortcutLegendOpen(false)}
+      />
     </div>
   );
 }

@@ -36,6 +36,10 @@ export interface WaveformHandle {
     isPlaying: () => boolean;
     /** Force the WaveSurfer region to match new times (for toolbar nudges) */
     syncRegion: (start: number, end: number) => void;
+    /** Zoom and scroll to show only the region between start and end */
+    zoomToRegion: (start: number, end: number) => void;
+    /** Current playhead position in seconds */
+    getCurrentTime: () => number;
 }
 
 export interface WaveformCanvasProps {
@@ -257,28 +261,6 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 const dur = ws.getDuration();
                 setDuration(dur);
                 drawGrid();
-
-                // Create initial region (8s centred around 25% mark, or whole track if short)
-                const defaultStart = dur > 16 ? dur * 0.1 : 0;
-                const defaultEnd = Math.min(defaultStart + 8, dur);
-                const startSnapped = snapEnabledRef.current
-                    ? snapTime(defaultStart)
-                    : defaultStart;
-                const endSnapped = snapEnabledRef.current
-                    ? snapTime(defaultEnd)
-                    : defaultEnd;
-
-                const region = wsRegions.addRegion({
-                    start: startSnapped,
-                    end: endSnapped,
-                    color: REGION_COLOR,
-                    drag: true,
-                    resize: true,
-                    minLength: 0.1,
-                });
-                activeRegionRef.current = region;
-
-                if (onRegionUpdate) onRegionUpdate(startSnapped, endSnapped);
                 if (onReady) onReady(dur);
             });
 
@@ -307,6 +289,10 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                     drag: true,
                     resize: true,
                     minLength: 0.1,
+                    handleStyle: {
+                        left:  { backgroundColor: '#00d4ff', width: '4px', borderRadius: '2px 0 0 2px' },
+                        right: { backgroundColor: '#00ff88', width: '4px', borderRadius: '0 2px 2px 0' },
+                    },
                 });
                 activeRegionRef.current = region;
                 const s = snapEnabledRef.current ? snapTime(region.start) : region.start;
@@ -337,8 +323,10 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             });
 
             ws.on('error', (err: any) => {
-                setLoading(false);
                 const msg = typeof err === 'string' ? err : err?.message || 'Failed to load audio';
+                // Ignore abort errors — caused by React StrictMode double-invoke cleanup
+                if (msg.toLowerCase().includes('abort') || msg.toLowerCase().includes('signal')) return;
+                setLoading(false);
                 setErrorMsg(msg);
                 if (onError) onError(new Error(msg), audioUrl);
             });
@@ -385,7 +373,11 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
         // ── Zoom sync ─────────────────────────────────────────────────────────
         useEffect(() => {
             if (wsRef.current) {
-                wsRef.current.zoom(zoom);
+                try {
+                    wsRef.current.zoom(zoom);
+                } catch {
+                    // WaveSurfer throws "No audio loaded" before audio is ready — safe to ignore
+                }
                 setTimeout(drawGrid, 50);
             }
         }, [zoom, drawGrid]);
@@ -426,12 +418,42 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             zoomFit: () => setZoom(50),
             setVolume: (v: number) => { wsRef.current?.setVolume(v); },
             getDuration: () => wsRef.current?.getDuration() ?? 0,
+            getCurrentTime: () => wsRef.current?.getCurrentTime() ?? 0,
             isPlaying: () => wsRef.current?.isPlaying() ?? false,
             syncRegion: (start: number, end: number) => {
-                const region = activeRegionRef.current;
-                if (!region) return;
-                region.setOptions({ start, end });
+                const regions = wsRegionsRef.current;
+                if (!regions) return;
+                if (activeRegionRef.current) {
+                    activeRegionRef.current.setOptions({ start, end });
+                } else {
+                    // No region yet — create one
+                    const region = regions.addRegion({
+                        start,
+                        end,
+                        color: REGION_COLOR,
+                        drag: true,
+                        resize: true,
+                        minLength: 0.1,
+                    });
+                    activeRegionRef.current = region;
+                }
                 if (onRegionUpdate) onRegionUpdate(start, end);
+            },
+            zoomToRegion: (start: number, end: number) => {
+                const ws = wsRef.current;
+                if (!ws || end <= start) return;
+                const container = containerRef.current;
+                if (!container) return;
+                const W = container.offsetWidth || 800;
+                const regionDuration = end - start;
+                // Fit region with 15% padding each side
+                const paddedDuration = regionDuration * 1.3;
+                const newZoom = Math.round(W / paddedDuration);
+                setZoom(Math.min(Math.max(newZoom, 10), 2000));
+                // Scroll to start of region after zoom settles
+                setTimeout(() => {
+                    try { ws.setTime(Math.max(0, start - regionDuration * 0.15)); } catch {}
+                }, 120);
             },
         }));
 

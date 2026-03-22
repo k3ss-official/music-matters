@@ -29,6 +29,10 @@ export interface LoopEditorToolbarProps {
     onRegionChange: (start: number, end: number) => void;
     onSaveLoop?: (start: number, end: number) => void;
     onStealRegion?: (start: number, end: number) => void;
+    activeBarPreset?: number | null;
+    onBarPresetToggle?: (bars: number) => void;
+    editLoopOpen?: boolean;
+    onEditLoopToggle?: () => void;
 }
 
 // Format seconds → MM:SS.ms
@@ -70,6 +74,35 @@ function snapToBar(time: number, bpm: number): number {
 // Bar preset options
 const BAR_PRESETS = [1, 2, 4, 8, 16, 32] as const;
 
+function QuantizeButton({ bpm, onQuantize }: { bpm: number | null | undefined; onQuantize: () => void }) {
+    const [flashing, setFlashing] = React.useState(false);
+    const handleClick = () => {
+        if (!bpm) return;
+        onQuantize();
+        setFlashing(true);
+        setTimeout(() => setFlashing(false), 400);
+    };
+    return (
+        <button
+            onClick={handleClick}
+            disabled={!bpm}
+            title="Snap IN and OUT to nearest bar boundary (one-time action)"
+            className={`
+                flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-mono
+                tracking-wider transition-all focus:outline-none
+                ${flashing
+                    ? 'bg-[#8b5cf6]/40 text-white border border-[#8b5cf6]/60 scale-95'
+                    : bpm
+                    ? 'bg-[#8b5cf6]/15 hover:bg-[#8b5cf6]/25 text-[#8b5cf6] border border-[#8b5cf6]/30'
+                    : 'bg-white/5 text-white/20 border border-white/5 cursor-not-allowed'}
+            `}
+        >
+            <Grid3x3 size={10} />
+            SNAP TO BAR
+        </button>
+    );
+}
+
 export const LoopEditorToolbar: React.FC<LoopEditorToolbarProps> = ({
     waveformRef,
     regionStart,
@@ -79,6 +112,10 @@ export const LoopEditorToolbar: React.FC<LoopEditorToolbarProps> = ({
     onRegionChange,
     onSaveLoop,
     onStealRegion,
+    activeBarPreset,
+    onBarPresetToggle,
+    editLoopOpen,
+    onEditLoopToggle,
 }) => {
     const [editingStart, setEditingStart] = useState(false);
     const [editingEnd, setEditingEnd] = useState(false);
@@ -253,50 +290,61 @@ export const LoopEditorToolbar: React.FC<LoopEditorToolbarProps> = ({
                 <span className="text-[10px] font-mono text-white/30 uppercase tracking-widest w-6">OUT</span>
             </div>
 
-            {/* ── Divider ──────────────────────────────────────────────────── */}
-            <div className="w-px h-6 bg-white/10" />
-
-            {/* ── Quantize to bar ──────────────────────────────────────────── */}
-            <button
-                onClick={quantizeToBar}
-                disabled={!bpm}
-                title="Snap IN and OUT to nearest bar"
-                className={`
-                    flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono
-                    tracking-wider transition-colors focus:outline-none
-                    ${bpm
-                        ? 'bg-[#8b5cf6]/15 hover:bg-[#8b5cf6]/25 text-[#8b5cf6] border border-[#8b5cf6]/30'
-                        : 'bg-white/5 text-white/20 border border-white/5 cursor-not-allowed'}
-                `}
-            >
-                <Grid3x3 size={11} />
-                Q
-            </button>
-
             {/* ── Bar presets ──────────────────────────────────────────────── */}
             <div className="flex items-center gap-1">
                 <span className="text-[10px] font-mono text-white/25 uppercase tracking-widest mr-1">BARS</span>
-                {BAR_PRESETS.map(bars => (
-                    <button
-                        key={bars}
-                        onClick={() => applyBarPreset(bars)}
-                        disabled={!bpm}
-                        title={`Set loop to ${bars} bar${bars !== 1 ? 's' : ''}`}
-                        className={`
-                            w-7 h-7 flex items-center justify-center rounded
-                            font-mono text-[11px] transition-colors focus:outline-none
-                            ${bpm
-                                ? 'bg-white/5 hover:bg-[#00d4ff]/15 text-white/50 hover:text-[#00d4ff] border border-white/10 hover:border-[#00d4ff]/30'
-                                : 'bg-white/3 text-white/15 border border-white/5 cursor-not-allowed'}
-                        `}
-                    >
-                        {bars}
-                    </button>
-                ))}
+                {BAR_PRESETS.map(bars => {
+                    const isActive = activeBarPreset === bars;
+                    return (
+                        <button
+                            key={bars}
+                            onClick={() => {
+                                if (onBarPresetToggle) {
+                                    onBarPresetToggle(bars);
+                                } else {
+                                    applyBarPreset(bars);
+                                }
+                            }}
+                            disabled={!bpm}
+                            title={`Set loop to ${bars} bar${bars !== 1 ? 's' : ''}`}
+                            className={`
+                                w-7 h-7 flex items-center justify-center rounded
+                                font-mono text-[11px] transition-all focus:outline-none
+                                ${!bpm
+                                    ? 'bg-white/3 text-white/15 border border-white/5 cursor-not-allowed'
+                                    : isActive
+                                    ? 'bg-[#00d4ff]/20 text-[#00d4ff] border border-[#00d4ff]/60 shadow-[0_0_8px_rgba(0,212,255,0.3)]'
+                                    : 'bg-white/5 hover:bg-[#00d4ff]/15 text-white/50 hover:text-[#00d4ff] border border-white/10 hover:border-[#00d4ff]/30'}
+                            `}
+                        >
+                            {bars}
+                        </button>
+                    );
+                })}
             </div>
 
             {/* ── Spacer ───────────────────────────────────────────────────── */}
             <div className="flex-1" />
+
+            {/* ── Edit Loop ────────────────────────────────────────────────── */}
+            {onEditLoopToggle !== undefined && (
+                <button
+                    onClick={onEditLoopToggle}
+                    disabled={!activeBarPreset}
+                    title={activeBarPreset ? 'Open focused loop editor' : 'Select a bar preset first'}
+                    className={`
+                        flex items-center gap-1.5 px-3 py-1.5 rounded font-mono text-[11px] tracking-wider
+                        transition-all focus:outline-none
+                        ${activeBarPreset
+                            ? editLoopOpen
+                                ? 'bg-[#8b5cf6]/30 text-[#8b5cf6] border border-[#8b5cf6]/60 shadow-[0_0_8px_rgba(139,92,246,0.3)]'
+                                : 'bg-[#8b5cf6]/15 hover:bg-[#8b5cf6]/25 text-[#8b5cf6] border border-[#8b5cf6]/30'
+                            : 'bg-white/5 text-white/20 border border-white/5 cursor-not-allowed'}
+                    `}
+                >
+                    EDIT LOOP
+                </button>
+            )}
 
             {/* ── Steal (copy region audio) ─────────────────────────────────── */}
             <button

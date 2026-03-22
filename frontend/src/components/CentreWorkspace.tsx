@@ -13,6 +13,8 @@ import type { TrackDetailResponse, JobProgress } from '../types';
 import WaveformCanvas, { WaveformHandle } from './WaveformCanvas';
 import { TransportBar } from './TransportBar';
 import { LoopEditorToolbar } from './LoopEditorToolbar';
+import { EditLoopSection } from './EditLoopSection';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import {
     getTrackAudioUrl,
     createCustomLoop,
@@ -36,6 +38,9 @@ interface CentreWorkspaceProps {
     errorMsg?: string | null;
     detailLoading?: boolean;
     activeJob?: JobProgress | null;
+    onPlayStateChange?: (playing: boolean) => void;
+    onTimeUpdate?: (time: number) => void;
+    onOpenExportDialog?: () => void;
 }
 
 // ── Phrase display helpers ─────────────────────────────────────────────────
@@ -84,6 +89,9 @@ export function CentreWorkspace({
     errorMsg: externalError,
     detailLoading,
     activeJob,
+    onPlayStateChange: onPlayStateChangeProp,
+    onTimeUpdate: onTimeUpdateProp,
+    onOpenExportDialog,
 }: CentreWorkspaceProps) {
     // ── Waveform ref ─────────────────────────────────────────────────────
     const waveformRef = useRef<WaveformHandle>(null);
@@ -94,6 +102,7 @@ export function CentreWorkspace({
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
     const [volume, setVolume] = useState(0.8);
+    // Single snap state — controls both WaveformCanvas region snap AND EditLoopSection quantize
     const [snapEnabled, setSnapEnabled] = useState(true);
 
     // ── Error / save state ───────────────────────────────────────────────
@@ -105,6 +114,10 @@ export function CentreWorkspace({
     const [smartPhrases, setSmartPhrases] = useState<SmartPhrase[]>([]);
     const [loadingPhrases, setLoadingPhrases] = useState(false);
     const [phrasesError, setPhrasesError] = useState<string | null>(null);
+
+    // ── Loop selection state ──────────────────────────────────────────────
+    const [activeBarPreset, setActiveBarPreset] = useState<number | null>(null);
+    const [editLoopOpen, setEditLoopOpen] = useState(false);
 
     const bpm: number | null = trackDetail?.bpm ?? null;
     const downbeats: number[] = (trackDetail?.metadata?.downbeats as number[]) ?? [];
@@ -122,6 +135,8 @@ export function CentreWorkspace({
         setDuration(0);
         setLoadError(null);
         setSaveSuccess(false);
+        setActiveBarPreset(null);
+        setEditLoopOpen(false);
     }, [trackId]);
 
     // ── Load smart phrases ────────────────────────────────────────────────
@@ -170,9 +185,11 @@ export function CentreWorkspace({
     // ── Region change (from toolbar nudge / preset) ───────────────────────
     const handleRegionChange = useCallback((s: number, e: number) => {
         onUpdateRegion(s, e);
-        // If currently looping, reset playhead to new start
+        // Always sync WaveSurfer region (creates it if none exists)
+        waveformRef.current?.syncRegion(s, e);
+        // If currently looping, restart from new start
         if (isLooping && waveformRef.current?.isPlaying()) {
-            waveformRef.current.syncRegion(s, e);
+            waveformRef.current.seek(s);
         }
     }, [onUpdateRegion, isLooping]);
 
@@ -200,6 +217,44 @@ export function CentreWorkspace({
         // Trigger save as well
         handleSaveLoop(start, end);
     }, [handleSaveLoop]);
+
+    // ── Bar preset toggle ─────────────────────────────────────────────────
+    const handleBarPresetToggle = useCallback((bars: number) => {
+        if (activeBarPreset === bars) {
+            setActiveBarPreset(null);
+            setEditLoopOpen(false);
+            return;
+        }
+        setActiveBarPreset(bars);
+        // Apply region only when BPM+duration are available
+        if (bpm && duration > 0) {
+            const beatDur = 60 / bpm;
+            const barDur = beatDur * 4;
+            const snappedStart = Math.round(regionStart / barDur) * barDur;
+            const newEnd = Math.min(snappedStart + barDur * bars, duration);
+            handleRegionChange(snappedStart, newEnd);
+        }
+    }, [bpm, duration, activeBarPreset, regionStart, handleRegionChange]);
+
+    // ── Export to Ableton (Cmd+E) ─────────────────────────────────────────
+    const handleExportAbleton = useCallback(() => {
+        if (!trackId) return;
+        onOpenExportDialog?.();
+    }, [trackId, onOpenExportDialog]);
+
+    // ── Keyboard shortcuts ────────────────────────────────────────────────
+    useKeyboardShortcuts({
+        waveformRef,
+        regionStart,
+        regionEnd,
+        duration,
+        bpm,
+        smartPhrases,
+        onUpdateRegion: handleRegionChange,
+        onSaveLoop: () => handleSaveLoop(regionStart, regionEnd),
+        onExportAbleton: handleExportAbleton,
+        enabled: !!trackId,
+    });
 
     // ── Smart phrase → set region ─────────────────────────────────────────
     const handleSmartPhrase = useCallback((phrase: SmartPhrase) => {
@@ -239,7 +294,10 @@ export function CentreWorkspace({
     };
 
     return (
-        <div className="flex flex-col flex-1 min-h-0 bg-[#0a0a0f] overflow-hidden">
+        <div
+            className="flex flex-col flex-1 min-h-0 bg-[#0a0a0f] overflow-hidden outline-none focus-within:ring-1 focus-within:ring-[#00d4ff]/20"
+            tabIndex={-1}
+        >
 
             {/* ── Pipeline job progress ───────────────────────────────────── */}
             {activeJob && activeJob.status !== 'completed' && (
@@ -330,7 +388,7 @@ export function CentreWorkspace({
                     setVolume(vol);
                     waveformRef.current?.setVolume(vol);
                 }}
-                onSnapToggle={() => setSnapEnabled(prev => !prev)}
+                onSnapToggle={() => setSnapEnabled(v => !v)}
             />
 
             {/* ── Waveform ───────────────────────────────────────────────── */}
@@ -385,10 +443,23 @@ export function CentreWorkspace({
                     onRegionUpdate={(s, e) => {
                         onUpdateRegion(s, e);
                     }}
-                    onTimeUpdate={setCurrentTime}
-                    onPlayStateChange={setIsPlaying}
+                    onTimeUpdate={t => { setCurrentTime(t); onTimeUpdateProp?.(t); }}
+                    onPlayStateChange={playing => { setIsPlaying(playing); onPlayStateChangeProp?.(playing); }}
                 />
             </div>
+
+            {/* ── Edit Loop section — sits above toolbar so it's always visible ── */}
+            {editLoopOpen && (
+                <EditLoopSection
+                    regionStart={regionStart}
+                    regionEnd={regionEnd}
+                    bpm={bpm}
+                    barCount={activeBarPreset ?? 0}
+                    quantizeEnabled={snapEnabled}
+                    onQuantizeToggle={() => setSnapEnabled(v => !v)}
+                    onClose={() => setEditLoopOpen(false)}
+                />
+            )}
 
             {/* ── Loop editor toolbar ────────────────────────────────────── */}
             <LoopEditorToolbar
@@ -400,6 +471,18 @@ export function CentreWorkspace({
                 onRegionChange={handleRegionChange}
                 onSaveLoop={handleSaveLoop}
                 onStealRegion={handleStealRegion}
+                activeBarPreset={activeBarPreset}
+                onBarPresetToggle={handleBarPresetToggle}
+                editLoopOpen={editLoopOpen}
+                onEditLoopToggle={() => {
+                    const opening = !editLoopOpen;
+                    setEditLoopOpen(opening);
+                    if (opening && regionEnd > regionStart) {
+                        waveformRef.current?.zoomToRegion(regionStart, regionEnd);
+                    } else if (!opening) {
+                        waveformRef.current?.zoomFit();
+                    }
+                }}
             />
 
             {/* ── Smart phrases ──────────────────────────────────────────── */}

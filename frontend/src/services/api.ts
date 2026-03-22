@@ -67,6 +67,11 @@ export const deleteTrack = async (trackId: string): Promise<void> => {
   await api.delete(`/library/tracks/${trackId}`);
 };
 
+export const refreshTrack = async (trackId: string): Promise<{ job_id: string; track_id: string }> => {
+    const response = await api.post(`/library/tracks/${trackId}/refresh`);
+    return response.data;
+};
+
 // Ingest
 export const ingestSource = async (payload: IngestPayload & { options?: ProcessingOptions }): Promise<{ job_id: string; track_id: string }> => {
   const response = await api.post('/ingest/ingest', payload);

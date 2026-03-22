@@ -8,6 +8,7 @@ interface ExportPanelProps {
     regionStart: number;
     regionEnd: number;
     onExportComplete?: (loop: any) => void;
+    onOpenDialog?: () => void;
     disabled?: boolean;
 }
 
@@ -17,6 +18,7 @@ export function ExportPanel({
     regionStart,
     regionEnd,
     onExportComplete,
+    onOpenDialog,
     disabled
 }: ExportPanelProps) {
     const [format, setFormat] = useState('WAV');
@@ -98,7 +100,21 @@ export function ExportPanel({
 
     return (
         <div className="bg-[#12121a] rounded-lg p-5 border border-white/5 space-y-4">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-gray-400">Export</h3>
+            <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-gray-400">Export</h3>
+                {onOpenDialog && (
+                    <button
+                        onClick={onOpenDialog}
+                        disabled={disabled}
+                        className="px-3 py-1 rounded text-[10px] font-bold uppercase tracking-widest font-mono
+                                   bg-[#00d4ff]/15 text-[#00d4ff] border border-[#00d4ff]/30
+                                   hover:bg-[#00d4ff]/25 disabled:opacity-30 disabled:cursor-not-allowed
+                                   transition-colors"
+                    >
+                        EXPORT…
+                    </button>
+                )}
+            </div>
 
             <div className="flex items-center justify-between text-xs text-gray-400">
                 <span className="flex items-center gap-1"><Layers size={14} /> {selectedStems.length} Stems</span>

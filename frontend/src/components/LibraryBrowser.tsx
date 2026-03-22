@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { Music, List, Mic2, FolderOpen, MoreVertical, Trash2, Tag } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Music, List, Mic2, FolderOpen, MoreVertical, Trash2, Play, Square } from 'lucide-react';
 import type { TrackSummary } from '../types';
+import { getTrackAudioUrl } from '../services/api';
 
 interface LibraryBrowserProps {
     tracks: TrackSummary[];
@@ -12,6 +13,35 @@ interface LibraryBrowserProps {
 
 export function LibraryBrowser({ tracks, onTrackSelect, onTrackDelete, selectedTrackId, loading }: LibraryBrowserProps) {
     const [activeTab, setActiveTab] = useState<'tracks' | 'stems' | 'loops'>('tracks');
+    const [previewingId, setPreviewingId] = useState<string | null>(null);
+    const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+
+    const handlePreview = (e: React.MouseEvent, trackId: string) => {
+        e.stopPropagation();
+        if (previewingId === trackId) {
+            // Stop
+            previewAudioRef.current?.pause();
+            previewAudioRef.current = null;
+            setPreviewingId(null);
+        } else {
+            // Stop any previous preview
+            previewAudioRef.current?.pause();
+            const audio = new Audio(getTrackAudioUrl(trackId));
+            audio.play().catch(console.error);
+            audio.addEventListener('ended', () => setPreviewingId(null));
+            previewAudioRef.current = audio;
+            setPreviewingId(trackId);
+        }
+    };
+
+    const stopPreviewOnSelect = (trackId: string) => {
+        if (previewingId) {
+            previewAudioRef.current?.pause();
+            previewAudioRef.current = null;
+            setPreviewingId(null);
+        }
+        onTrackSelect(trackId);
+    };
 
     const getStatusColor = (status: string) => {
         if (['project_ready', 'completed'].includes(status)) return '#00ff88';
@@ -83,11 +113,12 @@ export function LibraryBrowser({ tracks, onTrackSelect, onTrackDelete, selectedT
                 {activeTab === 'tracks' && tracks.map(track => {
                     const isSelected = track.track_id === selectedTrackId;
                     const statusColor = getStatusColor(track.status);
+                    const isPreviewing = previewingId === track.track_id;
 
                     return (
                         <div
                             key={track.track_id}
-                            onClick={() => onTrackSelect(track.track_id)}
+                            onClick={() => stopPreviewOnSelect(track.track_id)}
                             className={`group flex items-center justify-between p-3 rounded-lg border transition-all cursor-pointer ${isSelected
                                 ? 'border-[#00d4ff]/50 bg-[#00d4ff]/5 shadow-[0_4px_15px_rgba(0,212,255,0.05)]'
                                 : 'border-white/5 bg-black/20 hover:border-white/20 hover:bg-black/40'
@@ -164,6 +195,18 @@ export function LibraryBrowser({ tracks, onTrackSelect, onTrackDelete, selectedT
                                     >
                                         {getStatusLabel(track.status)}
                                     </span>
+
+                                    <button
+                                        onClick={(e) => handlePreview(e, track.track_id)}
+                                        title={isPreviewing ? 'Stop preview' : 'Preview track'}
+                                        className={`transition-colors ${isPreviewing
+                                            ? 'text-[#00d4ff]'
+                                            : 'opacity-0 group-hover:opacity-100 text-gray-500 hover:text-[#00d4ff]'}`}
+                                    >
+                                        {isPreviewing
+                                            ? <Square size={14} fill="currentColor" />
+                                            : <Play size={14} fill="currentColor" />}
+                                    </button>
 
                                     <button
                                         onClick={(e) => {
