@@ -1,14 +1,15 @@
 import React from 'react';
-import { Music, Activity, Clock, FileAudio, Copy } from 'lucide-react';
+import { Music, Activity, Clock, FileAudio, Copy, Layers } from 'lucide-react';
 import { DataChip } from './DataChip';
 import type { TrackDetailResponse } from '../types';
 
 interface AnalysisPanelProps {
     trackDetail: TrackDetailResponse | null;
     loading?: boolean;
+    onRequestSeparation?: () => void;
 }
 
-export function AnalysisPanel({ trackDetail, loading }: AnalysisPanelProps) {
+export function AnalysisPanel({ trackDetail, loading, onRequestSeparation }: AnalysisPanelProps) {
     if (loading || !trackDetail) {
         return (
             <div className="bg-[#12121a] rounded-lg p-5 border border-white/5 space-y-4">
@@ -41,7 +42,23 @@ export function AnalysisPanel({ trackDetail, loading }: AnalysisPanelProps) {
 
     return (
         <div className="bg-[#12121a] rounded-lg p-5 border border-white/5 space-y-4">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-gray-400">Analysis</h3>
+            <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-gray-400">Analysis</h3>
+                {onRequestSeparation && (
+                    <button
+                        onClick={onRequestSeparation}
+                        title="Run stem separation (drums, bass, vocals, other)"
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded
+                                   bg-[#8b5cf6]/15 hover:bg-[#8b5cf6]/25
+                                   text-[#8b5cf6] border border-[#8b5cf6]/30
+                                   text-[10px] font-bold font-mono tracking-wider
+                                   transition-colors"
+                    >
+                        <Layers size={10} />
+                        SEPARATE STEMS
+                    </button>
+                )}
+            </div>
 
             <div className="grid grid-cols-2 gap-3">
                 <DataChip

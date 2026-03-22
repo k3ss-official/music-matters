@@ -290,6 +290,23 @@ export const LoopEditorToolbar: React.FC<LoopEditorToolbarProps> = ({
                 <span className="text-[10px] font-mono text-white/30 uppercase tracking-widest w-6">OUT</span>
             </div>
 
+            {/* ── Quantize one-shot ────────────────────────────────────────── */}
+            <button
+                onClick={quantizeToBar}
+                disabled={!bpm}
+                title="Snap IN + OUT to nearest bar boundary"
+                className={`
+                    flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-mono
+                    tracking-wider transition-all focus:outline-none
+                    ${bpm
+                        ? 'bg-[#8b5cf6]/15 hover:bg-[#8b5cf6]/25 text-[#8b5cf6] border border-[#8b5cf6]/30'
+                        : 'bg-white/5 text-white/20 border border-white/5 cursor-not-allowed'}
+                `}
+            >
+                <Grid3x3 size={10} />
+                QUANTIZE
+            </button>
+
             {/* ── Bar presets ──────────────────────────────────────────────── */}
             <div className="flex items-center gap-1">
                 <span className="text-[10px] font-mono text-white/25 uppercase tracking-widest mr-1">BARS</span>

@@ -221,18 +221,25 @@ export function CentreWorkspace({
     // ── Bar preset toggle ─────────────────────────────────────────────────
     const handleBarPresetToggle = useCallback((bars: number) => {
         if (activeBarPreset === bars) {
+            // Deselect — stop loop, return to normal play
             setActiveBarPreset(null);
             setEditLoopOpen(false);
+            waveformRef.current?.stopRegion();
+            setIsLooping(false);
             return;
         }
         setActiveBarPreset(bars);
-        // Apply region only when BPM+duration are available
         if (bpm && duration > 0) {
             const beatDur = 60 / bpm;
             const barDur = beatDur * 4;
             const snappedStart = Math.round(regionStart / barDur) * barDur;
             const newEnd = Math.min(snappedStart + barDur * bars, duration);
             handleRegionChange(snappedStart, newEnd);
+            // Auto-engage loop and start playing the region
+            setIsLooping(true);
+            setTimeout(() => {
+                waveformRef.current?.playRegion();
+            }, 60);
         }
     }, [bpm, duration, activeBarPreset, regionStart, handleRegionChange]);
 
