@@ -200,14 +200,28 @@ export function useKeyboardShortcuts({
                     return;
                 case '[': {
                     e.preventDefault();
-                    const edge = nearestPhraseEdge(start, phrasesRef.current);
-                    if (edge !== null && edge < end) onUpdateRef.current(edge, end);
+                    const phraseEdge = nearestPhraseEdge(start, phrasesRef.current);
+                    if (phraseEdge !== null && phraseEdge < end) {
+                        // Snap IN to nearest phrase boundary
+                        onUpdateRef.current(phraseEdge, end);
+                    } else if (beatDur > 0) {
+                        // Fallback: nudge IN back by 1 bar
+                        const barDur = beatDur * 4;
+                        onUpdateRef.current(clamp(start - barDur), end);
+                    }
                     return;
                 }
                 case ']': {
                     e.preventDefault();
-                    const edge = nearestPhraseEdge(end, phrasesRef.current);
-                    if (edge !== null && edge > start) onUpdateRef.current(start, edge);
+                    const phraseEdge = nearestPhraseEdge(end, phrasesRef.current);
+                    if (phraseEdge !== null && phraseEdge > start) {
+                        // Snap OUT to nearest phrase boundary
+                        onUpdateRef.current(start, phraseEdge);
+                    } else if (beatDur > 0) {
+                        // Fallback: nudge OUT forward by 1 bar
+                        const barDur = beatDur * 4;
+                        onUpdateRef.current(start, clamp(end + barDur));
+                    }
                     return;
                 }
             }
