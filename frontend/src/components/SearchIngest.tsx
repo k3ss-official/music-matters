@@ -24,7 +24,15 @@ export function SearchIngest({ onFileUpload, onUrlSubmit, onBatchSubmit, loading
     const [batchLoading, setBatchLoading] = useState(false);
     const [batchError, setBatchError] = useState<string | null>(null);
     const [batchResult, setBatchResult] = useState<string | null>(null);
+    const [dragging, setDragging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setDragging(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file) onFileUpload(file, getOptions());
+    };
 
     const getOptions = (): ProcessingOptions => {
         switch (mode) {
@@ -79,7 +87,12 @@ export function SearchIngest({ onFileUpload, onUrlSubmit, onBatchSubmit, loading
     };
 
     return (
-        <div className="bg-[#12121a] border border-white/5 rounded-lg overflow-hidden flex flex-col">
+        <div
+            className={`bg-[#12121a] border rounded-lg overflow-hidden flex flex-col transition-colors ${dragging ? 'border-[#00d4ff]/60 bg-[#00d4ff]/5' : 'border-white/5'}`}
+            onDragOver={e => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={handleDrop}
+        >
             {/* Tab switcher */}
             <div className="flex border-b border-white/5 text-[10px] font-bold uppercase tracking-wider">
                 <button
@@ -160,6 +173,9 @@ export function SearchIngest({ onFileUpload, onUrlSubmit, onBatchSubmit, loading
                     >
                         <UploadCloud size={14} /> Upload File
                     </button>
+                    <span className={`text-[10px] font-mono transition-colors ${dragging ? 'text-[#00d4ff]' : 'text-white/15'}`}>
+                        {dragging ? '↓ drop to upload' : 'or drag & drop'}
+                    </span>
                 </div>
             </form>
             )}

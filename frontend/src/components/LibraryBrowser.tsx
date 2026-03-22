@@ -145,6 +145,15 @@ export function LibraryBrowser({ tracks, onTrackSelect, onTrackDelete, selectedT
                                         </div>
                                     );
                                 })()}
+                                {/* Source file path */}
+                                {(() => {
+                                    const src: string = (track as any).metadata?.source_path || (track as any).metadata?.source || '';
+                                    if (!src) return null;
+                                    const name = src.split('/').pop() || src;
+                                    return (
+                                        <p className="text-[9px] font-mono text-white/20 truncate mt-1" title={src}>{name}</p>
+                                    );
+                                })()}
                             </div>
 
                             <div className="flex flex-col items-end justify-between h-full gap-2">

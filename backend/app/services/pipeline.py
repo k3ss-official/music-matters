@@ -10,10 +10,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID, uuid4
 
+import logging
 import numpy as np
 import soundfile as sf
 
 from app.api import schemas
+
+logger = logging.getLogger(__name__)
 from app.config import settings
 from app.services.search.download_service import DownloadService
 from app.services.library import LibraryPaths
@@ -258,13 +261,12 @@ class PipelineOrchestrator:
             raise KeyError(f"Track {track_id} not found")
         # delete track folder and clear it from memory
         try:
-            track_dir = self._library.get_track_dir(track_id)
-            if track_dir.exists():
-                import shutil
-
-                shutil.rmtree(track_dir)
+            track = self._tracks[track_id]
+            for d in [track.stems_dir, track.loops_dir]:
+                if d and d.exists():
+                    shutil.rmtree(d)
         except Exception as e:
-            logger.error(f"Failed to delete track directory for {track_id}: {e}")
+            logger.warning("Failed to remove track files for %s: %s", track_id, e)
         del self._tracks[track_id]
         db.delete_track(track_id)
         if track_id in self._loop_records:
