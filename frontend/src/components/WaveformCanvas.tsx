@@ -128,6 +128,12 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
         const [errorMsg, setErrorMsg] = useState<string | null>(null);
         const [duration, setDuration] = useState(0);
         const [zoom, setZoom] = useState(50);
+        // Visible time window (updated on WaveSurfer scroll events)
+        const [visibleStart, setVisibleStart] = useState(0);
+        const visibleStartRef = useRef(0);
+        const zoomRef = useRef(50);
+        // Drag state for IN/OUT markers
+        const draggingMarker = useRef<'IN' | 'OUT' | null>(null);
 
         // Internal refs to avoid stale closures
         const wsRef = useRef<WaveSurfer | null>(null);
@@ -144,6 +150,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
         downbeatsRef.current = downbeats;
         chordsRef.current = chords;
         bpmRef.current = bpm;
+        zoomRef.current = zoom;
 
         // ── Snap helper ───────────────────────────────────────────────────────
         const snapTime = useCallback((time: number): number => {
@@ -336,6 +343,10 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
 
             ws.on('zoom', () => { drawGrid(); });
             ws.on('redraw', () => { drawGrid(); });
+            ws.on('scroll', (vStart: number) => {
+                visibleStartRef.current = vStart;
+                setVisibleStart(vStart);
+            });
 
             try {
                 ws.load(audioUrl);
@@ -464,6 +475,43 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             },
         }));
 
+        // Convert pointer X (relative to container) → audio time
+        const pxToTime = useCallback((clientX: number): number => {
+            const rect = containerRef.current?.getBoundingClientRect();
+            if (!rect || !duration) return 0;
+            const relX = clientX - rect.left;
+            const t = visibleStartRef.current + relX / zoomRef.current;
+            return Math.max(0, Math.min(t, duration));
+        }, [duration]);
+
+        const handleMarkerPointerDown = useCallback((
+            e: React.PointerEvent<HTMLDivElement>,
+            marker: 'IN' | 'OUT'
+        ) => {
+            e.preventDefault();
+            e.stopPropagation();
+            draggingMarker.current = marker;
+            (e.target as HTMLElement).setPointerCapture(e.pointerId);
+        }, []);
+
+        const handleMarkerPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+            if (!draggingMarker.current) return;
+            const t = pxToTime(e.clientX);
+            const s = regionStart ?? 0;
+            const en = regionEnd ?? duration;
+            if (draggingMarker.current === 'IN') {
+                const clamped = Math.max(0, Math.min(t, en - 0.1));
+                if (onRegionUpdate) onRegionUpdate(clamped, en);
+            } else {
+                const clamped = Math.max(s + 0.1, Math.min(t, duration));
+                if (onRegionUpdate) onRegionUpdate(s, clamped);
+            }
+        }, [pxToTime, regionStart, regionEnd, duration, onRegionUpdate]);
+
+        const handleMarkerPointerUp = useCallback(() => {
+            draggingMarker.current = null;
+        }, []);
+
         return (
             <div className="relative w-full rounded-lg bg-[#08080f] overflow-hidden select-none">
                 {audioUrl === null ? (
@@ -498,11 +546,98 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                             style={{ top: 18 }} // offset below timeline
                         />
 
-                        {/* Timeline ruler */}
-                        <div
-                            ref={timelineRef}
-                            className="w-full bg-[#0d0d18] border-b border-white/5"
-                        />
+                        {/* Timeline ruler + IN/OUT marker overlay */}
+                        <div className="relative w-full">
+                            <div
+                                ref={timelineRef}
+                                className="w-full bg-[#0d0d18] border-b border-white/5"
+                            />
+                            {/* Draggable IN/OUT markers on the timeline strip */}
+                            {duration > 0 && regionStart !== undefined && regionEnd !== undefined && (
+                                <div
+                                    className="absolute inset-0 overflow-hidden"
+                                    style={{ pointerEvents: 'none' }}
+                                    onPointerMove={handleMarkerPointerMove}
+                                    onPointerUp={handleMarkerPointerUp}
+                                >
+                                    {/* IN marker */}
+                                    {(() => {
+                                        const left = (regionStart - visibleStart) * zoom;
+                                        return (
+                                            <div
+                                                className="absolute top-0 bottom-0 flex flex-col items-center cursor-ew-resize"
+                                                style={{
+                                                    left: left - 12,
+                                                    width: 24,
+                                                    pointerEvents: 'auto',
+                                                    zIndex: 10,
+                                                }}
+                                                onPointerDown={e => handleMarkerPointerDown(e, 'IN')}
+                                                onPointerMove={handleMarkerPointerMove}
+                                                onPointerUp={handleMarkerPointerUp}
+                                            >
+                                                <div
+                                                    className="absolute bottom-0 left-1/2 -translate-x-1/2 flex flex-col items-center gap-0"
+                                                    style={{ pointerEvents: 'none' }}
+                                                >
+                                                    {/* Label */}
+                                                    <span className="text-[9px] font-bold font-mono leading-none px-1 rounded-sm"
+                                                        style={{ color: '#00d4ff', background: 'rgba(0,212,255,0.15)' }}>
+                                                        IN
+                                                    </span>
+                                                    {/* Triangle */}
+                                                    <div style={{
+                                                        width: 0, height: 0,
+                                                        borderLeft: '5px solid transparent',
+                                                        borderRight: '5px solid transparent',
+                                                        borderTop: '6px solid #00d4ff',
+                                                    }} />
+                                                </div>
+                                                {/* Vertical line */}
+                                                <div className="absolute top-0 bottom-0 w-px left-1/2 -translate-x-px"
+                                                    style={{ background: '#00d4ff', opacity: 0.7 }} />
+                                            </div>
+                                        );
+                                    })()}
+                                    {/* OUT marker */}
+                                    {(() => {
+                                        const left = (regionEnd - visibleStart) * zoom;
+                                        return (
+                                            <div
+                                                className="absolute top-0 bottom-0 flex flex-col items-center cursor-ew-resize"
+                                                style={{
+                                                    left: left - 12,
+                                                    width: 24,
+                                                    pointerEvents: 'auto',
+                                                    zIndex: 10,
+                                                }}
+                                                onPointerDown={e => handleMarkerPointerDown(e, 'OUT')}
+                                                onPointerMove={handleMarkerPointerMove}
+                                                onPointerUp={handleMarkerPointerUp}
+                                            >
+                                                <div
+                                                    className="absolute bottom-0 left-1/2 -translate-x-1/2 flex flex-col items-center gap-0"
+                                                    style={{ pointerEvents: 'none' }}
+                                                >
+                                                    <span className="text-[9px] font-bold font-mono leading-none px-1 rounded-sm"
+                                                        style={{ color: '#00ff88', background: 'rgba(0,255,136,0.15)' }}>
+                                                        OUT
+                                                    </span>
+                                                    <div style={{
+                                                        width: 0, height: 0,
+                                                        borderLeft: '5px solid transparent',
+                                                        borderRight: '5px solid transparent',
+                                                        borderTop: '6px solid #00ff88',
+                                                    }} />
+                                                </div>
+                                                <div className="absolute top-0 bottom-0 w-px left-1/2 -translate-x-px"
+                                                    style={{ background: '#00ff88', opacity: 0.7 }} />
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            )}
+                        </div>
 
                         {/* Waveform */}
                         <div ref={containerRef} className="w-full relative z-[2]" />
