@@ -165,18 +165,16 @@ export function CentreWorkspace({
         waveformRef.current?.setVolume(volume);
     }, [volume]);
 
-    // ── Loop toggle: if turning loop ON while playing, switch to region ───
+    // ── Loop toggle ───────────────────────────────────────────────────────
     const handleToggleLoop = useCallback(() => {
         setIsLooping(prev => {
             const next = !prev;
             const w = waveformRef.current;
-            if (w && isPlaying) {
-                if (next) {
-                    // Switch to region loop
-                    w.stopRegion();
-                    w.playRegion();
-                }
-                // Turning off: just let full track keep playing
+            // Keep WaveformCanvas regionLoopRef in sync with React state
+            w?.setLooping(next);
+            if (next && isPlaying) {
+                // Turning ON while playing — switch to region loop immediately
+                w?.playRegion();
             }
             return next;
         });
@@ -237,9 +235,10 @@ export function CentreWorkspace({
             handleRegionChange(snappedStart, newEnd);
             // Auto-engage loop and start playing the region
             setIsLooping(true);
+            waveformRef.current?.setLooping(true);
             setTimeout(() => {
                 waveformRef.current?.playRegion();
-            }, 60);
+            }, 150);
         }
     }, [bpm, duration, activeBarPreset, regionStart, handleRegionChange]);
 

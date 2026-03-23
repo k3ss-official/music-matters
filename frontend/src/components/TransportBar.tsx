@@ -83,15 +83,9 @@ export const TransportBar: React.FC<TransportBarProps> = ({
     }, [waveformRef]);
 
     const handleLoopToggle = useCallback(() => {
+        // All loop-switch logic lives in CentreWorkspace.handleToggleLoop
         onToggleLoop();
-        // If turning loop ON while playing, switch to region play
-        const w = waveformRef.current;
-        if (w && isPlaying && !isLooping) {
-            w.stopRegion();
-            w.playRegion();
-        }
-        // If turning loop OFF, just keep playing from current position
-    }, [waveformRef, isPlaying, isLooping, onToggleLoop]);
+    }, [onToggleLoop]);
 
     const isMuted = volume === 0;
 

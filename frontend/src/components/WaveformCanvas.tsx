@@ -27,6 +27,8 @@ export interface WaveformHandle {
     stop: () => void;
     playRegion: () => void;
     stopRegion: () => void;
+    /** Directly set the internal loop flag (keeps regionLoopRef in sync with React isLooping state) */
+    setLooping: (enabled: boolean) => void;
     seek: (seconds: number) => void;
     zoomIn: () => void;
     zoomOut: () => void;
@@ -314,8 +316,9 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             ws.on('play', () => { if (onPlayStateChange) onPlayStateChange(true); });
             ws.on('pause', () => { if (onPlayStateChange) onPlayStateChange(false); });
             ws.on('finish', () => {
-                if (regionLoopRef.current && activeRegionRef.current) {
-                    ws.setTime(activeRegionRef.current.start);
+                if (regionLoopRef.current) {
+                    // Loop: seek to region start (or track start if no region)
+                    ws.setTime(activeRegionRef.current ? activeRegionRef.current.start : 0);
                     ws.play();
                 } else {
                     if (onPlayStateChange) onPlayStateChange(false);
@@ -395,10 +398,11 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             },
             playRegion: () => {
                 const ws = wsRef.current;
-                const region = activeRegionRef.current;
-                if (!ws || !region) return;
+                if (!ws) return;
                 regionLoopRef.current = true;
-                ws.setTime(region.start);
+                const region = activeRegionRef.current;
+                // If region exists seek to its start, else play from current position
+                if (region) ws.setTime(region.start);
                 ws.play();
             },
             stopRegion: () => {
@@ -409,6 +413,9 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 if (activeRegionRef.current) {
                     ws.setTime(activeRegionRef.current.start);
                 }
+            },
+            setLooping: (enabled: boolean) => {
+                regionLoopRef.current = enabled;
             },
             seek: (seconds: number) => {
                 wsRef.current?.setTime(seconds);
