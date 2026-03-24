@@ -168,11 +168,43 @@ class PipelineOrchestrator:
                 lid: LoopRecord(**ldata) for lid, ldata in loops_map.items()
             }
 
+        # Hydrate jobs from DB on boot
+        raw_jobs = db.load_all_jobs()
+        for job_data in raw_jobs:
+            jid = job_data["job_id"]
+            # Convert stage dicts back to StageState objects
+            stages = {}
+            for sid, sdata in job_data["stages"].items():
+                stages[sid] = StageState(**sdata)
+            
+            job_record = JobRecord(
+                job_id=jid,
+                track_id=job_data["track_id"],
+                status=job_data["status"],
+                current_stage=job_data["current_stage"],
+                detail=job_data["detail"],
+                started_at=job_data["started_at"],
+                completed_at=job_data["completed_at"],
+                stages=stages
+            )
+            
+            # If job was running/queued but app restarted, mark as failed or let user retry
+            # For now, let's mark incomplete jobs as 'failed' on boot with a 'Server Restart' detail
+            if job_record.status in ["running", "queued"]:
+                job_record.status = "failed"
+                job_record.detail = "Job interrupted by server restart"
+                db.save_job(job_record)
+                
+            self._jobs[jid] = job_record
+
         self._lock = asyncio.Lock()
         self._library = LibraryPaths(settings)
         self._downloader = DownloadService(settings)
         self._fallback_root = settings.MUSIC_LIBRARY / ".library"
         self._fallback_root.mkdir(parents=True, exist_ok=True)
+        
+        # SSE Event Queues
+        self._event_queues: Dict[UUID, List[asyncio.Queue]] = {}
 
     # ------------------------------------------------------------------
     # Job management
@@ -215,6 +247,7 @@ class PipelineOrchestrator:
             stage_id: StageState(stage_id, label) for stage_id, label in stages_to_add
         }
         self._jobs[job_id] = job_record
+        db.save_job(job_record)
 
         loop = asyncio.get_running_loop()
         job_record.task = loop.create_task(self._run_pipeline(job_record, payload))
@@ -234,11 +267,45 @@ class PipelineOrchestrator:
             stage_id: StageState(stage_id, label) for stage_id, label in _STAGE_TEMPLATE
         }
         self._jobs[job_id] = job_record
+        db.save_job(job_record)
 
         loop = asyncio.get_running_loop()
         job_record.task = loop.create_task(self._run_pipeline(job_record))
 
         return self.get_job(job_id)
+
+    # ------------------------------------------------------------------
+    # SSE Subscription
+    # ------------------------------------------------------------------
+    async def subscribe(self, job_id: UUID) -> asyncio.Queue:
+        """Create a new event queue for an SSE subscriber."""
+        q: asyncio.Queue = asyncio.Queue()
+        if job_id not in self._event_queues:
+            self._event_queues[job_id] = []
+        self._event_queues[job_id].append(q)
+        return q
+
+    def unsubscribe(self, job_id: UUID, q: asyncio.Queue) -> None:
+        """Remove a subscriber queue."""
+        if job_id in self._event_queues:
+            try:
+                self._event_queues[job_id].remove(q)
+            except ValueError:
+                pass
+            if not self._event_queues[job_id]:
+                del self._event_queues[job_id]
+
+    def _broadcast(self, job_id: UUID) -> None:
+        """Push current job state to all SSE subscribers."""
+        if job_id not in self._event_queues:
+            return
+        try:
+            job_data = self.get_job(job_id)
+            event = job_data.model_dump(mode="json")
+            for q in self._event_queues[job_id]:
+                q.put_nowait(event)
+        except Exception as e:
+            logger.warning("Failed to broadcast job %s: %s", job_id, e)
 
     def get_job(self, job_id: UUID) -> schemas.JobResponse:
         job = self._jobs.get(job_id)
@@ -277,6 +344,8 @@ class PipelineOrchestrator:
     ) -> None:
         job.started_at = datetime.now(timezone.utc)
         job.status = "running"
+        db.save_job(job)
+        self._broadcast(job.job_id)
         track = self._tracks[job.track_id]
 
         # Default options if not provided (e.g. reprocessing)
@@ -308,11 +377,16 @@ class PipelineOrchestrator:
             job.detail = "Pipeline completed"
             job.completed_at = datetime.now(timezone.utc)
             track.status = "project_ready"
+            db.save_job(job)
+            self._broadcast(job.job_id)
         except Exception as exc:  # pylint: disable=broad-except
+            logger.exception("Pipeline failed for job %s", job.job_id)
             job.status = "failed"
             job.detail = str(exc)
             job.completed_at = datetime.now(timezone.utc)
             track.status = "error"
+            db.save_job(job)
+            self._broadcast(job.job_id)
 
     async def _run_stage(
         self,
@@ -334,14 +408,18 @@ class PipelineOrchestrator:
             stage.progress = 1.0
             stage.detail = stage.detail or "Completed"
 
-            # Persist track state changes after each stage
+            # Persist job and track state changes after each stage
+            db.save_job(job)
             db.save_track(track)
+            self._broadcast(job.job_id)
 
             return result
         except Exception as exc:  # pylint: disable=broad-except
             stage.status = "error"
             stage.detail = str(exc)
             stage.progress = 0.0
+            db.save_job(job)
+            self._broadcast(job.job_id)
             raise
 
     # ------------------------------------------------------------------
@@ -522,8 +600,41 @@ class PipelineOrchestrator:
                 return stem_map
 
             except Exception as exc:  # pylint: disable=broad-except
-                logger.warning("demucs-mlx failed (%s), falling back to HPSS", exc)
-                stage.detail = f"demucs-mlx failed, using HPSS fallback: {str(exc)[:60]}"
+                logger.warning("demucs-mlx failed (%s), trying standard demucs", exc)
+                stage.detail = f"demucs-mlx unavailable, trying standard demucs: {str(exc)[:50]}"
+                stage.progress = 0.25
+
+            # --- Tier 1.5: standard demucs (torch, MPS/CPU) ---
+            try:
+                import demucs.api
+
+                stage.detail = "demucs: loading htdemucs_6s model"
+                stage.progress = 0.3
+                sep = demucs.api.Separator(
+                    model="htdemucs_6s",
+                    shifts=1,
+                    overlap=0.25,
+                    device=settings.DEMUCS_DEVICE,
+                )
+
+                stage.detail = "demucs: separating 6 stems (this takes a while)…"
+                stage.progress = 0.4
+                _, stems_dict = sep.separate_audio_file(audio_path)
+
+                stem_map: Dict[str, Path] = {}
+                for stem_name, audio_tensor in stems_dict.items():
+                    out_path = stems_dir / f"{stem_name}.wav"
+                    # demucs returns torch tensors: (channels, samples)
+                    import torchaudio
+                    torchaudio.save(str(out_path), audio_tensor.cpu(), sep.samplerate)
+                    stem_map[stem_name] = out_path
+
+                stage.progress = 0.9
+                return stem_map
+
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning("Standard demucs failed (%s), falling back to HPSS", exc)
+                stage.detail = f"demucs failed, using HPSS fallback: {str(exc)[:60]}"
                 stage.progress = 0.5
 
             # --- Fallback: librosa HPSS (harmonic/percussive split only) ---

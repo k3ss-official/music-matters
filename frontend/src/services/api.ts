@@ -81,7 +81,13 @@ export const ingestSource = async (payload: IngestPayload & { options?: Processi
 export const uploadTrack = async (file: File, options: ProcessingOptions): Promise<{ job_id: string; track_id: string }> => {
   const formData = new FormData();
   formData.append('file', file);
-  formData.append('options', JSON.stringify(options));
+  // Backend Pydantic model uses snake_case field names
+  formData.append('options', JSON.stringify({
+    analysis: options.analysis,
+    separation: options.separation,
+    loop_slicing: options.loopSlicing,
+    mastering: options.mastering,
+  }));
 
   const response = await api.post('/ingest/upload', formData, {
     headers: {

@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, Component } from 'react';
+import React, { useState, useEffect, useRef, useCallback, Component } from 'react';
 import './index.css';
 
-// ── Error boundary to catch render crashes (black-screen diagnosis) ──────────
+// ── Error boundary ──────────────────────────────────────────────────────────
 class ErrorBoundary extends Component<
   { children: React.ReactNode },
   { error: Error | null }
@@ -38,64 +38,64 @@ class ErrorBoundary extends Component<
   }
 }
 
-import type { TrackSummary, JobProgress, ProcessingOptions, TrackDetailResponse, LoopPreview } from './types';
+import type { TrackDetailResponse, JobProgress, ProcessingOptions, LoopPreview } from './types';
 import * as api from './services/api';
+import { subscribeToJob } from './services/sse';
 
-import { SearchIngest } from './components/SearchIngest';
-import { QueuePanel } from './components/QueuePanel';
-import { LibraryBrowser } from './components/LibraryBrowser';
 import { CentreWorkspace } from './components/CentreWorkspace';
 import { AnalysisPanel } from './components/AnalysisPanel';
 import { StemLanes } from './components/StemLanes';
 import { ExportPanel } from './components/ExportPanel';
 import { ExportDialog } from './components/ExportDialog';
+import { ProcessingView } from './components/ProcessingView';
 import { ShortcutLegend } from './components/ShortcutLegend';
-import { GeneratePanel } from './components/GeneratePanel';
 import type WaveSurfer from 'wavesurfer.js';
 
+// Icons (inline SVGs for zero-dep)
+const UploadIcon = () => (
+  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+    <polyline points="17 8 12 3 7 8" />
+    <line x1="12" y1="3" x2="12" y2="15" />
+  </svg>
+);
+
+const CheckIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="20 6 9 17 4 12" />
+  </svg>
+);
+
+const SpinnerIcon = ({ size = 20 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="animate-spin">
+    <path d="M21 12a9 9 0 11-6.219-8.56" />
+  </svg>
+);
+
+const AlertIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="8" x2="12" y2="12" />
+    <line x1="12" y1="16" x2="12.01" y2="16" />
+  </svg>
+);
+
+// ── App state machine ──────────────────────────────────────────────────────
+type AppView = 'upload' | 'processing' | 'workspace';
+
 function App() {
+  // ── Core state ───────────────────────────────────────────────────────────
+  const [view, setView] = useState<AppView>('upload');
   const [isConnected, setIsConnected] = useState(false);
-  const [tracks, setTracks] = useState<TrackSummary[]>([]);
-  const [activeJobs, setActiveJobs] = useState<Record<string, JobProgress>>({});
 
-  // ── Sidebar widths ────────────────────────────────────────────────────────
-  const [leftWidth, setLeftWidth] = useState<number>(() =>
-    parseInt(localStorage.getItem('leftSidebarWidth') || '280', 10));
-  const [rightWidth, setRightWidth] = useState<number>(() =>
-    parseInt(localStorage.getItem('rightSidebarWidth') || '320', 10));
-
-  const startDragLeft = (e: React.PointerEvent) => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const startW = leftWidth;
-    const onMove = (ev: PointerEvent) => {
-      const w = Math.min(400, Math.max(200, startW + ev.clientX - startX));
-      setLeftWidth(w);
-      localStorage.setItem('leftSidebarWidth', String(w));
-    };
-    const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-  };
-
-  const startDragRight = (e: React.PointerEvent) => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const startW = rightWidth;
-    const onMove = (ev: PointerEvent) => {
-      const w = Math.min(400, Math.max(200, startW - (ev.clientX - startX)));
-      setRightWidth(w);
-      localStorage.setItem('rightSidebarWidth', String(w));
-    };
-    const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-  };
-
-  // Selection State
+  // Track state
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
   const [trackDetail, setTrackDetail] = useState<TrackDetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+
+  // Job state
+  const [activeJob, setActiveJob] = useState<JobProgress | null>(null);
+  const sseCleanupRef = useRef<(() => void) | null>(null);
 
   // Waveform & Loop State
   const [waveformReady, setWaveformReady] = useState(false);
@@ -105,7 +105,7 @@ function App() {
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const regionsRef = useRef<any>(null);
 
-  // Playback state (needed for StemLanes VU animation)
+  // Playback state
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
 
@@ -113,7 +113,12 @@ function App() {
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [shortcutLegendOpen, setShortcutLegendOpen] = useState(false);
 
-  // Health check
+  // Upload state
+  const [uploading, setUploading] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Health check ─────────────────────────────────────────────────────────
   useEffect(() => {
     const checkHealth = async () => {
       try {
@@ -128,132 +133,189 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch track history
-  const loadTracks = async () => {
-    try {
-      const data = await api.listTracks(50);
-      setTracks(data.items || []);
-    } catch (e) {
-      console.error('Failed to load tracks', e);
-    }
-  };
-
-  useEffect(() => {
-    loadTracks();
-    const interval = setInterval(loadTracks, 10000); // refresh every 10s
-    return () => clearInterval(interval);
-  }, []);
-
-  // Poll active jobs
-  useEffect(() => {
-    const pollJobs = async () => {
-      try {
-        const jobs = await api.listActiveJobs();
-        const jobMap: Record<string, JobProgress> = {};
-        jobs.forEach((j) => { jobMap[j.jobId] = j; });
-        setActiveJobs(jobMap);
-
-        // Re-load tracks if any job just completed
-        if (jobs.some(j => j.status === 'completed')) {
-          loadTracks();
-          // If the selected track just completed processing, refresh its details
-          if (selectedTrackId && jobs.some(j => j.status === 'completed' && j.trackId === selectedTrackId)) {
-            fetchTrackDetail(selectedTrackId);
-          }
-        }
-      } catch (e) {
-        // ignore
-      }
-    };
-    pollJobs();
-    const interval = setInterval(pollJobs, 3000);
-    return () => clearInterval(interval);
-  }, [selectedTrackId]);
-
-  // Handle Track Selection
-  const handleTrackSelect = (id: string) => {
-    if (id === selectedTrackId) return;
-    setSelectedTrackId(id);
-    setWaveformReady(false);
-    setSelectedStems([]);
-    setRegionStart(0);
-    setRegionEnd(0);
-    fetchTrackDetail(id);
-  };
-
-  const fetchTrackDetail = async (id: string) => {
+  // ── Track detail fetcher ─────────────────────────────────────────────────
+  const fetchTrackDetail = useCallback(async (id: string) => {
     setDetailLoading(true);
     try {
       const detail = await api.getTrackDetail(id);
       setTrackDetail(detail);
+      return detail;
     } catch (e) {
       console.error('Failed to load track detail', e);
       setTrackDetail(null);
+      return null;
     } finally {
       setDetailLoading(false);
     }
-  };
+  }, []);
 
-  const handleFileUpload = async (file: File, options: ProcessingOptions) => {
+  // ── SSE subscription for active job ──────────────────────────────────────
+  const subscribeToActiveJob = useCallback((jobId: string, trackId: string) => {
+    // Clean up previous subscription
+    if (sseCleanupRef.current) {
+      sseCleanupRef.current();
+      sseCleanupRef.current = null;
+    }
+
+    const cleanup = subscribeToJob(jobId, {
+      onUpdate: (job) => {
+        setActiveJob(job);
+      },
+      onDone: (job) => {
+        setActiveJob(job);
+        if (job.status === 'completed') {
+          // Pipeline done — fetch final track detail and switch to workspace
+          fetchTrackDetail(trackId).then(() => {
+            setView('workspace');
+          });
+        }
+        // If failed, stay on processing view to show error
+      },
+      onError: (_event) => {
+        // SSE disconnected — fall back to polling
+        console.warn('SSE disconnected, falling back to polling');
+        startPolling(jobId, trackId);
+      },
+    });
+
+    sseCleanupRef.current = cleanup;
+  }, [fetchTrackDetail]);
+
+  // ── Polling fallback ────────────────────────────────────────────────────
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startPolling = useCallback((jobId: string, trackId: string) => {
+    if (pollingRef.current) clearInterval(pollingRef.current);
+    pollingRef.current = setInterval(async () => {
+      try {
+        const jobs = await api.listActiveJobs();
+        const job = jobs.find(j => j.jobId === jobId);
+        if (job) {
+          setActiveJob(job);
+          if (job.status === 'completed' || job.status === 'failed') {
+            if (pollingRef.current) clearInterval(pollingRef.current);
+            if (job.status === 'completed') {
+              await fetchTrackDetail(trackId);
+              setView('workspace');
+            }
+          }
+        } else {
+          // Job not in active list — it already completed or failed.
+          // Check track status directly to recover.
+          const detail = await api.getTrackDetail(trackId);
+          if (detail && detail.status === 'project_ready') {
+            if (pollingRef.current) clearInterval(pollingRef.current);
+            setTrackDetail(detail);
+            setView('workspace');
+          } else if (detail && detail.status === 'error') {
+            if (pollingRef.current) clearInterval(pollingRef.current);
+            setActiveJob(prev => prev ? { ...prev, status: 'failed', detail: 'Pipeline failed' } : prev);
+          }
+        }
+      } catch (e) {
+        console.error('Polling error', e);
+      }
+    }, 2000);
+  }, [fetchTrackDetail]);
+
+  // ── Cleanup on unmount ──────────────────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      if (sseCleanupRef.current) sseCleanupRef.current();
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, []);
+
+  // ── File upload handler ──────────────────────────────────────────────────
+  const handleFileUpload = useCallback(async (file: File) => {
+    if (!isConnected) return;
+    setUploading(true);
+
+    const options: ProcessingOptions = {
+      analysis: true,
+      separation: true,
+      loopSlicing: false,
+      mastering: false,
+    };
+
     try {
       const data = await api.uploadTrack(file, options);
-      addJobToQueue(data.job_id, data.track_id);
+      const jobId = data.job_id;
+      const trackId = data.track_id;
+
+      setSelectedTrackId(trackId);
+      setActiveJob({
+        jobId,
+        trackId,
+        status: 'queued',
+        stages: [],
+      });
+      setView('processing');
+
+      // Subscribe to real-time updates
+      subscribeToActiveJob(jobId, trackId);
     } catch (e) {
-      alert('Upload Failed!');
-      console.error(e);
+      console.error('Upload failed', e);
+      alert('Upload failed — check the console for details.');
+    } finally {
+      setUploading(false);
     }
-  };
+  }, [isConnected, subscribeToActiveJob]);
 
-  const handleUrlSubmit = async (url: string, options: ProcessingOptions) => {
-    try {
-      const data = await api.ingestSource({ source: url, options });
-      addJobToQueue(data.job_id, data.track_id);
-    } catch (e) {
-      alert('Ingest Failed!');
-      console.error(e);
+  // ── Click handler for file picker ────────────────────────────────────────
+  const openFilePicker = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleFileUpload(file);
     }
-  };
+    // Reset input so same file can be re-selected
+    e.target.value = '';
+  }, [handleFileUpload]);
 
-  const addJobToQueue = (jobId: string, trackId: string) => {
-    setActiveJobs(prev => ({
-      ...prev,
-      [jobId]: { jobId, trackId, status: 'queued', stages: [] }
-    }));
-    // Try to auto-select it if possible, allowing immediate feedback
-    handleTrackSelect(trackId);
-  };
-
-  const handleDeleteTrack = async (id: string) => {
-    try {
-      await api.deleteTrack(id);
-      if (selectedTrackId === id) {
-        setSelectedTrackId(null);
-        setWaveformReady(false);
-        setTrackDetail(null);
-      }
-      loadTracks();
-    } catch (e) {
-      console.error('Failed to delete track', e);
-    }
-  };
-
+  // ── Stem toggle ──────────────────────────────────────────────────────────
   const toggleStemSelection = (stem: string) => {
     setSelectedStems(prev =>
       prev.includes(stem) ? prev.filter(s => s !== stem) : [...prev, stem]
     );
   };
 
+  // ── Separation request ──────────────────────────────────────────────────
   const handleRequestSeparation = async () => {
     if (!selectedTrackId) return;
     try {
       const data = await api.refreshTrack(selectedTrackId);
-      addJobToQueue(data.job_id, selectedTrackId);
+      setActiveJob({
+        jobId: data.job_id,
+        trackId: selectedTrackId,
+        status: 'queued',
+        stages: [],
+      });
+      setView('processing');
+      subscribeToActiveJob(data.job_id, selectedTrackId);
     } catch (e) {
       console.error('Failed to start separation', e);
     }
   };
 
-  // Global `?` key → shortcut legend
+  // ── New track (back to upload) ──────────────────────────────────────────
+  const handleNewTrack = useCallback(() => {
+    if (sseCleanupRef.current) sseCleanupRef.current();
+    if (pollingRef.current) clearInterval(pollingRef.current);
+    setSelectedTrackId(null);
+    setTrackDetail(null);
+    setActiveJob(null);
+    setWaveformReady(false);
+    setSelectedStems([]);
+    setRegionStart(0);
+    setRegionEnd(0);
+    setView('upload');
+  }, []);
+
+  // ── Global `?` key → shortcut legend ────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === '?' && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
@@ -264,15 +326,33 @@ function App() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  const navigateToLoop = (_loop: LoopPreview) => {
-    // Export complete — nothing to navigate in current UI
+  // ── Stage progress helper ─────────────────────────────────────────────
+  const STAGE_META: Record<string, { label: string; color: string; icon: string }> = {
+    ingest:     { label: 'Ingesting',        color: '#00d4ff', icon: '📥' },
+    analysis:   { label: 'Analysing',        color: '#8b5cf6', icon: '🔬' },
+    separation: { label: 'Separating Stems', color: '#00ff88', icon: '🎛️' },
+    loop:       { label: 'Slicing Loops',    color: '#f59e0b', icon: '🔁' },
+    project:    { label: 'Finalising',       color: '#00d4ff', icon: '📦' },
   };
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════════════════════════════════════
   return (
     <div className="h-screen w-full bg-[#0a0a0f] text-gray-300 flex flex-col overflow-hidden font-sans">
-      {/* HEADER */}
+      {/* ─── Hidden file input ──────────────────────────────────────────── */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="audio/*,.mp3,.wav,.flac,.m4a,.ogg,.aac"
+        onChange={handleFileChange}
+        className="hidden"
+        id="mvp-file-upload"
+      />
+
+      {/* ─── HEADER ─────────────────────────────────────────────────────── */}
       <header className="h-[60px] bg-[#12121a] border-b border-white/5 flex items-center justify-between px-6 flex-shrink-0 relative z-20 shadow-md">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 cursor-pointer" onClick={handleNewTrack}>
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#00d4ff] to-[#8b5cf6] p-0.5 shadow-[0_0_15px_rgba(0,212,255,0.4)]">
             <div className="w-full h-full bg-[#12121a] rounded-md flex items-center justify-center text-white text-lg">
               🎧
@@ -286,13 +366,27 @@ function App() {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* New Track button (visible when not on upload view) */}
+          {view !== 'upload' && (
+            <button
+              onClick={handleNewTrack}
+              className="px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest font-mono
+                         bg-[#00d4ff]/15 text-[#00d4ff] border border-[#00d4ff]/30
+                         hover:bg-[#00d4ff]/25 transition-colors"
+            >
+              + New Track
+            </button>
+          )}
+
+          {/* Connection status */}
           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] uppercase font-bold tracking-widest border transition-colors ${isConnected
             ? 'bg-[#00ff88]/10 text-[#00ff88] border-[#00ff88]/30'
             : 'bg-[#ff3b5c]/10 text-[#ff3b5c] border-[#ff3b5c]/30'
             }`}>
             <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-[#00ff88] animate-pulse' : 'bg-[#ff3b5c]'}`} />
-            {isConnected ? 'Backend Online' : 'Backend Offline'}
+            {isConnected ? 'Online' : 'Offline'}
           </div>
+
           {/* Shortcut legend button */}
           <button
             onClick={() => setShortcutLegendOpen(v => !v)}
@@ -307,91 +401,147 @@ function App() {
         </div>
       </header>
 
-      {/* 3-ZONE LAYOUT */}
+      {/* ─── MAIN CONTENT ──────────────────────────────────────────────── */}
       <main className="flex-1 overflow-hidden flex text-sm">
 
-        {/* LEFT SIDEBAR — resizable */}
-        <aside style={{ width: leftWidth }} className="bg-[#0a0a0f] border-r border-white/5 flex flex-col p-4 gap-4 overflow-y-auto hide-scrollbar z-10 shrink-0 relative">
-          <SearchIngest
-            onFileUpload={handleFileUpload}
-            onUrlSubmit={handleUrlSubmit}
-          />
-          <QueuePanel jobs={activeJobs} />
-          <LibraryBrowser
-            tracks={tracks}
-            onTrackSelect={handleTrackSelect}
-            onTrackDelete={handleDeleteTrack}
-            selectedTrackId={selectedTrackId}
-            loading={tracks.length === 0}
-          />
-          {/* Resize handle */}
-          <div
-            onPointerDown={startDragLeft}
-            className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-[#00d4ff]/30 transition-colors z-20"
-          />
-        </aside>
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* VIEW: UPLOAD ─────────────────────────────────────────────── */}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {view === 'upload' && (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-8 max-w-md">
+              {/* Hero */}
+              <div className="text-center space-y-3">
+                <div className="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-[#00d4ff]/20 to-[#8b5cf6]/20 border border-white/10 flex items-center justify-center text-4xl shadow-[0_0_40px_rgba(0,212,255,0.15)]">
+                  🎧
+                </div>
+                <h2 className="text-2xl font-bold text-white">
+                  Load a Track
+                </h2>
+                <p className="text-white/40 text-sm max-w-sm">
+                  Upload an audio file to analyse, separate stems, and export.
+                </p>
+              </div>
 
-        {/* CENTRE WORKSPACE (flex-grow) */}
-        <section className="flex-1 flex flex-col overflow-hidden relative z-0 min-w-[500px]">
-          <ErrorBoundary>
-          <CentreWorkspace
-            trackId={selectedTrackId}
-            trackDetail={trackDetail}
-            regionStart={regionStart}
-            regionEnd={regionEnd}
-            onUpdateRegion={(s, e) => { setRegionStart(s); setRegionEnd(e); }}
-            wavesurferRef={wavesurferRef}
-            regionsRef={regionsRef}
-            waveformReady={waveformReady}
-            setWaveformReady={setWaveformReady}
-            detailLoading={detailLoading}
-            activeJob={selectedTrackId ? Object.values(activeJobs).find(j => j.trackId === selectedTrackId) ?? null : null}
-            onPlayStateChange={setIsPlaying}
-            onTimeUpdate={setCurrentTime}
-            onOpenExportDialog={() => setExportDialogOpen(true)}
-          />
-          </ErrorBoundary>
-        </section>
+              {/* Upload drop zone */}
+              <div
+                onClick={openFilePicker}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragActive(true); }}
+                onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setDragActive(true); }}
+                onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragActive(false); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setDragActive(false);
+                  const file = e.dataTransfer.files?.[0];
+                  if (file && !uploading && isConnected) {
+                    handleFileUpload(file);
+                  }
+                }}
+                className={`group relative flex flex-col items-center gap-4 w-full py-10 px-8
+                           rounded-2xl border-2 border-dashed transition-all duration-300 cursor-pointer
+                           ${dragActive
+                             ? 'border-[#00d4ff] bg-[#00d4ff]/10 shadow-[0_0_30px_rgba(0,212,255,0.2)]'
+                             : 'border-white/10 hover:border-[#00d4ff]/50 hover:bg-[#00d4ff]/5'}
+                           ${(!isConnected || uploading) ? 'opacity-40 cursor-not-allowed' : ''}`}
+              >
+                <div className={`transition-colors ${dragActive ? 'text-[#00d4ff]' : 'text-white/30 group-hover:text-[#00d4ff]'}`}>
+                  {uploading ? <SpinnerIcon size={48} /> : <UploadIcon />}
+                </div>
+                <div className="text-center">
+                  <div className={`text-sm font-semibold transition-colors ${dragActive ? 'text-[#00d4ff]' : 'text-white/70 group-hover:text-white'}`}>
+                    {uploading ? 'Uploading...' : dragActive ? 'Drop it!' : 'Click or drag audio here'}
+                  </div>
+                  <div className="text-xs text-white/25 mt-1">
+                    MP3, WAV, FLAC, M4A, OGG, AAC
+                  </div>
+                </div>
 
-        {/* RIGHT SIDEBAR — resizable */}
-        <aside style={{ width: rightWidth }} className="bg-[#0a0a0f] border-l border-white/5 flex flex-col p-4 gap-4 overflow-y-auto hide-scrollbar z-10 shrink-0 relative">
-          {/* Resize handle */}
-          <div
-            onPointerDown={startDragRight}
-            className="absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-[#00d4ff]/30 transition-colors z-20"
-          />
-          <AnalysisPanel
-            loading={detailLoading}
-            trackDetail={trackDetail}
-            onRequestSeparation={selectedTrackId ? handleRequestSeparation : undefined}
-          />
+                {/* Glow effect on hover */}
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[#00d4ff]/0 to-[#8b5cf6]/0 group-hover:from-[#00d4ff]/5 group-hover:to-[#8b5cf6]/5 transition-all duration-500 pointer-events-none" />
+              </div>
 
-          <StemLanes
-            trackId={selectedTrackId || ''}
-            availableStems={trackDetail?.stems || []}
-            selectedStems={selectedStems}
-            onToggleStemSelection={toggleStemSelection}
-            onRequestSeparation={handleRequestSeparation}
-            loading={detailLoading}
-            isPlaying={isPlaying}
-            currentTime={currentTime}
-          />
+              {/* Backend offline warning */}
+              {!isConnected && (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#ff3b5c]/10 border border-[#ff3b5c]/20 text-[#ff3b5c] text-xs font-mono">
+                  <AlertIcon />
+                  Backend offline — start the server first
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
-          <ExportPanel
-            trackId={selectedTrackId || ''}
-            selectedStems={selectedStems}
-            regionStart={regionStart}
-            regionEnd={regionEnd}
-            onExportComplete={navigateToLoop}
-            onOpenDialog={() => setExportDialogOpen(true)}
-            disabled={!selectedTrackId || !waveformReady || detailLoading}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* VIEW: PROCESSING ─────────────────────────────────────────── */}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {view === 'processing' && activeJob && (
+          <ProcessingView
+            activeJob={activeJob}
+            stageMeta={STAGE_META}
+            onNewTrack={handleNewTrack}
+            onRetry={() => selectedTrackId && handleRequestSeparation()}
           />
+        )}
 
-          <GeneratePanel
-            bpm={trackDetail?.bpm}
-            musicalKey={trackDetail?.musical_key}
-          />
-        </aside>
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* VIEW: WORKSPACE ──────────────────────────────────────────── */}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {view === 'workspace' && selectedTrackId && (
+          <>
+            {/* CENTRE — Waveform + transport + loop editor */}
+            <section className="flex-1 flex flex-col overflow-hidden relative z-0 min-w-[500px]">
+              <ErrorBoundary>
+                <CentreWorkspace
+                  trackId={selectedTrackId}
+                  trackDetail={trackDetail}
+                  regionStart={regionStart}
+                  regionEnd={regionEnd}
+                  onUpdateRegion={(s, e) => { setRegionStart(s); setRegionEnd(e); }}
+                  wavesurferRef={wavesurferRef}
+                  regionsRef={regionsRef}
+                  waveformReady={waveformReady}
+                  setWaveformReady={setWaveformReady}
+                  detailLoading={detailLoading}
+                  activeJob={activeJob}
+                  onPlayStateChange={setIsPlaying}
+                  onTimeUpdate={setCurrentTime}
+                  onOpenExportDialog={() => setExportDialogOpen(true)}
+                />
+              </ErrorBoundary>
+            </section>
+
+            {/* RIGHT SIDEBAR — Analysis + Stems + Export */}
+            <aside className="w-[320px] bg-[#0a0a0f] border-l border-white/5 flex flex-col p-4 gap-4 overflow-y-auto hide-scrollbar z-10 shrink-0">
+              <AnalysisPanel
+                loading={detailLoading}
+                trackDetail={trackDetail}
+                onRequestSeparation={selectedTrackId ? handleRequestSeparation : undefined}
+              />
+
+              <StemLanes
+                trackId={selectedTrackId || ''}
+                availableStems={trackDetail?.stems || []}
+                selectedStems={selectedStems}
+                onToggleStemSelection={toggleStemSelection}
+                onRequestSeparation={handleRequestSeparation}
+                loading={detailLoading}
+                isPlaying={isPlaying}
+                currentTime={currentTime}
+              />
+
+              <ExportPanel
+                trackId={selectedTrackId || ''}
+                selectedStems={selectedStems}
+                regionStart={regionStart}
+                regionEnd={regionEnd}
+                onExportComplete={() => {}}
+                onOpenDialog={() => setExportDialogOpen(true)}
+                disabled={!selectedTrackId || !waveformReady || detailLoading}
+              />
+            </aside>
+          </>
+        )}
 
       </main>
 

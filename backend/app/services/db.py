@@ -69,6 +69,22 @@ class DatabaseService:
                 FOREIGN KEY(track_id) REFERENCES tracks(track_id) ON DELETE CASCADE
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS jobs (
+                job_id TEXT PRIMARY KEY,
+                track_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                current_stage TEXT,
+                stages TEXT,
+                detail TEXT,
+                error TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                started_at TEXT,
+                completed_at TEXT,
+                FOREIGN KEY(track_id) REFERENCES tracks(track_id) ON DELETE CASCADE
+            )
+        """)
         # Migration: add tags column if it doesn't exist (for existing databases)
         try:
             conn.execute("ALTER TABLE loop_records ADD COLUMN tags TEXT DEFAULT '[]'")
@@ -204,6 +220,78 @@ class DatabaseService:
                 "tags": json.loads(row["tags"]) if row["tags"] else [],
             }
         return loops
+
+    # ------------------------------------------------------------------
+    # Job Persistence
+    # ------------------------------------------------------------------
+    def save_job(self, job_record: Any) -> None:
+        """Upsert a JobRecord."""
+        conn = self._get_conn()
+        
+        # Serialize stages Dict[str, StageState] to JSON
+        stages_data = {}
+        for sid, stage in job_record.stages.items():
+            stages_data[sid] = {
+                "id": stage.id,
+                "label": stage.label,
+                "status": stage.status,
+                "progress": stage.progress,
+                "detail": stage.detail,
+                "eta_seconds": stage.eta_seconds
+            }
+
+        conn.execute(
+            """
+            INSERT INTO jobs (
+                job_id, track_id, status, current_stage, stages, detail, 
+                created_at, updated_at, started_at, completed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(job_id) DO UPDATE SET
+                status=excluded.status,
+                current_stage=excluded.current_stage,
+                stages=excluded.stages,
+                detail=excluded.detail,
+                updated_at=excluded.updated_at,
+                started_at=excluded.started_at,
+                completed_at=excluded.completed_at
+            """,
+            (
+                str(job_record.job_id),
+                str(job_record.track_id),
+                job_record.status,
+                job_record.current_stage,
+                json.dumps(stages_data),
+                job_record.detail,
+                datetime.now(timezone.utc).isoformat(), # created_at (simplification: updated on insert)
+                datetime.now(timezone.utc).isoformat(),
+                job_record.started_at.isoformat() if job_record.started_at else None,
+                job_record.completed_at.isoformat() if job_record.completed_at else None,
+            ),
+        )
+
+    def load_all_jobs(self) -> List[Dict[str, Any]]:
+        """Load all jobs from DB."""
+        conn = self._get_conn()
+        cursor = conn.execute("SELECT * FROM jobs")
+        jobs = []
+        for row in cursor.fetchall():
+            jobs.append({
+                "job_id": UUID(row["job_id"]),
+                "track_id": UUID(row["track_id"]),
+                "status": row["status"],
+                "current_stage": row["current_stage"],
+                "stages": json.loads(row["stages"]),
+                "detail": row["detail"],
+                "created_at": datetime.fromisoformat(row["created_at"]),
+                "updated_at": datetime.fromisoformat(row["updated_at"]),
+                "started_at": datetime.fromisoformat(row["started_at"]) if row["started_at"] else None,
+                "completed_at": datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
+            })
+        return jobs
+
+    def delete_job(self, job_id: UUID) -> None:
+        conn = self._get_conn()
+        conn.execute("DELETE FROM jobs WHERE job_id = ?", (str(job_id),))
 
 
 db = DatabaseService()
