@@ -1,0 +1,27 @@
+You are an expert Python developer specializing in high-performance audio applications and machine learning, with deep experience in FastAPI, Celery, MLX, and PyTorch.
+
+Analyze the GitHub repository: https://github.com/k3ss-official/music-matters
+
+This is a functional audio stem separation tool that already uses FastAPI, SQLite, librosa, a Demucs model (htdemucs_6s), yt-dlp, soundfile, and numpy. The goal is to evolve this prototype into a State-of-the-Art (SOTA), production-ready application optimized for Apple Silicon.
+
+Provide a detailed, actionable plan focusing on the following high-impact upgrades:
+
+**1. Asynchronous Architecture Implementation:**
+   - Detail the step-by-step implementation of a Celery and Redis task queue to handle all audio processing jobs.
+   - Provide the specific code changes needed for the FastAPI backend: creating a `/process` endpoint that returns a job_id, a `/status/<job_id>` endpoint, and a `/download/<job_id>` endpoint.
+   - Show how to refactor the existing Demucs inference logic into a Celery task.
+
+**2. True MLX Acceleration:**
+   - The current Demucs model is likely running via PyTorch. The SOTA goal is to run it with MLX for maximum M4 performance.
+   - Research and outline a plan to port the `htdemucs_6s` model to MLX. This involves finding MLX-compatible model weights, adapting the model architecture, and rewriting the inference loop to use MLX operations. Acknowledge the complexity of this task and suggest starting points (e.g., MLX documentation, existing PyTorch-to-MLX conversion scripts).
+
+**3. Real-Time User Experience:**
+   - Design a system for reporting job progress from the Celery worker to the Streamlit frontend.
+   - Provide code examples for using Redis Pub/Sub for progress updates and how to implement a dynamic progress bar in Streamlit that updates in real-time based on the task's progress.
+
+**4. Advanced Model and Output Management:**
+   - Propose a configuration-driven system for managing multiple models (e.g., `htdemucs_6s`, `demucs_v4`).
+   - Detail the changes to the UI (Streamlit) and backend (FastAPI/Celery) to allow a user to select a specific model before processing.
+   - Suggest how to add UI controls (e.g., checkboxes) that allow the user to select which individual stems (drums, bass, etc.) they want to be included in the final download, rather than always exporting all of them.
+
+Your response should be a technical roadmap with code snippets, focusing on architectural changes and advanced features that will make this project the definitive local tool for stem separation.
