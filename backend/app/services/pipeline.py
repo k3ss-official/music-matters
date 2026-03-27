@@ -1011,7 +1011,9 @@ class PipelineOrchestrator:
     async def extract_custom_loop(
         self, track_id: UUID, start_time: float, end_time: float, stems: list[str]
     ) -> schemas.LoopPreview:
-        track = self.get_track(track_id)
+        track = self._tracks.get(track_id)
+        if track is None:
+            raise KeyError(f"Track {track_id} not registered")
         if not track.original_path or not track.original_path.exists():
             raise FileNotFoundError(f"Original audio not found for {track_id}")
 
