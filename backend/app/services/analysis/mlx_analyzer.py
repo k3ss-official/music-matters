@@ -1,10 +1,10 @@
 """
-MLX analyser — wraps allin1.analyze() for pipeline consumption.
+MLX analyser — analysis chain for pipeline consumption.
 
-Returns BPM, key, beats, downbeats, chords, and structural segments
-in a single model pass, replacing the old librosa + heuristic stack.
-
-Falls back to librosa BPM + chroma key if allin1 is unavailable.
+Priority order:
+  1. allin1  — beats + downbeats + key + chords + structure (single pass)
+  2. BeatNet — beats + downbeats via offline DBN (replaces madmom)
+  3. librosa — beat tracker only (last resort)
 """
 from __future__ import annotations
 
@@ -65,35 +65,25 @@ def analyze_with_allin1(audio_path: Path) -> Dict[str, Any]:
     }
 
 
-def analyze_with_madmom(audio_path: Path) -> Dict[str, Any]:
+def analyze_with_beatnet(audio_path: Path) -> Dict[str, Any]:
     """
-    madmom RNN beat + downbeat tracker — accurate to ~10ms, handles tempo changes.
-    Only called if madmom is installed.
+    BeatNet offline DBN — beats + downbeats in a single model pass.
+    Replaces madmom: more accurate downbeat detection, no separate RNN pass.
+    Output rows: [beat_time, beat_number_in_bar] (1-indexed bar position).
     """
-    import madmom
-    import soundfile as sf
     import numpy as np
+    import soundfile as sf
+    import librosa
 
     info = sf.info(str(audio_path))
     duration = info.frames / float(info.samplerate)
 
-    # RNN beat processor → DBN beat tracker (handles tempo variations well)
-    proc = madmom.features.beats.RNNBeatProcessor()
-    dbn  = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
-    beat_times = dbn(proc(str(audio_path))).tolist()
-
-    # Downbeat: RNN downbeat processor
-    try:
-        db_proc = madmom.features.downbeats.RNNDownBeatProcessor()
-        db_dbn  = madmom.features.downbeats.DBNDownBeatTrackingProcessor(
-            beats_per_bar=[3, 4], fps=100
-        )
-        db_out  = db_dbn(db_proc(str(audio_path)))
-        # db_out columns: [beat_time, beat_number_in_bar]
-        downbeat_times = [float(row[0]) for row in db_out if int(row[1]) == 1]
-    except Exception:
-        # Fallback: derive downbeats from every 4th beat
-        downbeat_times = beat_times[::4] if beat_times else []
+    from BeatNet.BeatNet import BeatNet  # noqa: PLC0415
+    estimator = BeatNet(1, mode="offline", inference_model="DBN", plot=[], thread=False)
+    output = estimator.process(str(audio_path))
+    # output: ndarray [[beat_time, beat_number_in_bar], ...]
+    beat_times = [float(row[0]) for row in output]
+    downbeat_times = [float(row[0]) for row in output if int(row[1]) == 1]
 
     # BPM from median inter-beat interval
     if len(beat_times) >= 2:
@@ -102,15 +92,14 @@ def analyze_with_madmom(audio_path: Path) -> Dict[str, Any]:
     else:
         bpm = 120.0
 
-    # Basic key from chroma
-    import librosa
+    # Key from chroma (BeatNet doesn't provide key)
     y, sr = librosa.load(str(audio_path), sr=None, mono=True, duration=120.0)
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
     key_idx = int(chroma.mean(axis=1).argmax())
     keys = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
     logger.info(
-        "madmom OK — bpm=%.1f beats=%d downbeats=%d",
+        "BeatNet OK — bpm=%.1f beats=%d downbeats=%d",
         bpm, len(beat_times), len(downbeat_times),
     )
     return {
@@ -126,7 +115,7 @@ def analyze_with_madmom(audio_path: Path) -> Dict[str, Any]:
 
 
 def analyze_fallback(audio_path: Path) -> Dict[str, Any]:
-    """Librosa beat tracker — used only when madmom is also unavailable."""
+    """Librosa beat tracker — last resort when allin1 and BeatNet both fail."""
     import librosa
     import soundfile as sf
 
@@ -185,21 +174,14 @@ def analyze_track(audio_path: Path) -> Dict[str, Any]:
         )
         return result
     except Exception as exc:
-        logger.warning("allin1 failed (%s), trying madmom", exc)
+        logger.warning("allin1 failed (%s), trying BeatNet", exc)
 
     try:
-        result = analyze_with_madmom(audio_path)
+        result = analyze_with_beatnet(audio_path)
         result.update(base)
-        logger.info(
-            "madmom OK — bpm=%.1f key=%s beats=%d downbeats=%d",
-            result["bpm"],
-            result["key"],
-            len(result["beats"]),
-            len(result["downbeats"]),
-        )
         return result
     except Exception as exc:
-        logger.warning("madmom failed (%s), falling back to librosa", exc)
+        logger.warning("BeatNet failed (%s), falling back to librosa", exc)
 
     result = analyze_fallback(audio_path)
     result.update(base)
