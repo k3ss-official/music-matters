@@ -107,8 +107,16 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Cleanup on shutdown."""
-    logger.info("👋 Music Matters shutting down...")
+    """Graceful shutdown: finish current stage, block new ones, cancel queued tasks."""
+    logger.info("👋 Music Matters shutting down gracefully...")
+    from app.services.pipeline import pipeline
+
+    pipeline._shutting_down = True
+    # Cancel tasks that are queued (haven't acquired the semaphore yet)
+    for job in pipeline._jobs.values():
+        if job.task and not job.task.done() and job.status == "queued":
+            job.task.cancel()
+    logger.info("✅ Shutdown flag set — running jobs will finish current stage then stop")
 
 
 if __name__ == "__main__":

@@ -202,7 +202,12 @@ class PipelineOrchestrator:
         self._downloader = DownloadService(settings)
         self._fallback_root = settings.MUSIC_LIBRARY / ".library"
         self._fallback_root.mkdir(parents=True, exist_ok=True)
-        
+
+        # Concurrency: limit parallel processing jobs
+        self._semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_JOBS)
+        # Shutdown flag: set True on SIGTERM to stop new stages from starting
+        self._shutting_down = False
+
         # SSE Event Queues
         self._event_queues: Dict[UUID, List[asyncio.Queue]] = {}
 
@@ -342,51 +347,69 @@ class PipelineOrchestrator:
     async def _run_pipeline(
         self, job: JobRecord, payload: schemas.IngestRequest | None = None
     ) -> None:
-        job.started_at = datetime.now(timezone.utc)
-        job.status = "running"
-        db.save_job(job)
-        self._broadcast(job.job_id)
-        track = self._tracks[job.track_id]
-
-        # Default options if not provided (e.g. reprocessing)
-        options = payload.options if payload else schemas.ProcessingOptions()
-
-        try:
-            audio_path = await self._run_stage(
-                job, "ingest", self._stage_ingest, track, payload
-            )
-
-            if options.analysis:
-                await self._run_stage(
-                    job, "analysis", self._stage_analysis, track, audio_path
-                )
-
-            if options.separation:
-                await self._run_stage(
-                    job, "separation", self._stage_separation, track, audio_path,
-                    options.separation_mode,
-                )
-
-            if options.loop_slicing:
-                await self._run_stage(job, "loop", self._stage_loop, track, audio_path)
-
-            await self._run_stage(
-                job, "project", self._stage_project, track, audio_path
-            )
-            job.status = "completed"
-            job.detail = "Pipeline completed"
-            job.completed_at = datetime.now(timezone.utc)
-            track.status = "project_ready"
+        # Surface queue position while waiting for a processing slot
+        running = sum(1 for j in self._jobs.values() if j.status == "running")
+        if running >= settings.MAX_CONCURRENT_JOBS:
+            pos = sum(1 for j in self._jobs.values() if j.status == "queued")
+            job.detail = f"Queued — position ~{pos} (max {settings.MAX_CONCURRENT_JOBS} concurrent)"
             db.save_job(job)
             self._broadcast(job.job_id)
-        except Exception as exc:  # pylint: disable=broad-except
-            logger.exception("Pipeline failed for job %s", job.job_id)
-            job.status = "failed"
-            job.detail = str(exc)
-            job.completed_at = datetime.now(timezone.utc)
-            track.status = "error"
+
+        async with self._semaphore:
+            if self._shutting_down:
+                job.status = "failed"
+                job.detail = "Aborted — server shutting down"
+                job.completed_at = datetime.now(timezone.utc)
+                db.save_job(job)
+                self._broadcast(job.job_id)
+                return
+
+            job.started_at = datetime.now(timezone.utc)
+            job.status = "running"
+            job.detail = None
             db.save_job(job)
             self._broadcast(job.job_id)
+            track = self._tracks[job.track_id]
+
+            # Default options if not provided (e.g. reprocessing)
+            options = payload.options if payload else schemas.ProcessingOptions()
+
+            try:
+                audio_path = await self._run_stage(
+                    job, "ingest", self._stage_ingest, track, payload
+                )
+
+                if options.analysis:
+                    await self._run_stage(
+                        job, "analysis", self._stage_analysis, track, audio_path
+                    )
+
+                if options.separation:
+                    await self._run_stage(
+                        job, "separation", self._stage_separation, track, audio_path,
+                        options.separation_mode,
+                    )
+
+                if options.loop_slicing:
+                    await self._run_stage(job, "loop", self._stage_loop, track, audio_path)
+
+                await self._run_stage(
+                    job, "project", self._stage_project, track, audio_path
+                )
+                job.status = "completed"
+                job.detail = "Pipeline completed"
+                job.completed_at = datetime.now(timezone.utc)
+                track.status = "project_ready"
+                db.save_job(job)
+                self._broadcast(job.job_id)
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.exception("Pipeline failed for job %s", job.job_id)
+                job.status = "failed"
+                job.detail = str(exc)
+                job.completed_at = datetime.now(timezone.utc)
+                track.status = "error"
+                db.save_job(job)
+                self._broadcast(job.job_id)
 
     async def _run_stage(
         self,
@@ -396,6 +419,8 @@ class PipelineOrchestrator:
         track: TrackRecord,
         *args,
     ) -> Any:
+        if self._shutting_down:
+            raise RuntimeError("Server is shutting down — aborting pipeline")
         stage = job.stages[stage_id]
         stage.status = "running"
         stage.progress = 0.05
