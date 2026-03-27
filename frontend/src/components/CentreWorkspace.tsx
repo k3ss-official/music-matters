@@ -105,7 +105,7 @@ export function CentreWorkspace({
     const [duration, setDuration] = useState(0);
     const [volume, setVolume] = useState(0.8);
     // Single snap state — controls both WaveformCanvas region snap AND EditLoopSection quantize
-    const [snapEnabled, setSnapEnabled] = useState(true);
+    const [snapEnabled, setSnapEnabled] = useState(false);
 
     // ── Error / save state ───────────────────────────────────────────────
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -133,8 +133,9 @@ export function CentreWorkspace({
     const stemMixer = useStemMixer(trackId, stemNames);
 
     // Refs for stem transport wiring (avoid stale closures in callbacks)
-    const isPlayingRef  = useRef(false);
-    const lastTimeRef   = useRef(0);
+    const isPlayingRef       = useRef(false);
+    const lastTimeRef        = useRef(0);
+    const stemPlayDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // ── Selected stems for export ────────────────────────────────────────
     const [selectedStems, setSelectedStems] = useState<string[]>([]);
@@ -243,22 +244,22 @@ export function CentreWorkspace({
             return;
         }
         setActiveBarPreset(bars);
-        setEditLoopOpen(true);
         if (bpm && duration > 0) {
             const beatDur = 60 / bpm;
             const barDur = beatDur * 4;
-            const snappedStart = Math.round(regionStart / barDur) * barDur;
+            // Snap to the nearest bar boundary from the current playhead
+            const playhead = waveformRef.current?.getCurrentTime() ?? currentTime;
+            const snappedStart = Math.round(playhead / barDur) * barDur;
             const newEnd = Math.min(snappedStart + barDur * bars, duration);
             handleRegionChange(snappedStart, newEnd);
             setIsLooping(true);
             waveformRef.current?.setLooping(true);
-            // Zoom into the selected loop region
             waveformRef.current?.zoomToRegion(snappedStart, newEnd);
             setTimeout(() => {
                 waveformRef.current?.playRegion();
             }, 150);
         }
-    }, [bpm, duration, activeBarPreset, regionStart, handleRegionChange]);
+    }, [bpm, duration, activeBarPreset, currentTime, handleRegionChange]);
 
     // ── Stem solo + play ──────────────────────────────────────────────────
     const handlePlayStem = useCallback((name: string) => {
@@ -493,20 +494,30 @@ export function CentreWorkspace({
                     onTimeUpdate={t => {
                         setCurrentTime(t);
                         onTimeUpdateProp?.(t);
-                        // Seek detection: jump > 0.5 s while playing → resync stems
-                        if (isPlayingRef.current && Math.abs(t - lastTimeRef.current) > 0.5) {
+                        const dt = t - lastTimeRef.current;
+                        lastTimeRef.current = t;
+                        // Resync stems only on backward jump (loop restart) or
+                        // very large forward jump (>2s = user seek, not bar-preset nav)
+                        if (isPlayingRef.current && (dt < -0.1 || dt > 2.0)) {
                             stemMixer.seek(t);
                         }
-                        lastTimeRef.current = t;
                     }}
                     onPlayStateChange={playing => {
                         setIsPlaying(playing);
                         isPlayingRef.current = playing;
                         onPlayStateChangeProp?.(playing);
                         if (playing) {
-                            const offset = waveformRef.current?.getCurrentTime() ?? 0;
-                            stemMixer.play(offset);
+                            // Debounce: WaveSurfer fires 'play' on loop restarts too.
+                            // Cancel any pending call and schedule a fresh one so rapid
+                            // back-to-back play events collapse into a single stemMixer.play().
+                            if (stemPlayDebounceRef.current) clearTimeout(stemPlayDebounceRef.current);
+                            stemPlayDebounceRef.current = setTimeout(() => {
+                                if (!isPlayingRef.current) return; // paused before debounce fired
+                                const offset = waveformRef.current?.getCurrentTime() ?? 0;
+                                stemMixer.play(offset);
+                            }, 30);
                         } else {
+                            if (stemPlayDebounceRef.current) clearTimeout(stemPlayDebounceRef.current);
                             stemMixer.pause();
                         }
                     }}

@@ -261,6 +261,11 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
 
             const wsRegions = ws.registerPlugin(RegionsPlugin.create());
 
+            // Enable drag-to-create: left mouse down + drag on waveform draws a new region
+            wsRegions.enableDragSelection({
+                color: REGION_COLOR,
+            });
+
             wsRef.current = ws;
             wsRegionsRef.current = wsRegions;
             if (wavesurferRef) wavesurferRef.current = ws;

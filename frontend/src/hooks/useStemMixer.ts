@@ -43,6 +43,7 @@ export function useStemMixer(
     const playingRef       = useRef(false);
     const startCtxTimeRef  = useRef(0);   // ctx.currentTime when play() was called
     const startOffsetRef   = useRef(0);   // audio offset passed to play()
+    const playGenRef       = useRef(0);   // incremented each play() call — stale async calls bail out
 
     const [stemStates, setStemStates] = useState<StemMixerState[]>([]);
     const [isLoaded, setIsLoaded]     = useState(false);
@@ -139,8 +140,11 @@ export function useStemMixer(
         const ctx = ctxRef.current;
         if (!ctx) return;
 
+        // Generation token — any later play() call will invalidate this one
+        const gen = ++playGenRef.current;
+
         stopSources();
-        if (ctx.state === 'suspended') ctx.resume();
+        if (ctx.state === 'suspended') await ctx.resume();
 
         startOffsetRef.current  = offset;
         startCtxTimeRef.current = ctx.currentTime;
@@ -150,7 +154,11 @@ export function useStemMixer(
         const names = Array.from(gainNodesRef.current.keys());
         await Promise.all(names.map(name => loadStemBuffer(name)));
 
-        if (!playingRef.current) return; // aborted during load
+        // Bail if a newer play() call has taken over, or if we've been paused
+        if (gen !== playGenRef.current || !playingRef.current) return;
+
+        // Re-sync ctx time after async load
+        startCtxTimeRef.current = ctx.currentTime;
 
         buffersRef.current.forEach((buffer, name) => {
             const gain = gainNodesRef.current.get(name);

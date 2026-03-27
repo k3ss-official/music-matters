@@ -203,21 +203,6 @@ export const TransportBar: React.FC<TransportBarProps> = ({
                 </div>
             )}
 
-            {/* ── Snap toggle ──────────────────────────────────────────────── */}
-            <button
-                onClick={onSnapToggle}
-                title="Beat Snap"
-                className={`
-                    flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-mono
-                    tracking-widest transition-colors focus:outline-none
-                    ${snapEnabled
-                        ? 'bg-[#00d4ff]/15 text-[#00d4ff] border border-[#00d4ff]/30'
-                        : 'bg-white/5 text-white/30 hover:text-white/50 border border-white/10'}
-                `}
-            >
-                <AlignJustify size={11} />
-                SNAP
-            </button>
 
             {/* ── Bar presets ──────────────────────────────────────────────── */}
             {onBarPresetToggle && (
