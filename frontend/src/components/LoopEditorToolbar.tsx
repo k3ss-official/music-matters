@@ -12,10 +12,8 @@
  *  - SAVE LOOP
  */
 import React, { useCallback, useState } from 'react';
-import { ChevronLeft, ChevronRight, Save, Scissors } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Save } from 'lucide-react';
 import type { WaveformHandle } from './WaveformCanvas';
-
-const BAR_PRESETS = [4, 8, 16, 32];
 
 export interface LoopEditorToolbarProps {
     waveformRef: React.RefObject<WaveformHandle>;
@@ -25,11 +23,7 @@ export interface LoopEditorToolbarProps {
     bpm?: number | null;
     onRegionChange: (start: number, end: number) => void;
     onSaveLoop?: (start: number, end: number) => void;
-    onStealRegion?: (start: number, end: number) => void;
     editLoopOpen?: boolean;
-    onEditToggle?: () => void;
-    activeBarPreset?: number | null;
-    onBarPresetToggle?: (bars: number) => void;
 }
 
 function fmtTime(s: number): string {
@@ -66,11 +60,7 @@ export const LoopEditorToolbar: React.FC<LoopEditorToolbarProps> = ({
     bpm,
     onRegionChange,
     onSaveLoop,
-    onStealRegion,
     editLoopOpen,
-    onEditToggle,
-    activeBarPreset,
-    onBarPresetToggle,
 }) => {
     const [editingStart, setEditingStart] = useState(false);
     const [editingEnd,   setEditingEnd]   = useState(false);
@@ -201,59 +191,6 @@ export const LoopEditorToolbar: React.FC<LoopEditorToolbarProps> = ({
             </div>
 
             <div className="flex-1" />
-
-            {/* ── Bar presets ──────────────────────────────────────────────── */}
-            {onBarPresetToggle && (
-                <div className="flex items-center gap-1">
-                    {BAR_PRESETS.map(bars => (
-                        <button
-                            key={bars}
-                            onClick={() => onBarPresetToggle(bars)}
-                            title={`Set loop to ${bars} bars`}
-                            className={`
-                                w-7 h-7 flex items-center justify-center rounded
-                                font-mono text-[10px] font-bold transition-all focus:outline-none
-                                ${activeBarPreset === bars
-                                    ? 'bg-[#8b5cf6]/30 text-[#8b5cf6] border border-[#8b5cf6]/60 shadow-[0_0_6px_rgba(139,92,246,0.3)]'
-                                    : 'bg-white/5 text-white/35 border border-white/10 hover:bg-white/10 hover:text-white/70'}
-                            `}
-                        >
-                            {bars}
-                        </button>
-                    ))}
-                </div>
-            )}
-
-            {/* ── Edit toggle ──────────────────────────────────────────────── */}
-            {onEditToggle && (
-                <button
-                    onClick={onEditToggle}
-                    title={editLoopOpen ? 'Close beat grid editor' : 'Open beat grid editor'}
-                    className={`
-                        flex items-center justify-center px-2.5 h-7 rounded
-                        font-mono text-[10px] font-bold tracking-widest transition-all focus:outline-none
-                        ${editLoopOpen
-                            ? 'bg-[#00d4ff]/20 text-[#00d4ff] border border-[#00d4ff]/50'
-                            : 'bg-white/5 text-white/35 border border-white/10 hover:bg-white/10 hover:text-white/70'}
-                    `}
-                >
-                    EDIT
-                </button>
-            )}
-
-            {/* ── Bounce ───────────────────────────────────────────────────── */}
-            <button
-                onClick={() => onStealRegion?.(regionStart, regionEnd)}
-                title="Bounce — copy this region as a raw audio clip"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded
-                           bg-[#f59e0b]/10 hover:bg-[#f59e0b]/20
-                           text-[#f59e0b] border border-[#f59e0b]/25
-                           font-mono text-[11px] tracking-wider
-                           transition-colors focus:outline-none"
-            >
-                <Scissors size={11} />
-                BOUNCE
-            </button>
 
             {/* ── Save loop ────────────────────────────────────────────────── */}
             <button

@@ -223,13 +223,6 @@ export function CentreWorkspace({
         }
     }, [trackId, trackDetail, saving]);
 
-    // ── Steal region ─────────────────────────────────────────────────────
-    const handleStealRegion = useCallback((start: number, end: number) => {
-        // For now: stop and seek to start of region, ready to export
-        waveformRef.current?.stopRegion();
-        // Trigger save as well
-        handleSaveLoop(start, end);
-    }, [handleSaveLoop]);
 
     // ── Bar preset toggle ─────────────────────────────────────────────────
     const handleBarPresetToggle = useCallback((bars: number) => {
@@ -420,6 +413,10 @@ export function CentreWorkspace({
                     waveformRef.current?.setVolume(vol);
                 }}
                 onSnapToggle={() => setSnapEnabled(v => !v)}
+                activeBarPreset={activeBarPreset}
+                onBarPresetToggle={handleBarPresetToggle}
+                editLoopOpen={editLoopOpen}
+                onEditToggle={() => setEditLoopOpen(v => !v)}
             />
 
             {/* ── Waveform ───────────────────────────────────────────────── */}
@@ -519,11 +516,7 @@ export function CentreWorkspace({
                 bpm={bpm}
                 onRegionChange={handleRegionChange}
                 onSaveLoop={handleSaveLoop}
-                onStealRegion={handleStealRegion}
                 editLoopOpen={editLoopOpen}
-                onEditToggle={() => setEditLoopOpen(v => !v)}
-                activeBarPreset={activeBarPreset}
-                onBarPresetToggle={handleBarPresetToggle}
             />
 
             {/* ── Stem lanes ─────────────────────────────────────────────── */}

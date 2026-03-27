@@ -28,6 +28,8 @@ import {
 } from 'lucide-react';
 import type { WaveformHandle } from './WaveformCanvas';
 
+const BAR_PRESETS = [4, 8, 16, 32];
+
 export interface TransportBarProps {
     waveformRef: React.RefObject<WaveformHandle>;
     isPlaying: boolean;
@@ -40,6 +42,10 @@ export interface TransportBarProps {
     onToggleLoop: () => void;
     onVolumeChange: (v: number) => void;
     onSnapToggle: () => void;
+    activeBarPreset?: number | null;
+    onBarPresetToggle?: (bars: number) => void;
+    editLoopOpen?: boolean;
+    onEditToggle?: () => void;
 }
 
 // Format seconds → MM:SS.ms (e.g. "01:23.456")
@@ -63,6 +69,10 @@ export const TransportBar: React.FC<TransportBarProps> = ({
     onToggleLoop,
     onVolumeChange,
     onSnapToggle,
+    activeBarPreset,
+    onBarPresetToggle,
+    editLoopOpen,
+    onEditToggle,
 }) => {
     const handlePlayPause = useCallback(() => {
         const w = waveformRef.current;
@@ -208,6 +218,45 @@ export const TransportBar: React.FC<TransportBarProps> = ({
                 <AlignJustify size={11} />
                 SNAP
             </button>
+
+            {/* ── Bar presets ──────────────────────────────────────────────── */}
+            {onBarPresetToggle && (
+                <div className="flex items-center gap-1">
+                    {BAR_PRESETS.map(bars => (
+                        <button
+                            key={bars}
+                            onClick={() => onBarPresetToggle(bars)}
+                            title={`${bars}-bar loop`}
+                            className={`
+                                w-7 h-7 flex items-center justify-center rounded
+                                font-mono text-[10px] font-bold transition-all focus:outline-none
+                                ${activeBarPreset === bars
+                                    ? 'bg-[#8b5cf6]/30 text-[#8b5cf6] border border-[#8b5cf6]/60 shadow-[0_0_6px_rgba(139,92,246,0.3)]'
+                                    : 'bg-white/5 text-white/35 border border-white/10 hover:bg-white/10 hover:text-white/70'}
+                            `}
+                        >
+                            {bars}
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            {/* ── Edit loop ────────────────────────────────────────────────── */}
+            {onEditToggle && (
+                <button
+                    onClick={onEditToggle}
+                    title={editLoopOpen ? 'Close beat grid editor' : 'Open beat grid editor'}
+                    className={`
+                        flex items-center justify-center px-2.5 h-8 rounded
+                        font-mono text-[11px] font-bold tracking-widest transition-all focus:outline-none
+                        ${editLoopOpen
+                            ? 'bg-[#00d4ff]/20 text-[#00d4ff] border border-[#00d4ff]/50'
+                            : 'bg-white/5 text-white/35 border border-white/10 hover:bg-white/10 hover:text-white/70'}
+                    `}
+                >
+                    EDIT
+                </button>
+            )}
 
             {/* ── Spacer ───────────────────────────────────────────────────── */}
             <div className="flex-1" />
