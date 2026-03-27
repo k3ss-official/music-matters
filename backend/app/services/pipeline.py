@@ -611,8 +611,9 @@ class PipelineOrchestrator:
                     model="htdemucs_6s",
                     shifts=1,
                     overlap=0.25,
-                    segment=10,    # 10s chunks — caps peak RAM on 16GB M4
-                    batch_size=1,  # one chunk at a time, no batching pressure
+                    # No segment override — use model's training length (~7.8s)
+                    # which is the safe maximum. batch_size=1 caps peak RAM.
+                    batch_size=1,
                 )
 
                 stage.detail = "demucs-mlx: separating stems"
