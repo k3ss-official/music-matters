@@ -111,10 +111,12 @@ async def export_ableton(request: AbletonExportRequest):
     # Resolve stems directory from track record
     from app.services.pipeline import pipeline as _pipeline
     track_record = _pipeline._tracks.get(track_uuid)
-    if track_record and track_record.stems_dir:
+    if not track_record:
+        raise HTTPException(status_code=404, detail="Track record not found")
+    if track_record.stems_dir:
         stems_dir = track_record.stems_dir
     else:
-        stems_dir = settings.resolved_stems_dir / track.slug
+        stems_dir = settings.resolved_stems_dir / track_record.slug
 
     stem_files = {}
     for stem in request.stems:
@@ -138,15 +140,15 @@ async def export_ableton(request: AbletonExportRequest):
     try:
         exporter = get_ableton_exporter()
 
-        output_dir = settings.resolved_exports_dir
+        output_dir = settings.resolved_loops_dir / "ableton"
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        output_file = output_dir / f"{track.slug}_ableton.als"
+        output_file = output_dir / f"{track_record.slug}_ableton.als"
 
         exporter.export(
             output_path=output_file,
             stem_files=stem_files,
-            track_title=track.title,
+            track_title=track_record.title,
             bpm=float(track.bpm or 120.0),
             start_time=request.start_time,
             end_time=request.end_time,
