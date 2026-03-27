@@ -564,6 +564,7 @@ function App() {
                   onPlayStateChange={setIsPlaying}
                   onTimeUpdate={setCurrentTime}
                   onOpenExportDialog={() => setExportDialogOpen(true)}
+                  onSelectedStemsChange={setSelectedStems}
                 />
               </ErrorBoundary>
             </section>

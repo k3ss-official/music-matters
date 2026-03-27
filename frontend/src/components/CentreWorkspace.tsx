@@ -43,6 +43,8 @@ interface CentreWorkspaceProps {
     onPlayStateChange?: (playing: boolean) => void;
     onTimeUpdate?: (time: number) => void;
     onOpenExportDialog?: () => void;
+    /** Lifted stem selection — keeps ExportPanel in App.tsx in sync */
+    onSelectedStemsChange?: (stems: string[]) => void;
 }
 
 // ── Phrase display helpers ─────────────────────────────────────────────────
@@ -94,6 +96,7 @@ export function CentreWorkspace({
     onPlayStateChange: onPlayStateChangeProp,
     onTimeUpdate: onTimeUpdateProp,
     onOpenExportDialog,
+    onSelectedStemsChange,
 }: CentreWorkspaceProps) {
     // ── Waveform ref ─────────────────────────────────────────────────────
     const waveformRef = useRef<WaveformHandle>(null);
@@ -247,9 +250,11 @@ export function CentreWorkspace({
         if (bpm && duration > 0) {
             const beatDur = 60 / bpm;
             const barDur = beatDur * 4;
-            // Snap to the nearest bar boundary from the current playhead
             const playhead = waveformRef.current?.getCurrentTime() ?? currentTime;
-            const snappedStart = Math.round(playhead / barDur) * barDur;
+            // Snap ON → align to nearest bar boundary; Snap OFF → start exactly at playhead
+            const snappedStart = snapEnabled
+                ? Math.round(playhead / barDur) * barDur
+                : playhead;
             const newEnd = Math.min(snappedStart + barDur * bars, duration);
             handleRegionChange(snappedStart, newEnd);
             setIsLooping(true);
@@ -505,6 +510,14 @@ export function CentreWorkspace({
                     }}
                     onRegionUpdate={(s, e) => {
                         onUpdateRegion(s, e);
+                        // If user dragged a custom region, clear the bar preset badge
+                        // unless the new region length matches the active preset exactly
+                        if (bpm && activeBarPreset) {
+                            const expectedLen = (60 / bpm) * 4 * activeBarPreset;
+                            if (Math.abs((e - s) - expectedLen) > 0.1) {
+                                setActiveBarPreset(null);
+                            }
+                        }
                     }}
                     onTimeUpdate={t => {
                         setCurrentTime(t);
@@ -577,11 +590,15 @@ export function CentreWorkspace({
                         mixerLoaded={stemMixer.isLoaded}
                         isPlaying={isPlaying}
                         selectedStems={selectedStems}
-                        onToggleStemSelection={name =>
-                            setSelectedStems(prev =>
-                                prev.includes(name) ? prev.filter(s => s !== name) : [...prev, name]
-                            )
-                        }
+                        onToggleStemSelection={name => {
+                            setSelectedStems(prev => {
+                                const next = prev.includes(name)
+                                    ? prev.filter(s => s !== name)
+                                    : [...prev, name];
+                                onSelectedStemsChange?.(next);
+                                return next;
+                            });
+                        }}
                     />
                 </div>
             )}

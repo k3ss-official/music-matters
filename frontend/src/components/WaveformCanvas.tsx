@@ -247,6 +247,8 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 height: 110,
                 normalize: true,
                 interact: true,
+                autoScroll: true,
+                autoCenter: true,
                 plugins: [
                     TimelinePlugin.create({
                         container: timelineRef.current,

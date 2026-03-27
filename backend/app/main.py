@@ -55,6 +55,25 @@ app.add_middleware(
 # Include API router
 app.include_router(api_router, prefix="/api")
 
+# Download any generated file (exports, .als, loops) — path must stay inside MUSIC_LIBRARY
+@app.get("/api/download-file")
+async def download_file(path: str):
+    """Serve a generated export file (e.g. .als, .wav loop) by absolute path."""
+    from pathlib import Path
+    from fastapi import HTTPException
+    file_path = Path(path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {path}")
+    # Security: path must be inside the music library root
+    try:
+        file_path.resolve().relative_to(settings.MUSIC_LIBRARY.resolve())
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Access denied")
+    import mimetypes
+    media_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+    return FileResponse(file_path, media_type=media_type, filename=file_path.name)
+
+
 # Serve audio files
 @app.get("/audio/{path:path}")
 async def serve_audio(path: str):
