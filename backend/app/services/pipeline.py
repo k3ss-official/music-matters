@@ -607,7 +607,13 @@ class PipelineOrchestrator:
 
                 stage.detail = "demucs-mlx: loading htdemucs_6s model"
                 stage.progress = 0.2
-                sep = Separator(model="htdemucs_6s", shifts=1, overlap=0.25)
+                sep = Separator(
+                    model="htdemucs_6s",
+                    shifts=1,
+                    overlap=0.25,
+                    segment=10,    # 10s chunks — caps peak RAM on 16GB M4
+                    batch_size=1,  # one chunk at a time, no batching pressure
+                )
 
                 stage.detail = "demucs-mlx: separating stems"
                 stage.progress = 0.3

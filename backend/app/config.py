@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     MUSIC_LIBRARY: Path = Path.home() / "Music Matters"
     CACHE_DIR: Path = Path.home() / ".cache" / "music-matters"
     TEMP_DIR: Path = Path.home() / ".cache" / "music-matters" / "temp"
+    # HuggingFace model cache — redirect to SSD to keep boot drive free.
+    # Set HF_HOME env var to override (or change this default).
+    HF_HOME: Path = Path("/Volumes/MLX/cache")
 
     @property
     def resolved_downloads_dir(self) -> Path:

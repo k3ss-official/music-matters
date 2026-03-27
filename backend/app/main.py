@@ -10,6 +10,7 @@ The ultimate DJ & producer automation platform combining:
 - DAW export (Rekordbox, Serato, M3U)
 """
 import logging
+import os
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -97,8 +98,15 @@ async def health_check():
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup."""
+    # Redirect HuggingFace model cache to SSD before any model imports
+    hf_home = str(settings.HF_HOME)
+    os.environ.setdefault("HF_HOME", hf_home)
+    os.environ.setdefault("HUGGINGFACE_HUB_CACHE", hf_home + "/hub")
+    os.environ.setdefault("TRANSFORMERS_CACHE", hf_home + "/hub")
+
     logger.info(f"🎧 {settings.APP_NAME} v{settings.APP_VERSION} starting...")
     logger.info(f"📁 Music Library: {settings.MUSIC_LIBRARY}")
+    logger.info(f"🤗 HF cache: {hf_home}")
     logger.info(f"🎛️  Demucs Model: {settings.DEMUCS_MODEL} on {settings.DEMUCS_DEVICE}")
     logger.info(f"🔬 SOTA Analysis: {settings.ENABLE_SOTA_ANALYSIS}")
     logger.info(f"👆 Fingerprinting: {settings.ENABLE_FINGERPRINTING}")
