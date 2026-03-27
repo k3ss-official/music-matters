@@ -131,3 +131,19 @@ Next:
 2. Test EDIT zoom-in fine-tuning workflow
 3. Test SAVE LOOP → check file saved to ~/music-matters/loops/
 4. Phase 1.3 Roformer vocal quality path
+
+---
+## Update 2026-03-27 (session end)
+
+Commit `64b2c14`:
+- **Double audio fixed**: playGenRef counter in stemMixer + 30ms debounce on onPlayStateChange
+- **Seek threshold fixed**: only backward jumps (loop restart) or >2s forward (user seek) trigger resync
+- **Drag to create region**: `wsRegions.enableDragSelection()` now enabled in WaveformCanvas
+- **Bar presets start from playhead**: `currentTime` used instead of `regionStart` 
+- **SNAP button removed**: snap defaults off, no quantize
+- **Bar presets no longer auto-open EDIT**: EDIT is an explicit button
+
+Remaining:
+1. Test full workflow (upload → stems → drag region → [ ] keys → bar presets → EDIT → SAVE)
+2. Phase 1.3 Roformer
+3. Stream router prefix conflict fix
