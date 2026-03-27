@@ -79,11 +79,6 @@ export function useStemMixer(
         master.connect(ctx.destination);
         masterGainRef.current = master;
 
-        // Initialise state as loading
-        setStemStates(stemNames.map(name => ({
-            name, muted: false, soloed: false, loaded: false, error: false,
-        })));
-
         // Lazy-load: only pre-create gain nodes. Actual audio buffers are
         // fetched on-demand when play() is called, to avoid ~186MB upfront decode.
         stemNames.forEach(name => {

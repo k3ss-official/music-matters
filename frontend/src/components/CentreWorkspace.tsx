@@ -417,13 +417,11 @@ export function CentreWorkspace({
                 duration={duration}
                 volume={volume}
                 bpm={bpm}
-                snapEnabled={snapEnabled}
                 onToggleLoop={handleToggleLoop}
                 onVolumeChange={vol => {
                     setVolume(vol);
                     waveformRef.current?.setVolume(vol);
                 }}
-                onSnapToggle={() => setSnapEnabled(v => !v)}
                 activeBarPreset={activeBarPreset}
                 onBarPresetToggle={handleBarPresetToggle}
                 editLoopOpen={editLoopOpen}

@@ -559,8 +559,6 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                                 <div
                                     className="absolute inset-0 overflow-hidden"
                                     style={{ pointerEvents: 'none' }}
-                                    onPointerMove={handleMarkerPointerMove}
-                                    onPointerUp={handleMarkerPointerUp}
                                 >
                                     {/* IN marker */}
                                     {(() => {

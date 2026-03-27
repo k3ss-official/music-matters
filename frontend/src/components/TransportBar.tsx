@@ -22,7 +22,6 @@ import {
     ZoomIn,
     ZoomOut,
     Maximize2,
-    AlignJustify,
     SkipBack,
     SkipForward,
 } from 'lucide-react';
@@ -38,10 +37,8 @@ export interface TransportBarProps {
     duration: number;         // seconds
     volume: number;           // 0–1
     bpm?: number | null;
-    snapEnabled: boolean;
     onToggleLoop: () => void;
     onVolumeChange: (v: number) => void;
-    onSnapToggle: () => void;
     activeBarPreset?: number | null;
     onBarPresetToggle?: (bars: number) => void;
     editLoopOpen?: boolean;
@@ -65,10 +62,8 @@ export const TransportBar: React.FC<TransportBarProps> = ({
     duration,
     volume,
     bpm,
-    snapEnabled,
     onToggleLoop,
     onVolumeChange,
-    onSnapToggle,
     activeBarPreset,
     onBarPresetToggle,
     editLoopOpen,

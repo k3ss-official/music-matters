@@ -184,7 +184,7 @@ export function useKeyboardShortcuts({
                 }
                 case ' ':
                     e.preventDefault();
-                    ws?.isPlaying() ? ws.pause() : ws?.play();
+                    ws?.isPlaying() ? ws?.pause() : ws?.play();
                     return;
                 case 'Escape':
                     e.preventDefault();
