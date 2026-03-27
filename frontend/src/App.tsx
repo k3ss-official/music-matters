@@ -44,7 +44,6 @@ import { subscribeToJob } from './services/sse';
 
 import { CentreWorkspace } from './components/CentreWorkspace';
 import { AnalysisPanel } from './components/AnalysisPanel';
-import { StemLanes } from './components/StemLanes';
 import { ExportPanel } from './components/ExportPanel';
 import { ExportDialog } from './components/ExportDialog';
 import { ProcessingView } from './components/ProcessingView';
@@ -132,6 +131,32 @@ function App() {
     const interval = setInterval(checkHealth, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  // ── Recent tracks for upload page ─────────────────────────────────────────
+  const [recentTracks, setRecentTracks] = useState<any[]>([]);
+  useEffect(() => {
+    if (view === 'upload' && isConnected) {
+      api.listTracks(6, 0).then(data => setRecentTracks(data.items)).catch(() => {});
+    }
+  }, [view, isConnected]);
+
+  // ── Deep-link: ?track=<id> in URL loads directly into workspace ─────────
+  const deepLinkHandled = useRef(false);
+  useEffect(() => {
+    if (deepLinkHandled.current || !isConnected) return;
+    const params = new URLSearchParams(window.location.search);
+    const trackParam = params.get('track');
+    if (trackParam) {
+      deepLinkHandled.current = true;
+      setSelectedTrackId(trackParam);
+      setDetailLoading(true);
+      api.getTrackDetail(trackParam).then(detail => {
+        setTrackDetail(detail);
+        setDetailLoading(false);
+        setView('workspace');
+      }).catch(() => { setDetailLoading(false); });
+    }
+  }, [isConnected]);
 
   // ── Track detail fetcher ─────────────────────────────────────────────────
   const fetchTrackDetail = useCallback(async (id: string) => {
@@ -468,6 +493,38 @@ function App() {
                   Backend offline — start the server first
                 </div>
               )}
+
+              {/* Recent tracks */}
+              {recentTracks.length > 0 && (
+                <div className="w-full max-w-lg mt-4">
+                  <div className="text-[10px] font-mono tracking-[0.2em] text-white/25 text-center mb-3">RECENT TRACKS</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {recentTracks.map((t: any) => (
+                      <button
+                        key={t.track_id}
+                        onClick={() => {
+                          setSelectedTrackId(t.track_id);
+                          setDetailLoading(true);
+                          api.getTrackDetail(t.track_id).then(detail => {
+                            setTrackDetail(detail);
+                            setDetailLoading(false);
+                            setView('workspace');
+                          }).catch(() => setDetailLoading(false));
+                        }}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] hover:border-[#00d4ff]/30 transition-all text-left"
+                      >
+                        <div className="w-8 h-8 rounded bg-gradient-to-br from-[#8b5cf6]/30 to-[#00d4ff]/30 flex items-center justify-center text-[#00d4ff]">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-white truncate capitalize">{t.title}</div>
+                          <div className="text-[10px] text-white/30 font-mono">{Math.round(t.bpm)} BPM  {t.musical_key}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -517,17 +574,6 @@ function App() {
                 loading={detailLoading}
                 trackDetail={trackDetail}
                 onRequestSeparation={selectedTrackId ? handleRequestSeparation : undefined}
-              />
-
-              <StemLanes
-                trackId={selectedTrackId || ''}
-                availableStems={trackDetail?.stems || []}
-                selectedStems={selectedStems}
-                onToggleStemSelection={toggleStemSelection}
-                onRequestSeparation={handleRequestSeparation}
-                loading={detailLoading}
-                isPlaying={isPlaying}
-                currentTime={currentTime}
               />
 
               <ExportPanel

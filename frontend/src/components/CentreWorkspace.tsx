@@ -14,6 +14,8 @@ import WaveformCanvas, { WaveformHandle } from './WaveformCanvas';
 import { TransportBar } from './TransportBar';
 import { LoopEditorToolbar } from './LoopEditorToolbar';
 import { EditLoopSection } from './EditLoopSection';
+import { StemLanes } from './StemLanes';
+import { useStemMixer } from '../hooks/useStemMixer';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import {
     getTrackAudioUrl,
@@ -123,6 +125,15 @@ export function CentreWorkspace({
     const downbeats: number[] = (trackDetail?.metadata?.downbeats as number[]) ?? [];
     const chords: Array<{ start: number; end: number; chord: string }> =
         (trackDetail?.metadata?.chords as any[]) ?? [];
+
+    // ── Stem names (strip .wav) ───────────────────────────────────────────
+    const stemNames = (trackDetail?.stems ?? []).map(s => s.replace(/\.wav$/, ''));
+
+    // ── Stem mixer ───────────────────────────────────────────────────────
+    const stemMixer = useStemMixer(trackId, stemNames);
+
+    // ── Selected stems for export ────────────────────────────────────────
+    const [selectedStems, setSelectedStems] = useState<string[]>([]);
 
     // ── Audio URL ────────────────────────────────────────────────────────
     const audioUrl = trackId ? getTrackAudioUrl(trackId) : null;
@@ -477,19 +488,28 @@ export function CentreWorkspace({
                 onRegionChange={handleRegionChange}
                 onSaveLoop={handleSaveLoop}
                 onStealRegion={handleStealRegion}
-                activeBarPreset={activeBarPreset}
-                onBarPresetToggle={handleBarPresetToggle}
                 editLoopOpen={editLoopOpen}
-                onEditLoopToggle={() => {
-                    const opening = !editLoopOpen;
-                    setEditLoopOpen(opening);
-                    if (opening && regionEnd > regionStart) {
-                        waveformRef.current?.zoomToRegion(regionStart, regionEnd);
-                    } else if (!opening) {
-                        waveformRef.current?.zoomFit();
-                    }
-                }}
             />
+
+            {/* ── Stem lanes ─────────────────────────────────────────────── */}
+            {stemNames.length > 0 && (
+                <div className="shrink-0 max-h-[220px] overflow-y-auto border-t border-white/5">
+                    <StemLanes
+                        trackId={trackId ?? undefined}
+                        availableStems={stemNames}
+                        stemMixerStates={stemMixer.stemStates}
+                        onToggleMute={stemMixer.toggleMute}
+                        onToggleSolo={stemMixer.toggleSolo}
+                        mixerLoaded={stemMixer.isLoaded}
+                        selectedStems={selectedStems}
+                        onToggleStemSelection={name =>
+                            setSelectedStems(prev =>
+                                prev.includes(name) ? prev.filter(s => s !== name) : [...prev, name]
+                            )
+                        }
+                    />
+                </div>
+            )}
 
             {/* ── Smart phrases ──────────────────────────────────────────── */}
             {(loadingPhrases || smartPhrases.length > 0 || phrasesError) && (

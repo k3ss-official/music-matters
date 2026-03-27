@@ -229,12 +229,14 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 activeRegionRef.current = null;
             }
 
+            let destroyed = false;
             setErrorMsg(null);
             setLoading(true);
             setDuration(0);
 
             const ws = WaveSurfer.create({
                 container: containerRef.current,
+                url: audioUrl,
                 waveColor: 'rgba(139, 92, 246, 0.45)',
                 progressColor: '#8b5cf6',
                 cursorColor: '#00d4ff',
@@ -266,6 +268,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
 
             // ── Ready ────────────────────────────────────────────────────────
             ws.on('ready', () => {
+                if (destroyed) return;
                 setLoading(false);
                 const dur = ws.getDuration();
                 setDuration(dur);
@@ -333,6 +336,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             });
 
             ws.on('error', (err: any) => {
+                if (destroyed) return;
                 const msg = typeof err === 'string' ? err : err?.message || 'Failed to load audio';
                 // Ignore abort errors — caused by React StrictMode double-invoke cleanup
                 if (msg.toLowerCase().includes('abort') || msg.toLowerCase().includes('signal')) return;
@@ -348,15 +352,8 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 setVisibleStart(vStart);
             });
 
-            try {
-                ws.load(audioUrl);
-            } catch (err: any) {
-                setLoading(false);
-                setErrorMsg(err.message);
-                if (onError) onError(err, audioUrl);
-            }
-
             return () => {
+                destroyed = true;
                 regionLoopRef.current = false;
                 ws.destroy();
                 wsRef.current = null;

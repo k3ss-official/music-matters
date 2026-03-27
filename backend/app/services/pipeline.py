@@ -482,7 +482,7 @@ class PipelineOrchestrator:
             search_query = f"ytsearch1:{source}"
             return self._downloader.download(search_query)
 
-        audio_path = _download()
+        audio_path = await asyncio.to_thread(_download)
 
         stage.detail = f"Source staged at {audio_path}"
         stage.progress = 0.9
@@ -505,7 +505,7 @@ class PipelineOrchestrator:
             from app.services.analysis.mlx_analyzer import analyze_track
             return analyze_track(audio_path)
 
-        analysis = _compute()
+        analysis = await asyncio.to_thread(_compute)
 
         stage.progress = 1.0
         bpm = analysis["bpm"]
@@ -664,7 +664,29 @@ class PipelineOrchestrator:
             except Exception:  # pylint: disable=broad-except
                 return {"mixdown": mixdown_path}
 
-        stem_map = _separate()
+        # Hard timeout: demucs can freeze the OS if it OOMs. 8 min is generous for M4.
+        try:
+            stem_map = await asyncio.wait_for(
+                asyncio.to_thread(_separate),
+                timeout=480,
+            )
+        except asyncio.TimeoutError:
+            logger.error("Stem separation timed out after 8 minutes — falling back to HPSS")
+            stage.detail = "Separation timed out — using HPSS fallback"
+            import librosa, soundfile as sf2
+            info = sf2.info(str(audio_path))
+            sr = int(info.samplerate)
+            data, _ = sf2.read(str(audio_path), dtype="float32")
+            if data.ndim > 1:
+                data = data.mean(axis=1)
+            mixdown_path = stems_dir / "mixdown.wav"
+            sf2.write(mixdown_path, data, sr)
+            harmonic, percussive = librosa.effects.hpss(data)
+            harmonic_path = stems_dir / "harmonic.wav"
+            percussive_path = stems_dir / "percussive.wav"
+            sf2.write(harmonic_path, harmonic.astype("float32"), sr)
+            sf2.write(percussive_path, percussive.astype("float32"), sr)
+            stem_map = {"mixdown": mixdown_path, "harmonic": harmonic_path, "percussive": percussive_path}
         track.stems_dir = stems_dir
         track.stems = [path.name for path in stem_map.values()]
         track.status = "stems_ready"
@@ -773,7 +795,7 @@ class PipelineOrchestrator:
 
             return results
 
-        loop_records = _generate()
+        loop_records = await asyncio.to_thread(_generate)
         stage.progress = 1.0
         stage.detail = f"{len(loop_records)} loops ready"
         self._loop_records[track.track_id] = {loop.id: loop for loop in loop_records}
@@ -806,7 +828,7 @@ class PipelineOrchestrator:
             with metadata_path.open("w", encoding="utf-8") as handle:
                 json.dump(content, handle, indent=2)
 
-        _write()
+        await asyncio.to_thread(_write)
         stage.progress = 1.0
         stage.detail = f"Project scaffold at {metadata_path}"
         track.status = "project_ready"

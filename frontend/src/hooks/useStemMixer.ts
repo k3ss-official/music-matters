@@ -20,7 +20,7 @@ export interface StemMixerState {
 interface StemMixerReturn {
     stemStates: StemMixerState[];
     isLoaded: boolean;
-    play: (offset: number) => void;
+    play: (offset: number) => Promise<void>;
     pause: () => void;
     seek: (offset: number) => void;
     toggleMute: (name: string) => void;
@@ -33,6 +33,7 @@ export function useStemMixer(
     stemNames: string[],   // base names without extension e.g. ['drums', 'bass']
 ): StemMixerReturn {
     const ctxRef         = useRef<AudioContext | null>(null);
+    const trackIdRef     = useRef<string | null>(trackId);
     const masterGainRef  = useRef<GainNode | null>(null);
     const gainNodesRef   = useRef<Map<string, GainNode>>(new Map());
     const buffersRef     = useRef<Map<string, AudioBuffer>>(new Map());
@@ -66,6 +67,7 @@ export function useStemMixer(
             setStemStates([]);
             return;
         }
+        trackIdRef.current = trackId;
 
         // Fresh context
         const ctx = new AudioContext();
@@ -81,40 +83,20 @@ export function useStemMixer(
             name, muted: false, soloed: false, loaded: false, error: false,
         })));
 
-        let cancelled = false;
-
-        Promise.all(
-            stemNames.map(async name => {
-                try {
-                    const url  = getStemAudioUrl(trackId, name);
-                    const res  = await fetch(url);
-                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                    const buf  = await res.arrayBuffer();
-                    const audio = await ctx.decodeAudioData(buf);
-                    return { name, audio, ok: true as const };
-                } catch {
-                    return { name, audio: null, ok: false as const };
-                }
-            })
-        ).then(results => {
-            if (cancelled) return;
-            results.forEach(({ name, audio, ok }) => {
-                if (ok && audio) {
-                    buffersRef.current.set(name, audio);
-                    const gain = ctx.createGain();
-                    gain.gain.value = 1;
-                    gain.connect(master);
-                    gainNodesRef.current.set(name, gain);
-                }
-                setStemStates(prev =>
-                    prev.map(s => s.name === name ? { ...s, loaded: ok, error: !ok } : s)
-                );
-            });
-            setIsLoaded(true);
+        // Lazy-load: only pre-create gain nodes. Actual audio buffers are
+        // fetched on-demand when play() is called, to avoid ~186MB upfront decode.
+        stemNames.forEach(name => {
+            const gain = ctx.createGain();
+            gain.gain.value = 1;
+            gain.connect(master);
+            gainNodesRef.current.set(name, gain);
         });
+        setStemStates(stemNames.map(name => ({
+            name, muted: false, soloed: false, loaded: true, error: false,
+        })));
+        setIsLoaded(true);
 
         return () => {
-            cancelled = true;
             sourceNodesRef.current.forEach(n => { try { n.stop(); } catch {} });
             sourceNodesRef.current.clear();
             gainNodesRef.current.clear();
@@ -136,8 +118,24 @@ export function useStemMixer(
         sourceNodesRef.current.clear();
     }, []);
 
+    // ── Lazy-load a single stem buffer on demand ────────────────────────────
+    const loadStemBuffer = useCallback(async (name: string): Promise<AudioBuffer | null> => {
+        if (buffersRef.current.has(name)) return buffersRef.current.get(name)!;
+        const ctx = ctxRef.current;
+        if (!ctx || !trackIdRef.current) return null;
+        try {
+            const url = getStemAudioUrl(trackIdRef.current, name);
+            const res = await fetch(url);
+            if (!res.ok) return null;
+            const buf = await res.arrayBuffer();
+            const audio = await ctx.decodeAudioData(buf);
+            buffersRef.current.set(name, audio);
+            return audio;
+        } catch { return null; }
+    }, []);
+
     // ── Play from given audio offset ──────────────────────────────────────────
-    const play = useCallback((offset: number) => {
+    const play = useCallback(async (offset: number) => {
         const ctx = ctxRef.current;
         if (!ctx) return;
 
@@ -147,6 +145,12 @@ export function useStemMixer(
         startOffsetRef.current  = offset;
         startCtxTimeRef.current = ctx.currentTime;
         playingRef.current      = true;
+
+        // Load any missing buffers lazily, then start all sources together
+        const names = Array.from(gainNodesRef.current.keys());
+        await Promise.all(names.map(name => loadStemBuffer(name)));
+
+        if (!playingRef.current) return; // aborted during load
 
         buffersRef.current.forEach((buffer, name) => {
             const gain = gainNodesRef.current.get(name);
@@ -158,7 +162,7 @@ export function useStemMixer(
             source.start(0, safeOffset);
             sourceNodesRef.current.set(name, source);
         });
-    }, [stopSources]);
+    }, [stopSources, loadStemBuffer]);
 
     // ── Pause — record current position ──────────────────────────────────────
     const pause = useCallback(() => {
