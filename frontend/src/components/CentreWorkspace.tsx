@@ -175,10 +175,18 @@ export function CentreWorkspace({
         }
     }, [trackId]);
 
-    // ── Volume → WaveSurfer ───────────────────────────────────────────────
+    // ── Volume routing: mute WaveSurfer when stems are loaded (stems ARE the audio) ──
+    const stemsActive = stemMixer.isLoaded && stemNames.length > 0;
     useEffect(() => {
-        waveformRef.current?.setVolume(volume);
-    }, [volume]);
+        if (stemsActive) {
+            // Silence WaveSurfer — stem mixer provides all audio
+            waveformRef.current?.setVolume(0);
+            stemMixer.setMasterVolume(volume);
+        } else {
+            waveformRef.current?.setVolume(volume);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [stemsActive, volume]);
 
     // ── Loop toggle ───────────────────────────────────────────────────────
     const handleToggleLoop = useCallback(() => {
@@ -244,6 +252,8 @@ export function CentreWorkspace({
             handleRegionChange(snappedStart, newEnd);
             setIsLooping(true);
             waveformRef.current?.setLooping(true);
+            // Zoom into the selected loop region
+            waveformRef.current?.zoomToRegion(snappedStart, newEnd);
             setTimeout(() => {
                 waveformRef.current?.playRegion();
             }, 150);
@@ -416,7 +426,16 @@ export function CentreWorkspace({
                 activeBarPreset={activeBarPreset}
                 onBarPresetToggle={handleBarPresetToggle}
                 editLoopOpen={editLoopOpen}
-                onEditToggle={() => setEditLoopOpen(v => !v)}
+                onEditToggle={() => setEditLoopOpen(v => {
+                    const next = !v;
+                    if (next && regionEnd > regionStart) {
+                        // Zoom waveform into the loop region so user can fine-tune
+                        waveformRef.current?.zoomToRegion(regionStart, regionEnd);
+                    } else if (!next) {
+                        waveformRef.current?.zoomFit();
+                    }
+                    return next;
+                })}
             />
 
             {/* ── Waveform ───────────────────────────────────────────────── */}
