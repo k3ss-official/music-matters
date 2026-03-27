@@ -140,14 +140,36 @@ export const LoopEditorToolbar: React.FC<LoopEditorToolbarProps> = ({
                 </button>
             </div>
 
-            {/* ── Loop length ──────────────────────────────────────────────── */}
-            <div className="flex flex-col items-center justify-center min-w-[60px]">
-                <span className="font-mono text-[13px] text-white/70 tabular-nums">
-                    {loopLength.toFixed(2)}s
-                </span>
-                <span className="font-mono text-[10px] text-[#8b5cf6]/70 tracking-wide">
-                    {fmtBarBeats(loopLength, bpm)}
-                </span>
+            {/* ── Loop length + Halve/Double ───────────────────────────────── */}
+            <div className="flex items-center gap-1.5">
+                <button
+                    onClick={() => applyRegion(regionStart, regionStart + loopLength / 2)}
+                    title="Halve loop length (÷2)"
+                    disabled={loopLength < 0.2}
+                    className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-white/40 hover:text-white
+                               font-mono text-[11px] transition-colors disabled:opacity-25 disabled:cursor-not-allowed
+                               border border-white/10 hover:border-white/20"
+                >
+                    ÷2
+                </button>
+                <div className="flex flex-col items-center justify-center min-w-[60px]">
+                    <span className="font-mono text-[13px] text-white/70 tabular-nums">
+                        {loopLength.toFixed(2)}s
+                    </span>
+                    <span className="font-mono text-[10px] text-[#8b5cf6]/70 tracking-wide">
+                        {fmtBarBeats(loopLength, bpm)}
+                    </span>
+                </div>
+                <button
+                    onClick={() => applyRegion(regionStart, Math.min(regionStart + loopLength * 2, duration))}
+                    title="Double loop length (×2)"
+                    disabled={regionStart + loopLength * 2 > duration + 0.01}
+                    className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-white/40 hover:text-white
+                               font-mono text-[11px] transition-colors disabled:opacity-25 disabled:cursor-not-allowed
+                               border border-white/10 hover:border-white/20"
+                >
+                    ×2
+                </button>
             </div>
 
             {/* ── OUT ─────────────────────────────────────────────────────── */}

@@ -562,6 +562,8 @@ export function CentreWorkspace({
                     quantizeEnabled={snapEnabled}
                     onQuantizeToggle={() => setSnapEnabled(v => !v)}
                     onClose={() => setEditLoopOpen(false)}
+                    onRegionChange={handleRegionChange}
+                    duration={duration}
                 />
             )}
 
