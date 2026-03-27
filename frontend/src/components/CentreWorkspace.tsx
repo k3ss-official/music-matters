@@ -132,6 +132,10 @@ export function CentreWorkspace({
     // ── Stem mixer ───────────────────────────────────────────────────────
     const stemMixer = useStemMixer(trackId, stemNames);
 
+    // Refs for stem transport wiring (avoid stale closures in callbacks)
+    const isPlayingRef  = useRef(false);
+    const lastTimeRef   = useRef(0);
+
     // ── Selected stems for export ────────────────────────────────────────
     const [selectedStems, setSelectedStems] = useState<string[]>([]);
 
@@ -460,8 +464,26 @@ export function CentreWorkspace({
                     onRegionUpdate={(s, e) => {
                         onUpdateRegion(s, e);
                     }}
-                    onTimeUpdate={t => { setCurrentTime(t); onTimeUpdateProp?.(t); }}
-                    onPlayStateChange={playing => { setIsPlaying(playing); onPlayStateChangeProp?.(playing); }}
+                    onTimeUpdate={t => {
+                        setCurrentTime(t);
+                        onTimeUpdateProp?.(t);
+                        // Seek detection: jump > 0.5 s while playing → resync stems
+                        if (isPlayingRef.current && Math.abs(t - lastTimeRef.current) > 0.5) {
+                            stemMixer.seek(t);
+                        }
+                        lastTimeRef.current = t;
+                    }}
+                    onPlayStateChange={playing => {
+                        setIsPlaying(playing);
+                        isPlayingRef.current = playing;
+                        onPlayStateChangeProp?.(playing);
+                        if (playing) {
+                            const offset = waveformRef.current?.getCurrentTime() ?? 0;
+                            stemMixer.play(offset);
+                        } else {
+                            stemMixer.pause();
+                        }
+                    }}
                 />
             </div>
 

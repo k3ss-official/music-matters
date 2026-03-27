@@ -199,29 +199,19 @@ export function useKeyboardShortcuts({
                     ws?.seek(clamp(now() + 0.1));
                     return;
                 case '[': {
+                    // CDJ-style: set loop IN at current playhead
                     e.preventDefault();
-                    const phraseEdge = nearestPhraseEdge(start, phrasesRef.current);
-                    if (phraseEdge !== null && phraseEdge < end) {
-                        // Snap IN to nearest phrase boundary
-                        onUpdateRef.current(phraseEdge, end);
-                    } else if (beatDur > 0) {
-                        // Fallback: nudge IN back by 1 bar
-                        const barDur = beatDur * 4;
-                        onUpdateRef.current(clamp(start - barDur), end);
-                    }
+                    const t = clamp(now());
+                    const newEnd = end > t + 0.05 ? end : clamp(t + beatDur * 4);
+                    onUpdateRef.current(t, newEnd);
                     return;
                 }
                 case ']': {
+                    // CDJ-style: set loop OUT at current playhead
                     e.preventDefault();
-                    const phraseEdge = nearestPhraseEdge(end, phrasesRef.current);
-                    if (phraseEdge !== null && phraseEdge > start) {
-                        // Snap OUT to nearest phrase boundary
-                        onUpdateRef.current(start, phraseEdge);
-                    } else if (beatDur > 0) {
-                        // Fallback: nudge OUT forward by 1 bar
-                        const barDur = beatDur * 4;
-                        onUpdateRef.current(start, clamp(end + barDur));
-                    }
+                    const t = clamp(now());
+                    const newStart = start < t - 0.05 ? start : Math.max(0, t - beatDur * 4);
+                    onUpdateRef.current(newStart, t);
                     return;
                 }
             }
