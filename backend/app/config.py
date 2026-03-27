@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     RELOAD: bool = True
 
     # Paths
-    MUSIC_LIBRARY: Path = Path.home() / "Music Matters"
+    MUSIC_LIBRARY: Path = Path.home() / "music-matters"
     CACHE_DIR: Path = Path.home() / ".cache" / "music-matters"
     TEMP_DIR: Path = Path.home() / ".cache" / "music-matters" / "temp"
     # HuggingFace model cache — redirect to SSD to keep boot drive free.
