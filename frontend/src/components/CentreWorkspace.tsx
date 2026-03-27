@@ -242,13 +242,13 @@ export function CentreWorkspace({
             return;
         }
         setActiveBarPreset(bars);
+        setEditLoopOpen(true);
         if (bpm && duration > 0) {
             const beatDur = 60 / bpm;
             const barDur = beatDur * 4;
             const snappedStart = Math.round(regionStart / barDur) * barDur;
             const newEnd = Math.min(snappedStart + barDur * bars, duration);
             handleRegionChange(snappedStart, newEnd);
-            // Auto-engage loop and start playing the region
             setIsLooping(true);
             waveformRef.current?.setLooping(true);
             setTimeout(() => {
@@ -256,6 +256,16 @@ export function CentreWorkspace({
             }, 150);
         }
     }, [bpm, duration, activeBarPreset, regionStart, handleRegionChange]);
+
+    // ── Stem solo + play ──────────────────────────────────────────────────
+    const handlePlayStem = useCallback((name: string) => {
+        const currentState = stemMixer.stemStates.find(s => s.name === name);
+        const wasSoloed = currentState?.soloed ?? false;
+        stemMixer.toggleSolo(name);
+        if (!wasSoloed && !isPlaying) {
+            waveformRef.current?.play();
+        }
+    }, [stemMixer, isPlaying]);
 
     // ── Export to Ableton (Cmd+E) ─────────────────────────────────────────
     const handleExportAbleton = useCallback(() => {
@@ -511,6 +521,9 @@ export function CentreWorkspace({
                 onSaveLoop={handleSaveLoop}
                 onStealRegion={handleStealRegion}
                 editLoopOpen={editLoopOpen}
+                onEditToggle={() => setEditLoopOpen(v => !v)}
+                activeBarPreset={activeBarPreset}
+                onBarPresetToggle={handleBarPresetToggle}
             />
 
             {/* ── Stem lanes ─────────────────────────────────────────────── */}
@@ -522,7 +535,9 @@ export function CentreWorkspace({
                         stemMixerStates={stemMixer.stemStates}
                         onToggleMute={stemMixer.toggleMute}
                         onToggleSolo={stemMixer.toggleSolo}
+                        onPlayStem={handlePlayStem}
                         mixerLoaded={stemMixer.isLoaded}
+                        isPlaying={isPlaying}
                         selectedStems={selectedStems}
                         onToggleStemSelection={name =>
                             setSelectedStems(prev =>
