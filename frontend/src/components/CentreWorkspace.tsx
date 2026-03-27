@@ -271,6 +271,32 @@ export function CentreWorkspace({
         }
     }, [stemMixer, isPlaying]);
 
+    // ── EDIT toggle — zoom waveform into loop region ──────────────────────
+    const handleEditToggle = useCallback(() => {
+        setEditLoopOpen(prev => {
+            const next = !prev;
+            if (next) {
+                const s = regionStart;
+                const e = regionEnd;
+                if (e > s) {
+                    // Zoom in: force at least 200px/s so the region is always prominent
+                    waveformRef.current?.zoomToRegion(s, e);
+                } else if (bpm && duration > 0) {
+                    // No region — snap a 4-bar region from playhead and zoom to it
+                    const barDur = (60 / bpm) * 4;
+                    const playhead = waveformRef.current?.getCurrentTime() ?? 0;
+                    const snappedStart = Math.round(playhead / barDur) * barDur;
+                    const newEnd = Math.min(snappedStart + barDur * 4, duration);
+                    handleRegionChange(snappedStart, newEnd);
+                    setTimeout(() => waveformRef.current?.zoomToRegion(snappedStart, newEnd), 30);
+                }
+            } else {
+                waveformRef.current?.zoomFit();
+            }
+            return next;
+        });
+    }, [regionStart, regionEnd, bpm, duration, handleRegionChange]);
+
     // ── Export to Ableton (Cmd+E) ─────────────────────────────────────────
     const handleExportAbleton = useCallback(() => {
         if (!trackId) return;
@@ -425,16 +451,7 @@ export function CentreWorkspace({
                 activeBarPreset={activeBarPreset}
                 onBarPresetToggle={handleBarPresetToggle}
                 editLoopOpen={editLoopOpen}
-                onEditToggle={() => setEditLoopOpen(v => {
-                    const next = !v;
-                    if (next && regionEnd > regionStart) {
-                        // Zoom waveform into the loop region so user can fine-tune
-                        waveformRef.current?.zoomToRegion(regionStart, regionEnd);
-                    } else if (!next) {
-                        waveformRef.current?.zoomFit();
-                    }
-                    return next;
-                })}
+                onEditToggle={handleEditToggle}
             />
 
             {/* ── Waveform ───────────────────────────────────────────────── */}

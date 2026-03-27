@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import type { WaveformHandle } from './WaveformCanvas';
 
-const BAR_PRESETS = [4, 8, 16, 32];
+const BAR_PRESETS = [1, 4, 8, 16];
 
 export interface TransportBarProps {
     waveformRef: React.RefObject<WaveformHandle>;
