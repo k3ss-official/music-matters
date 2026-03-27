@@ -114,3 +114,20 @@ Data dir: `~/music-matters/` (library.db, downloads/, stems/, loops/)
 2. Test: play, stem ▶/M/S, VU bars, [ ] keys, bar presets, EDIT beat grid
 3. Phase 1.3 — Roformer (see docs/PRODUCTION-PLAN.md §1.3)
 4. Fix stream router prefix conflict (backend/app/api/router.py)
+
+---
+## Update 2026-03-27 (latest)
+
+Added commits:
+- `8b83ddb` mute WaveSurfer when stems loaded + zoom to region on EDIT
+
+Fixes:
+- **Double audio gone**: WaveSurfer is silenced when stems are present. Volume slider now routes to stemMixer.setMasterVolume. Stems = the audio.
+- **EDIT zooms in**: clicking EDIT zooms the waveform to the loop region. Closing EDIT calls zoomFit to return to full track view.
+- **Bar preset zooms in**: selecting 4/8/16/32 also zooms to the new loop region.
+
+Next:
+1. Test stem playback (no galloping horses double audio now)
+2. Test EDIT zoom-in fine-tuning workflow
+3. Test SAVE LOOP → check file saved to ~/music-matters/loops/
+4. Phase 1.3 Roformer vocal quality path
