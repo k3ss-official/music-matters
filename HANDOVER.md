@@ -1,204 +1,116 @@
-# 🔄 Handover: Enhanced UI with Track History & Processing Options
-
-## ✅ What's Already Working
-
-**Backend:**
-- 6-stem Demucs separation (vocals, drums, bass, other, guitar, piano)
-- Real BPM/key detection
-- File upload API (`POST /api/v1/jobs/upload`)
-- URL ingest API (`POST /api/v1/jobs/ingest`)
-- Track listing API (`GET /api/v1/library/tracks`)
-- Clean directory structure (0-cache, 1-downloads, 2-stems, 3-loops, 4-projects)
-- CORS enabled
-- Git committed and pushed
-
-**Frontend:**
-- Basic upload working
-- Progress timeline with visual indicators
-- Loop controls
-- Search panel
-
-## 🚧 What Needs Completing
-
-### 1. **Integrate UploadPanel Component**
-
-**File:** `/Volumes/deep-1t/Users/k3ss/projects/music-matters/frontend/src/App.tsx`
-
-**What to do:**
-- Replace the current `SearchPanel` upload logic with the new `UploadPanel` component
-- Add handlers for file upload and URL submit that accept `ProcessingOptions`
-- The `UploadPanel` component is already created at `frontend/src/components/UploadPanel.tsx`
-
-**Handler signature:**
-```typescript
-const handleFileUploadWithOptions = async (file: File, options: ProcessingOptions) => {
-  // Upload file with processing options
-  // Currently uploadFile() doesn't accept options - you'll need to update the API
-};
-
-const handleUrlSubmitWithOptions = async (url: string, options: ProcessingOptions) => {
-  // Submit URL with processing options
-  // Currently ingestSource() doesn't accept options - you'll need to update the API
-};
-```
-
-### 2. **Integrate TrackHistory Component**
-
-**File:** `/Volumes/deep-1t/Users/k3ss/projects/music-matters/frontend/src/App.tsx`
-
-**What to do:**
-- Add a `useEffect` to load tracks on mount:
-```typescript
-useEffect(() => {
-  const loadTracks = async () => {
-    try {
-      const trackList = await listTracks();
-      setTracks(trackList);
-    } catch (err) {
-      console.error('Failed to load tracks:', err);
-    }
-  };
-  loadTracks();
-}, []);
-```
-
-- Add handler for track selection:
-```typescript
-const handleTrackSelect = async (trackId: string) => {
-  setActiveTrackId(trackId);
-  await loadLoops(trackId, loopLength);
-};
-```
-
-- Render the component in the layout (probably in the right sidebar or a new section)
-
-### 3. **Update Backend API to Accept Processing Options**
-
-**Files to modify:**
-- `app/api/schemas.py` - Add `ProcessingOptions` schema
-- `app/api/routes/ingest.py` - Update endpoints to accept options
-- `app/services/pipeline.py` - Conditionally skip stages based on options
-
-**Example schema:**
-```python
-class ProcessingOptions(BaseModel):
-    analysis: bool = True
-    separation: bool = True
-    loop_slicing: bool = True
-    mastering: bool = False
-
-class IngestRequest(BaseModel):
-    source: str
-    tags: list[str] = []
-    collection: str | None = None
-    options: ProcessingOptions = ProcessingOptions()
-```
-
-**Pipeline modification:**
-```python
-def run_pipeline(self, track_id: str, options: ProcessingOptions):
-    stages = []
-    if options.analysis:
-        stages.append(self._stage_analysis)
-    if options.separation:
-        stages.append(self._stage_separation)
-    if options.loop_slicing:
-        stages.append(self._stage_loop)
-    # etc...
-```
-
-### 4. **Update Frontend API Calls**
-
-**File:** `frontend/src/services/api.ts`
-
-Update these functions to accept and send processing options:
-```typescript
-export async function uploadFile(file: File, options?: ProcessingOptions): Promise<IngestResponse> {
-  const formData = new FormData();
-  formData.append('file', file);
-  if (options) {
-    formData.append('options', JSON.stringify(options));
-  }
-  // ... rest of implementation
-}
-
-export async function ingestSource(payload: IngestPayload & { options?: ProcessingOptions }): Promise<IngestResponse> {
-  // ... include options in request body
-}
-```
-
-### 5. **Layout Integration**
-
-**Suggested layout in App.tsx:**
-```tsx
-<main className="panel-grid">
-  <section className="column column--primary">
-    <UploadPanel
-      onFileUpload={handleFileUploadWithOptions}
-      onUrlSubmit={handleUrlSubmitWithOptions}
-      loading={loading}
-    />
-    <LoopControls ... />
-  </section>
-  
-  <aside className="column column--secondary">
-    <TrackHistory
-      tracks={tracks}
-      onTrackSelect={handleTrackSelect}
-      selectedTrackId={activeTrackId}
-    />
-    <ProgressTimeline job={job} />
-  </aside>
-</main>
-```
-
-## 📁 Files Created
-
-**New Components:**
-- `frontend/src/components/UploadPanel.tsx` - Upload UI with processing mode selection
-- `frontend/src/components/TrackHistory.tsx` - Track history list
-
-**Updated Types:**
-- `frontend/src/types.ts` - Added `TrackSummary`, `ProcessingMode`, `ProcessingOptions`
-
-## 🐛 Minor Fixes Needed
-
-1. Remove unused `KeyboardEvent` import from `UploadPanel.tsx` line 1
-2. The `UploadPanel` component uses inline event handlers - consider extracting them if needed
-3. Add proper error handling for track list loading
-
-## 🎯 Testing Checklist
-
-After integration:
-- [ ] Upload file with "Full Pipeline" mode
-- [ ] Upload file with "Stems Only" mode
-- [ ] Upload file with "Master + Stems" mode
-- [ ] Upload file with "Custom" mode (select specific stages)
-- [ ] Verify track appears in history
-- [ ] Click track in history to load its loops
-- [ ] Verify selected track is highlighted
-- [ ] Check that processing respects the selected options
-
-## 🚀 Quick Start Commands
-
-```bash
-# Backend
-cd /Volumes/deep-1t/Users/k3ss/projects/music-matters
-conda activate music-matters
-uvicorn app.main:app --reload --port 8010
-
-# Frontend
-cd frontend
-npm run dev
-```
-
-## 📝 Notes
-
-- The backend currently processes all stages regardless of options - you need to implement conditional stage execution
-- The `mastering` option is new - you'll need to implement a mastering stage if desired
-- Track history refreshes on mount but doesn't auto-update when new tracks are added - consider adding polling or WebSocket updates
-- Processing options are currently frontend-only - backend needs to be updated to respect them
+# Music Matters — Handover
+> Updated: 2026-03-27 · Branch: main
 
 ---
 
-**Current Status:** Components created, types defined, ready for integration into App.tsx and backend API updates.
+## Done This Session (commits in order)
+
+| Commit | What |
+|--------|------|
+| `36cfe6d` | Cap demucs-mlx RAM + Phase 1.4 HF_HOME SSD redirect |
+| `7dae1a0` | Phase 1.2 — BeatNet replaces madmom in analysis chain |
+| `d5fccd5` | Phase 0.3+0.4 — concurrent job limiting + graceful shutdown |
+| `1d15b2f` | Restore lost UI changes + pipeline timeout + BOUNCE rename |
+| `93ea8e3` | CDJ-style `[` `]` keys + wire stem transport to WaveSurfer |
+| `0770a1e` | Restore bar presets + EDIT button + wire stem play + VU bars |
+| `1c1d0f4` | Move bar presets + EDIT to TransportBar, kill BOUNCE |
+
+---
+
+## Current UI Layout
+
+```
+[ |< ] [ □ ] [ ▶ ] [ >| ] [LOOP]   00:00.000 / 03:15.004   130.4 BPM   [SNAP]   [4] [8] [16] [32] [EDIT]    ... zoom ... vol
+──────────────────────────────────────────────────────────────────────────
+                          WAVEFORM
+──────────────────────────────────────────────────────────────────────────
+         EditLoopSection (beat grid canvas) — shown when EDIT active
+──────────────────────────────────────────────────────────────────────────
+IN [<] 00:00.000 [>]   0.00s / 0 beats   [<] 00:00.000 [>] OUT       [SAVE LOOP]
+──────────────────────────────────────────────────────────────────────────
+STEMS: Drums / Bass / Vocals / Guitar / Piano / Other   [▶] [M] [S] per row
+──────────────────────────────────────────────────────────────────────────
+Phrases row (smart phrase detection pills)
+```
+
+---
+
+## What Works ✅
+
+- Upload → Processing view → Workspace transition
+- WaveSurfer waveform: beat snap, drag regions, loop playback, zoom
+- demucs-mlx 6-stem separation (htdemucs_6s)
+- BeatNet beat/downbeat detection
+- `[` = set loop IN at playhead, `]` = set loop OUT at playhead
+- `I` / `O` same as `[` / `]`
+- Space = play/pause, Esc = stop
+- Bar presets 4/8/16/32 in TransportBar → snaps region, auto-loops, opens EDIT
+- EDIT button in TransportBar → toggles beat grid canvas
+- Stem mixer: M mute, S solo, ▶ solo+play (if not playing, starts WaveSurfer too)
+- VU bars animate during playback
+- WaveSurfer play/pause/seek drives all stem AudioContext nodes in sync (seek detected by >0.5s jump)
+- Job queue: asyncio.Semaphore(3), graceful shutdown
+- HF_HOME → /Volumes/MLX/cache (off boot drive)
+- SQLite persistence (tracks/loops/jobs survive restarts)
+- SSE real-time progress stream
+
+---
+
+## Known Remaining Issues ❌
+
+1. **No track with real 6 stems yet** — user needs to re-upload. Last track had HPSS stems (3 stems) and was deleted. demucs-mlx segment fix is committed so next upload should produce drums/bass/vocals/guitar/piano/other.
+2. **Stream router prefix conflict** — `jobs.py` and `stream.py` both use `prefix="/jobs"`. Fix: reorder in router.py or change stream prefix.
+3. **Phase 1.3 not started** — Roformer vocal quality path.
+4. **Phase 2+ not started** — Model registry, stem selection, SAM extraction.
+
+---
+
+## Production Plan Progress
+
+```
+Phase 0  ██████████  DONE  — SQLite, SSE, concurrency, graceful shutdown
+Phase 1  ████████░░  75%   — demucs-mlx ✅, BeatNet ✅, HF_HOME ✅, Roformer ❌
+Phase 2  ░░░░░░░░░░  0%    — Model registry, stem selection, SAM
+Phase 3  ░░░░░░░░░░  0%    — Zustand, error boundaries, data integrity, export quality
+Phase 4  ░░░░░░░░░░  0%    — ACE-Step, MIDI, chord overlay, stem→MIDI
+```
+
+---
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `backend/app/services/pipeline.py` | Main orchestrator: ingest→analyse→separate→loop→project |
+| `backend/app/services/analysis/mlx_analyzer.py` | allin1 → BeatNet → librosa fallback chain |
+| `backend/app/config.py` | MUSIC_LIBRARY=~/music-matters, HF_HOME=/Volumes/MLX/cache |
+| `backend/app/main.py` | FastAPI app, startup/shutdown hooks |
+| `frontend/src/components/CentreWorkspace.tsx` | State owner: wires everything |
+| `frontend/src/components/TransportBar.tsx` | Play/pause/stop/loop, bar presets, EDIT, zoom, snap, volume |
+| `frontend/src/components/WaveformCanvas.tsx` | WaveSurfer v7 (MediaElement backend) |
+| `frontend/src/components/LoopEditorToolbar.tsx` | IN/OUT nudge + SAVE LOOP only |
+| `frontend/src/components/EditLoopSection.tsx` | Beat grid canvas (opened by EDIT or bar preset) |
+| `frontend/src/components/StemLanes.tsx` | Stem rows: VU bars, ▶ M S |
+| `frontend/src/hooks/useStemMixer.ts` | Web Audio API: per-stem gain nodes, lazy buffer loading |
+| `frontend/src/hooks/useKeyboardShortcuts.ts` | All keyboard shortcuts |
+
+---
+
+## How to Start
+
+```bash
+conda activate music-matters
+cd ~/k3ss-official/music-matters
+./start.sh
+# Backend:  http://localhost:8010/api/docs
+# Frontend: http://localhost:5173
+```
+
+Data dir: `~/music-matters/` (library.db, downloads/, stems/, loops/)
+
+## Next Directive
+
+1. Re-upload a track → verify 6 real stems show in StemLanes
+2. Test: play, stem ▶/M/S, VU bars, [ ] keys, bar presets, EDIT beat grid
+3. Phase 1.3 — Roformer (see docs/PRODUCTION-PLAN.md §1.3)
+4. Fix stream router prefix conflict (backend/app/api/router.py)
