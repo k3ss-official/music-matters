@@ -19,6 +19,11 @@ import React, {
 import WaveSurfer from 'wavesurfer.js';
 import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.js';
 import TimelinePlugin from 'wavesurfer.js/dist/plugins/timeline.js';
+import MinimapPlugin from 'wavesurfer.js/dist/plugins/minimap.js';
+
+// Heights (px) for layout coordinate calculations
+const MINIMAP_H = 48;
+const TIMELINE_H = 18;
 
 // ─── Public handle exposed via ref ────────────────────────────────────────────
 export interface WaveformHandle {
@@ -125,6 +130,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
     ) {
         const containerRef = useRef<HTMLDivElement>(null);
         const timelineRef = useRef<HTMLDivElement>(null);
+        const minimapRef = useRef<HTMLDivElement>(null);
         const gridCanvasRef = useRef<HTMLCanvasElement>(null);
 
         const [loading, setLoading] = useState(false);
@@ -241,7 +247,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
 
         // ── Init WaveSurfer ───────────────────────────────────────────────────
         useEffect(() => {
-            if (!containerRef.current || !timelineRef.current || !audioUrl) return;
+            if (!containerRef.current || !timelineRef.current || !minimapRef.current || !audioUrl) return;
 
             // Clean up previous instance
             if (wsRef.current) {
@@ -273,11 +279,24 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 plugins: [
                     TimelinePlugin.create({
                         container: timelineRef.current,
-                        height: 18,
+                        height: TIMELINE_H,
                         timeInterval: 1,
                         primaryLabelInterval: 10,
                         secondaryLabelInterval: 5,
                         style: { fontSize: '10px', color: '#555' },
+                    }),
+                    MinimapPlugin.create({
+                        container: minimapRef.current!,
+                        height: MINIMAP_H,
+                        waveColor: 'rgba(139, 92, 246, 0.28)',
+                        progressColor: 'rgba(139, 92, 246, 0.55)',
+                        cursorColor: '#00d4ff',
+                        cursorWidth: 1,
+                        overlayColor: 'rgba(0, 212, 255, 0.08)',
+                        barWidth: 1,
+                        barGap: 0,
+                        barRadius: 0,
+                        interact: true,
                     }),
                 ],
             });
@@ -564,11 +583,19 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                             </div>
                         )}
 
+                        {/* ── Overview / minimap strip ── */}
+                        <div
+                            ref={minimapRef}
+                            className="w-full bg-[#06060e] border-b border-white/[0.04] overflow-hidden"
+                            style={{ height: MINIMAP_H }}
+                            title="Overview — click to navigate"
+                        />
+
                         {/* BPM grid overlay canvas */}
                         <canvas
                             ref={gridCanvasRef}
                             className="absolute inset-0 z-[1] pointer-events-none w-full h-full"
-                            style={{ top: 18 }} // offset below timeline
+                            style={{ top: MINIMAP_H + TIMELINE_H }} // below minimap + timeline
                         />
 
                         {/* Timeline ruler + IN/OUT marker overlay */}
@@ -668,7 +695,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                             const rightL = Math.max(0, (regionEnd   - visibleStart) * zoom);
                             const shade  = 'rgba(8,8,15,0.58)';
                             const style: React.CSSProperties = {
-                                top: 18,   // below timeline ruler
+                                top: MINIMAP_H + TIMELINE_H,   // below minimap + timeline ruler
                                 bottom: chords.length > 0 ? 18 : 0,
                                 pointerEvents: 'none',
                                 position: 'absolute',

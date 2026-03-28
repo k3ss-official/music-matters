@@ -29,6 +29,11 @@ interface StemLanesProps {
     onRequestSeparation?: () => void;
     loading?:   boolean;
     isPlaying?: boolean;
+    /** When EDIT loop is open, show loop scope indicator on each lane */
+    editLoopOpen?: boolean;
+    regionStart?: number;
+    regionEnd?: number;
+    trackDuration?: number;
 }
 
 // ── Colours & ordering ──────────────────────────────────────────────────────
@@ -114,7 +119,9 @@ export function StemLanes({
     availableStems, stemMixerStates, onToggleMute, onToggleSolo, onPlayStem,
     mixerLoaded, selectedStems, onToggleStemSelection,
     onRequestSeparation, loading, isPlaying = false,
+    editLoopOpen = false, regionStart = 0, regionEnd = 0, trackDuration = 0,
 }: StemLanesProps) {
+    const showScope = editLoopOpen && trackDuration > 0 && regionEnd > regionStart;
 
     if (loading || availableStems.length === 0) {
         return <EmptyState loading={loading} onRequestSeparation={onRequestSeparation} />;
@@ -179,11 +186,12 @@ export function StemLanes({
                         <div
                             key={stem}
                             className={`
-                                flex items-center gap-2.5 px-3 py-1.5 select-none
+                                flex flex-col px-3 py-1.5 select-none
                                 transition-all
                                 ${dimRow ? 'opacity-35' : 'opacity-100'}
                             `}
                         >
+                        <div className="flex items-center gap-2.5">
                             {/* Export checkbox */}
                             <div
                                 onClick={e => { e.stopPropagation(); onToggleStemSelection(stem); }}
@@ -259,6 +267,23 @@ export function StemLanes({
                             >
                                 S
                             </button>
+                        </div>{/* end inner flex row */}
+
+                            {/* Loop scope bar — visible when EDIT mode is open */}
+                            {showScope && (
+                                <div className="relative w-full h-[3px] bg-white/[0.04] rounded-full overflow-hidden mt-1">
+                                    <div
+                                        className="absolute h-full rounded-full"
+                                        style={{
+                                            left:  `${(regionStart / trackDuration) * 100}%`,
+                                            width: `${((regionEnd - regionStart) / trackDuration) * 100}%`,
+                                            backgroundColor: color,
+                                            opacity: dimRow ? 0.2 : 0.8,
+                                            boxShadow: dimRow ? 'none' : `0 0 4px ${color}88`,
+                                        }}
+                                    />
+                                </div>
+                            )}
                         </div>
                     );
                 })}

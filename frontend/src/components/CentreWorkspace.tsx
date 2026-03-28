@@ -593,6 +593,10 @@ export function CentreWorkspace({
                         mixerLoaded={stemMixer.isLoaded}
                         isPlaying={isPlaying}
                         selectedStems={selectedStems}
+                        editLoopOpen={editLoopOpen}
+                        regionStart={regionStart}
+                        regionEnd={regionEnd}
+                        trackDuration={duration}
                         onToggleStemSelection={name => {
                             setSelectedStems(prev => {
                                 const next = prev.includes(name)
