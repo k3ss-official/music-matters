@@ -43,6 +43,8 @@ export interface TransportBarProps {
     onBarPresetToggle?: (bars: number) => void;
     editLoopOpen?: boolean;
     onEditToggle?: () => void;
+    snapEnabled?: boolean;
+    onSnapToggle?: () => void;
 }
 
 // Format seconds → MM:SS.ms (e.g. "01:23.456")
@@ -68,6 +70,8 @@ export const TransportBar: React.FC<TransportBarProps> = ({
     onBarPresetToggle,
     editLoopOpen,
     onEditToggle,
+    snapEnabled,
+    onSnapToggle,
 }) => {
     const handlePlayPause = useCallback(() => {
         const w = waveformRef.current;
@@ -219,6 +223,23 @@ export const TransportBar: React.FC<TransportBarProps> = ({
                         </button>
                     ))}
                 </div>
+            )}
+
+            {/* ── Snap toggle ──────────────────────────────────────────────── */}
+            {onSnapToggle && (
+                <button
+                    onClick={onSnapToggle}
+                    title={snapEnabled ? 'Snap to grid ON — click to disable (or hold Alt while dragging)' : 'Snap to grid OFF — click to enable'}
+                    className={`
+                        flex items-center justify-center px-2.5 h-8 rounded
+                        font-mono text-[11px] font-bold tracking-widest transition-all focus:outline-none
+                        ${snapEnabled
+                            ? 'bg-[#00ff88]/15 text-[#00ff88] border border-[#00ff88]/40'
+                            : 'bg-white/5 text-white/35 border border-white/10 hover:bg-white/10 hover:text-white/70'}
+                    `}
+                >
+                    SNAP
+                </button>
             )}
 
             {/* ── Edit loop ────────────────────────────────────────────────── */}

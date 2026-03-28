@@ -75,6 +75,8 @@ export interface WaveformCanvasProps {
     regionEnd?: number;
     /** Phrase boundary times for snap grid (e.g. from allin1 smart phrases) */
     phraseMarkers?: number[];
+    /** Whether loop mode is active — controls region dim overlay visibility */
+    isLooping?: boolean;
 }
 
 // How close (seconds) to a beat before we snap
@@ -125,6 +127,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             regionStart,
             regionEnd,
             phraseMarkers = [],
+            isLooping = false,
         },
         ref
     ) {
@@ -132,6 +135,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
         const timelineRef = useRef<HTMLDivElement>(null);
         const minimapRef = useRef<HTMLDivElement>(null);
         const gridCanvasRef = useRef<HTMLCanvasElement>(null);
+        const outerRef = useRef<HTMLDivElement>(null);
 
         const [loading, setLoading] = useState(false);
         const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -191,6 +195,22 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 window.removeEventListener('keydown', onDown);
                 window.removeEventListener('keyup',   onUp);
             };
+        }, []);
+
+        // ── Shift+scroll = zoom ───────────────────────────────────────────────
+        useEffect(() => {
+            const el = outerRef.current;
+            if (!el) return;
+            const onWheel = (e: WheelEvent) => {
+                if (!e.shiftKey) return;
+                e.preventDefault();
+                // deltaY > 0 = scroll down = zoom out; < 0 = scroll up = zoom in
+                setZoom(z => e.deltaY < 0
+                    ? Math.min(z * 1.15, 2000)
+                    : Math.max(z / 1.15, 10));
+            };
+            el.addEventListener('wheel', onWheel, { passive: false });
+            return () => el.removeEventListener('wheel', onWheel);
         }, []);
 
         // ── Draw BPM grid + real downbeats overlay ────────────────────────────
@@ -471,6 +491,12 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             },
             setLooping: (enabled: boolean) => {
                 regionLoopRef.current = enabled;
+                // Lock the view on the region when looping — stop WaveSurfer scrolling away
+                const ws = wsRef.current as any;
+                if (ws) {
+                    ws.options.autoScroll = !enabled;
+                    ws.options.autoCenter = !enabled;
+                }
             },
             seek: (seconds: number) => {
                 wsRef.current?.setTime(seconds);
@@ -557,7 +583,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
         }, []);
 
         return (
-            <div className="relative w-full rounded-lg bg-[#08080f] overflow-hidden select-none">
+            <div ref={outerRef} className="relative w-full rounded-lg bg-[#08080f] overflow-hidden select-none">
                 {audioUrl === null ? (
                     <div className="h-[150px] flex items-center justify-center text-gray-600 text-sm">
                         No track loaded
@@ -689,8 +715,8 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                             )}
                         </div>
 
-                        {/* Loop region dim overlays — shade outside the active region */}
-                        {duration > 0 && regionStart !== undefined && regionEnd !== undefined && regionEnd > regionStart && (() => {
+                        {/* Loop region dim overlays — only visible when LOOP mode is ON */}
+                        {isLooping && duration > 0 && regionStart !== undefined && regionEnd !== undefined && regionEnd > regionStart && (() => {
                             const leftW  = Math.max(0, (regionStart - visibleStart) * zoom);
                             const rightL = Math.max(0, (regionEnd   - visibleStart) * zoom);
                             const shade  = 'rgba(8,8,15,0.58)';

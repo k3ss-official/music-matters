@@ -256,13 +256,10 @@ export function CentreWorkspace({
                 ? Math.round(playhead / barDur) * barDur
                 : playhead;
             const newEnd = Math.min(snappedStart + barDur * bars, duration);
+            // Just set the region — do NOT auto-start the loop.
+            // User must press LOOP to activate looping.
             handleRegionChange(snappedStart, newEnd);
-            setIsLooping(true);
-            waveformRef.current?.setLooping(true);
             waveformRef.current?.zoomToRegion(snappedStart, newEnd);
-            setTimeout(() => {
-                waveformRef.current?.playRegion();
-            }, 150);
         }
     }, [bpm, duration, activeBarPreset, currentTime, handleRegionChange]);
 
@@ -457,6 +454,8 @@ export function CentreWorkspace({
                 onBarPresetToggle={handleBarPresetToggle}
                 editLoopOpen={editLoopOpen}
                 onEditToggle={handleEditToggle}
+                snapEnabled={snapEnabled}
+                onSnapToggle={() => setSnapEnabled(v => !v)}
             />
 
             {/* ── Waveform ───────────────────────────────────────────────── */}
@@ -496,6 +495,7 @@ export function CentreWorkspace({
                     chords={chords}
                     bpm={bpm}
                     snapEnabled={snapEnabled}
+                    isLooping={isLooping}
                     regionStart={regionStart}
                     regionEnd={regionEnd}
                     phraseMarkers={smartPhrases.map(p => p.start_time)}

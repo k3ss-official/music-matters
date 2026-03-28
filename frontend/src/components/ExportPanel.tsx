@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { DownloadCloud, Music2, Loader2, CheckCircle2 } from 'lucide-react';
+import { DownloadCloud } from 'lucide-react';
 import * as api from '../services/api';
 
 const STEM_COLORS: Record<string, string> = {
@@ -35,10 +35,14 @@ export function ExportPanel({
     onOpenDialog,
     disabled,
 }: ExportPanelProps) {
+    // "mixdown" is the full-mix option — treated as a pseudo-stem
+    const MIXDOWN = '__mixdown__';
+
     // Local stem selection (initialised from externalStems / availableStems)
     const [localStems, setLocalStems] = useState<string[]>(() =>
         externalStems.length > 0 ? externalStems : availableStems,
     );
+    const [mixdownSelected, setMixdownSelected] = useState(false);
 
     // Keep local in sync when external (StemLanes) changes
     React.useEffect(() => {
@@ -46,8 +50,7 @@ export function ExportPanel({
     }, [externalStems, availableStems]);
 
     const [exporting, setExporting] = useState(false);
-    const [abletonLoading, setAbletonLoading] = useState(false);
-    const [abletonSuccess, setAbletonSuccess] = useState(false);
+    const [abletonLoading] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
     const toggleStem = useCallback((stem: string) => {
@@ -60,9 +63,23 @@ export function ExportPanel({
         try {
             setExporting(true);
             setErrorMsg(null);
-            const stems = localStems.length > 0 ? localStems : availableStems;
-            const loop = await api.createCustomLoop(trackId, regionStart, regionEnd, stems);
-            if (onExportComplete) onExportComplete(loop);
+            if (mixdownSelected) {
+                // Export full mix (no stem filtering)
+                const { blob, filename } = await api.downloadAbletonExport(
+                    trackId, ['mixdown'], regionStart, regionEnd,
+                );
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = filename;
+                document.body.appendChild(a); a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                if (onExportComplete) onExportComplete({ mixdown: true });
+            } else {
+                const stems = localStems.length > 0 ? localStems : availableStems;
+                const loop = await api.createCustomLoop(trackId, regionStart, regionEnd, stems);
+                if (onExportComplete) onExportComplete(loop);
+            }
         } catch (e: any) {
             setErrorMsg(e.message || 'Export failed');
         } finally {
@@ -70,43 +87,11 @@ export function ExportPanel({
         }
     };
 
-    const handleExportAbleton = async () => {
-        if (!trackId || abletonLoading) return;
-        setAbletonLoading(true);
-        setExporting(true);
-        setErrorMsg(null);
-        setAbletonSuccess(false);
-        try {
-            const stems = localStems.length > 0 ? localStems : ['mixdown'];
-            const { blob, filename } = await api.downloadAbletonExport(
-                trackId, stems, regionStart, regionEnd,
-            );
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            setAbletonSuccess(true);
-            setTimeout(() => setAbletonSuccess(false), 3000);
-        } catch (e: any) {
-            setErrorMsg(
-                e instanceof api.ApiError
-                    ? `Export failed (${e.status}): ${e.detail}`
-                    : e?.message || 'Ableton export failed',
-            );
-        } finally {
-            setExporting(false);
-            setAbletonLoading(false);
-        }
-    };
-
-    const abletonDisabled = disabled || abletonLoading || exporting || !trackId || regionEnd <= regionStart;
     const loopLen = Math.max(0, regionEnd - regionStart);
     const hasRegion = regionEnd > regionStart;
     const baseStemNames = availableStems.map(s => s.replace(/\.(wav|mp3|flac)$/i, ''));
+    const exportDisabled = disabled || exporting || abletonLoading || !hasRegion;
+    const nothingSelected = !mixdownSelected && localStems.length === 0;
 
     return (
         <div className="bg-[#12121a] rounded-lg p-4 border border-white/5 space-y-3">
@@ -132,55 +117,69 @@ export function ExportPanel({
                 </div>
             </div>
 
-            {/* Stem selector */}
-            {baseStemNames.length > 0 && (
-                <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                        <span className="text-[9px] text-white/25 uppercase font-mono tracking-widest">Stems</span>
-                        <div className="flex gap-1">
-                            <button
-                                onClick={() => setLocalStems([...availableStems])}
-                                className="px-1.5 py-0.5 text-[8px] font-mono uppercase tracking-wider rounded
-                                           bg-white/5 hover:bg-[#00ff88]/10 text-white/25 hover:text-[#00ff88]
-                                           border border-white/5 transition-colors"
-                            >all</button>
-                            <button
-                                onClick={() => setLocalStems([])}
-                                className="px-1.5 py-0.5 text-[8px] font-mono uppercase tracking-wider rounded
-                                           bg-white/5 hover:bg-[#ff3b5c]/10 text-white/25 hover:text-[#ff3b5c]
-                                           border border-white/5 transition-colors"
-                            >none</button>
-                        </div>
+            {/* Stem + Full Mix selector */}
+            <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                    <span className="text-[9px] text-white/25 uppercase font-mono tracking-widest">Export stems</span>
+                    <div className="flex gap-1">
+                        <button
+                            onClick={() => { setLocalStems([...availableStems]); setMixdownSelected(false); }}
+                            className="px-1.5 py-0.5 text-[8px] font-mono uppercase tracking-wider rounded
+                                       bg-white/5 hover:bg-[#00ff88]/10 text-white/25 hover:text-[#00ff88]
+                                       border border-white/5 transition-colors"
+                        >all</button>
+                        <button
+                            onClick={() => { setLocalStems([]); setMixdownSelected(false); }}
+                            className="px-1.5 py-0.5 text-[8px] font-mono uppercase tracking-wider rounded
+                                       bg-white/5 hover:bg-[#ff3b5c]/10 text-white/25 hover:text-[#ff3b5c]
+                                       border border-white/5 transition-colors"
+                        >none</button>
                     </div>
-                    <div className="grid grid-cols-2 gap-1">
-                        {availableStems.map((stem, i) => {
-                            const base = baseStemNames[i];
-                            const sel  = localStems.includes(stem);
-                            const col  = stemColor(base);
-                            return (
-                                <button
-                                    key={stem}
-                                    onClick={() => toggleStem(stem)}
-                                    className={`flex items-center gap-1.5 px-2 py-1.5 rounded border
-                                                text-[10px] font-medium capitalize transition-all
-                                                ${sel
-                                                    ? 'bg-white/[0.06] border-white/15 text-white/70'
-                                                    : 'bg-white/[0.02] border-white/5 text-white/25 hover:text-white/45 hover:bg-white/[0.04]'}`}
-                                >
-                                    <div
-                                        className="w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors"
-                                        style={{ backgroundColor: sel ? col : 'rgba(255,255,255,0.12)' }}
-                                    />
-                                    {base}
-                                </button>
-                            );
-                        })}
-                    </div>
-                    <p className="text-[9px] text-white/15 font-mono text-center">
-                        {localStems.length}/{availableStems.length} selected
-                    </p>
                 </div>
-            )}
+
+                {/* Full Mix toggle — treated like a stem row */}
+                <button
+                    onClick={() => { setMixdownSelected(v => !v); setLocalStems([]); }}
+                    className={`w-full flex items-center gap-1.5 px-2 py-1.5 rounded border
+                                text-[10px] font-medium transition-all
+                                ${mixdownSelected
+                                    ? 'bg-white/[0.06] border-white/15 text-white/70'
+                                    : 'bg-white/[0.02] border-white/5 text-white/25 hover:text-white/45 hover:bg-white/[0.04]'}`}
+                >
+                    <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors"
+                        style={{ backgroundColor: mixdownSelected ? '#9ca3af' : 'rgba(255,255,255,0.12)' }} />
+                    Full Mix (mixdown)
+                </button>
+
+                {/* Individual stem toggles */}
+                <div className="grid grid-cols-2 gap-1">
+                    {availableStems.map((stem, i) => {
+                        const base = baseStemNames[i];
+                        const sel  = localStems.includes(stem) && !mixdownSelected;
+                        const col  = stemColor(base);
+                        return (
+                            <button
+                                key={stem}
+                                onClick={() => { setMixdownSelected(false); toggleStem(stem); }}
+                                className={`flex items-center gap-1.5 px-2 py-1.5 rounded border
+                                            text-[10px] font-medium capitalize transition-all
+                                            ${sel
+                                                ? 'bg-white/[0.06] border-white/15 text-white/70'
+                                                : 'bg-white/[0.02] border-white/5 text-white/25 hover:text-white/45 hover:bg-white/[0.04]'}`}
+                            >
+                                <div
+                                    className="w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors"
+                                    style={{ backgroundColor: sel ? col : 'rgba(255,255,255,0.12)' }}
+                                />
+                                {base}
+                            </button>
+                        );
+                    })}
+                </div>
+                <p className="text-[9px] text-white/15 font-mono text-center">
+                    {mixdownSelected ? 'Full mix selected' : `${localStems.length}/${availableStems.length} stems`}
+                </p>
+            </div>
 
             {errorMsg && (
                 <div className="p-2 bg-[#ff3b5c]/10 border border-[#ff3b5c]/30 text-[#ff3b5c] text-[10px] rounded text-center font-mono">
@@ -188,9 +187,9 @@ export function ExportPanel({
                 </div>
             )}
 
-            {/* Export Loop */}
+            {/* Single export button */}
             <button
-                disabled={disabled || exporting || !hasRegion}
+                disabled={exportDisabled || nothingSelected}
                 onClick={handleExportLoop}
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-bold text-black
                            bg-[#00d4ff] hover:bg-[#00b8e6]
@@ -203,27 +202,14 @@ export function ExportPanel({
                 }
             </button>
 
-            {/* Ableton */}
-            <button
-                disabled={abletonDisabled}
-                onClick={handleExportAbleton}
-                className={`w-full flex items-center justify-center gap-2 py-2 rounded-lg font-bold text-[11px] transition-colors
-                    border disabled:opacity-40 disabled:cursor-not-allowed
-                    ${abletonSuccess
-                        ? 'text-[#00ff88] bg-[#00ff88]/10 border-[#00ff88]/30'
-                        : 'text-[#22c55e] bg-[#22c55e]/10 border-[#22c55e]/30 hover:bg-[#22c55e]/20'}`}
-            >
-                {abletonLoading
-                    ? <><Loader2 size={13} className="animate-spin" /><span>Exporting…</span></>
-                    : abletonSuccess
-                    ? <><CheckCircle2 size={13} /><span>Downloaded!</span></>
-                    : <><Music2 size={14} /><span>Ableton .als</span></>
-                }
-            </button>
-
             {!hasRegion && trackId && (
                 <p className="text-[9px] text-white/20 font-mono text-center">
                     Set a loop region to export
+                </p>
+            )}
+            {hasRegion && nothingSelected && (
+                <p className="text-[9px] text-white/20 font-mono text-center">
+                    Select Full Mix or at least one stem
                 </p>
             )}
         </div>
