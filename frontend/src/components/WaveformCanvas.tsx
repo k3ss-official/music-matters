@@ -68,6 +68,8 @@ export interface WaveformCanvasProps {
     regionStart?: number;
     /** Current region end (controlled) */
     regionEnd?: number;
+    /** Phrase boundary times for snap grid (e.g. from allin1 smart phrases) */
+    phraseMarkers?: number[];
 }
 
 // How close (seconds) to a beat before we snap
@@ -117,6 +119,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             snapEnabled = true,
             regionStart,
             regionEnd,
+            phraseMarkers = [],
         },
         ref
     ) {
@@ -143,27 +146,45 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
         const downbeatsRef = useRef(downbeats);
         const chordsRef = useRef(chords);
         const bpmRef = useRef(bpm);
+        const phraseMarkersRef = useRef(phraseMarkers);
         const regionLoopRef = useRef(false); // whether we're looping the region
         const rafRef = useRef<number | null>(null);
+        // Alt key tracking for snap bypass
+        const altHeldRef = useRef(false);
 
         snapEnabledRef.current = snapEnabled;
         downbeatsRef.current = downbeats;
         chordsRef.current = chords;
         bpmRef.current = bpm;
+        phraseMarkersRef.current = phraseMarkers;
         zoomRef.current = zoom;
 
         // ── Snap helper ───────────────────────────────────────────────────────
         const snapTime = useCallback((time: number): number => {
-            if (!snapEnabledRef.current) return time;
-            // Build grid from downbeats + BPM beats
+            if (!snapEnabledRef.current || altHeldRef.current) return time;
+            // Build grid from downbeats + BPM beats + phrase boundaries
             const dur = wsRef.current?.getDuration() || 0;
-            let grid: number[] = [...downbeatsRef.current];
+            let grid: number[] = [...downbeatsRef.current, ...phraseMarkersRef.current];
             if (bpmRef.current && dur > 0) {
                 grid = [...grid, ...buildBeatGrid(bpmRef.current, dur)];
                 // dedupe
                 grid = [...new Set(grid.map(t => parseFloat(t.toFixed(4))))].sort((a, b) => a - b);
             }
-            return snapToNearest(time, grid, SNAP_THRESHOLD_S);
+            // Adaptive threshold: 4 pixels in seconds (tighter snap at high zoom)
+            const threshold = Math.max(0.01, 4 / Math.max(zoomRef.current, 1));
+            return snapToNearest(time, grid, threshold);
+        }, []);
+
+        // ── Alt key tracking for snap bypass ─────────────────────────────────
+        useEffect(() => {
+            const onDown = (e: KeyboardEvent) => { if (e.key === 'Alt') altHeldRef.current = true; };
+            const onUp   = (e: KeyboardEvent) => { if (e.key === 'Alt') altHeldRef.current = false; };
+            window.addEventListener('keydown', onDown);
+            window.addEventListener('keyup',   onUp);
+            return () => {
+                window.removeEventListener('keydown', onDown);
+                window.removeEventListener('keyup',   onUp);
+            };
         }, []);
 
         // ── Draw BPM grid + real downbeats overlay ────────────────────────────
@@ -640,6 +661,29 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                                 </div>
                             )}
                         </div>
+
+                        {/* Loop region dim overlays — shade outside the active region */}
+                        {duration > 0 && regionStart !== undefined && regionEnd !== undefined && regionEnd > regionStart && (() => {
+                            const leftW  = Math.max(0, (regionStart - visibleStart) * zoom);
+                            const rightL = Math.max(0, (regionEnd   - visibleStart) * zoom);
+                            const shade  = 'rgba(8,8,15,0.58)';
+                            const style: React.CSSProperties = {
+                                top: 18,   // below timeline ruler
+                                bottom: chords.length > 0 ? 18 : 0,
+                                pointerEvents: 'none',
+                                position: 'absolute',
+                                zIndex: 3,
+                                background: shade,
+                            };
+                            return (
+                                <>
+                                    {leftW > 0 && (
+                                        <div style={{ ...style, left: 0, width: leftW }} />
+                                    )}
+                                    <div style={{ ...style, left: rightL, right: 0 }} />
+                                </>
+                            );
+                        })()}
 
                         {/* Waveform */}
                         <div ref={containerRef} className="w-full relative z-[2]" />

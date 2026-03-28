@@ -8,7 +8,7 @@
  *
  * All changes propagate via onRegionChange → WaveSurfer sync.
  */
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { X, Grid3x3 } from 'lucide-react';
 
 interface EditLoopSectionProps {
@@ -82,10 +82,14 @@ export const EditLoopSection: React.FC<EditLoopSectionProps> = ({
     onRegionChange,
     duration = 0,
 }) => {
+    const [nudgeMode, setNudgeMode] = useState<'beat' | 'ms'>('beat');
     const loopLen = regionEnd - regionStart;
     const beatDur = bpm ? 60 / bpm : 0.25;
     const barDur  = beatDur * 4;
-    const msStep  = 0.010; // 10 ms
+    // Beat mode: 10ms / beat / bar  |  MS mode: 1ms / 10ms / 100ms
+    const steps = nudgeMode === 'beat'
+        ? { fine: 0.010, mid: beatDur, coarse: barDur, fineLabel: '10ms', midLabel: 'beat', coarseLabel: 'bar' }
+        : { fine: 0.001, mid: 0.010,   coarse: 0.100,  fineLabel: '1ms',  midLabel: '10ms', coarseLabel: '100ms' };
 
     // Clamp helper
     const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -136,6 +140,17 @@ export const EditLoopSection: React.FC<EditLoopSectionProps> = ({
                     </span>
                 </div>
                 <div className="flex items-center gap-2">
+                    {/* Nudge mode toggle: BEAT ↔ MS */}
+                    <button
+                        onClick={() => setNudgeMode(m => m === 'beat' ? 'ms' : 'beat')}
+                        title={nudgeMode === 'beat' ? 'Switch to millisecond nudge mode' : 'Switch to beat nudge mode'}
+                        className={`px-2 py-1 rounded font-mono text-[10px] tracking-wider transition-all border
+                            ${nudgeMode === 'beat'
+                                ? 'bg-[#00d4ff]/10 text-[#00d4ff] border-[#00d4ff]/30'
+                                : 'bg-[#f59e0b]/10 text-[#f59e0b] border-[#f59e0b]/30'}`}
+                    >
+                        {nudgeMode === 'beat' ? 'BEAT' : 'MS'}
+                    </button>
                     {/* Quantize toggle */}
                     <button
                         onClick={onQuantizeToggle}
@@ -166,18 +181,18 @@ export const EditLoopSection: React.FC<EditLoopSectionProps> = ({
                 <div className="flex items-center gap-2">
                     <span className="text-[10px] font-mono text-[#00d4ff] w-8 shrink-0 tracking-widest">IN</span>
                     <div className="flex items-center gap-1">
-                        <JogBtn label="◄bar"  title={`Nudge IN back 1 bar (${barDur.toFixed(2)}s)`}   onClick={() => nudgeIn(-barDur)}  dim />
-                        <JogBtn label="◄beat" title={`Nudge IN back 1 beat (${beatDur.toFixed(3)}s)`} onClick={() => nudgeIn(-beatDur)} />
-                        <JogBtn label="◄10ms" title="Nudge IN back 10 ms"                             onClick={() => nudgeIn(-msStep)}  />
+                        <JogBtn label={`◄${steps.coarseLabel}`} title={`Nudge IN back — ${steps.coarseLabel}`} onClick={() => nudgeIn(-steps.coarse)} dim />
+                        <JogBtn label={`◄${steps.midLabel}`}    title={`Nudge IN back — ${steps.midLabel}`}    onClick={() => nudgeIn(-steps.mid)} />
+                        <JogBtn label={`◄${steps.fineLabel}`}   title={`Nudge IN back — ${steps.fineLabel}`}   onClick={() => nudgeIn(-steps.fine)} />
                     </div>
                     <span className={`font-mono text-[12px] tabular-nums px-2 py-0.5 rounded border min-w-[88px] text-center
                         ${canChange ? 'text-[#00d4ff] border-[#00d4ff]/25 bg-[#00d4ff]/5' : 'text-white/25 border-white/10 bg-white/3'}`}>
                         {fmtTime(regionStart)}
                     </span>
                     <div className="flex items-center gap-1">
-                        <JogBtn label="10ms►" title="Nudge IN forward 10 ms"                              onClick={() => nudgeIn(+msStep)}  />
-                        <JogBtn label="beat►" title={`Nudge IN forward 1 beat (${beatDur.toFixed(3)}s)`}  onClick={() => nudgeIn(+beatDur)} />
-                        <JogBtn label="bar►"  title={`Nudge IN forward 1 bar (${barDur.toFixed(2)}s)`}    onClick={() => nudgeIn(+barDur)}  dim />
+                        <JogBtn label={`${steps.fineLabel}►`}   title={`Nudge IN forward — ${steps.fineLabel}`}   onClick={() => nudgeIn(+steps.fine)} />
+                        <JogBtn label={`${steps.midLabel}►`}    title={`Nudge IN forward — ${steps.midLabel}`}    onClick={() => nudgeIn(+steps.mid)} />
+                        <JogBtn label={`${steps.coarseLabel}►`} title={`Nudge IN forward — ${steps.coarseLabel}`} onClick={() => nudgeIn(+steps.coarse)} dim />
                     </div>
                     {!canChange && (
                         <span className="text-[9px] font-mono text-white/20 ml-1">no BPM</span>
@@ -188,8 +203,8 @@ export const EditLoopSection: React.FC<EditLoopSectionProps> = ({
                 <div className="flex items-center gap-2">
                     <span className="text-[10px] font-mono text-white/30 w-8 shrink-0 tracking-widest uppercase">Shift</span>
                     <div className="flex items-center gap-1">
-                        <JogBtn label="◄◄bar"  title={`Shift loop back 1 bar`}   onClick={() => shiftLoop(-barDur)}  dim />
-                        <JogBtn label="◄beat"  title={`Shift loop back 1 beat`}  onClick={() => shiftLoop(-beatDur)} />
+                        <JogBtn label={`◄◄${steps.coarseLabel}`} title={`Shift loop back — ${steps.coarseLabel}`} onClick={() => shiftLoop(-steps.coarse)} dim />
+                        <JogBtn label={`◄${steps.midLabel}`}     title={`Shift loop back — ${steps.midLabel}`}    onClick={() => shiftLoop(-steps.mid)} />
                     </div>
                     <div className="flex flex-col items-center min-w-[88px]">
                         <span className="font-mono text-[12px] text-white/60 tabular-nums">
@@ -200,8 +215,8 @@ export const EditLoopSection: React.FC<EditLoopSectionProps> = ({
                         </span>
                     </div>
                     <div className="flex items-center gap-1">
-                        <JogBtn label="beat►"  title={`Shift loop forward 1 beat`}  onClick={() => shiftLoop(+beatDur)} />
-                        <JogBtn label="bar►►"  title={`Shift loop forward 1 bar`}   onClick={() => shiftLoop(+barDur)}  dim />
+                        <JogBtn label={`${steps.midLabel}►`}     title={`Shift loop forward — ${steps.midLabel}`}    onClick={() => shiftLoop(+steps.mid)} />
+                        <JogBtn label={`${steps.coarseLabel}►►`} title={`Shift loop forward — ${steps.coarseLabel}`} onClick={() => shiftLoop(+steps.coarse)} dim />
                     </div>
                 </div>
 
@@ -209,18 +224,18 @@ export const EditLoopSection: React.FC<EditLoopSectionProps> = ({
                 <div className="flex items-center gap-2">
                     <span className="text-[10px] font-mono text-[#00ff88] w-8 shrink-0 tracking-widest">OUT</span>
                     <div className="flex items-center gap-1">
-                        <JogBtn label="◄bar"  title={`Nudge OUT back 1 bar (${barDur.toFixed(2)}s)`}   onClick={() => nudgeOut(-barDur)}  dim />
-                        <JogBtn label="◄beat" title={`Nudge OUT back 1 beat (${beatDur.toFixed(3)}s)`} onClick={() => nudgeOut(-beatDur)} />
-                        <JogBtn label="◄10ms" title="Nudge OUT back 10 ms"                             onClick={() => nudgeOut(-msStep)}  />
+                        <JogBtn label={`◄${steps.coarseLabel}`} title={`Nudge OUT back — ${steps.coarseLabel}`} onClick={() => nudgeOut(-steps.coarse)} dim />
+                        <JogBtn label={`◄${steps.midLabel}`}    title={`Nudge OUT back — ${steps.midLabel}`}    onClick={() => nudgeOut(-steps.mid)} />
+                        <JogBtn label={`◄${steps.fineLabel}`}   title={`Nudge OUT back — ${steps.fineLabel}`}   onClick={() => nudgeOut(-steps.fine)} />
                     </div>
                     <span className={`font-mono text-[12px] tabular-nums px-2 py-0.5 rounded border min-w-[88px] text-center
                         ${canChange ? 'text-[#00ff88] border-[#00ff88]/25 bg-[#00ff88]/5' : 'text-white/25 border-white/10 bg-white/3'}`}>
                         {fmtTime(regionEnd)}
                     </span>
                     <div className="flex items-center gap-1">
-                        <JogBtn label="10ms►" title="Nudge OUT forward 10 ms"                              onClick={() => nudgeOut(+msStep)}  />
-                        <JogBtn label="beat►" title={`Nudge OUT forward 1 beat (${beatDur.toFixed(3)}s)`}  onClick={() => nudgeOut(+beatDur)} />
-                        <JogBtn label="bar►"  title={`Nudge OUT forward 1 bar (${barDur.toFixed(2)}s)`}    onClick={() => nudgeOut(+barDur)}  dim />
+                        <JogBtn label={`${steps.fineLabel}►`}   title={`Nudge OUT forward — ${steps.fineLabel}`}   onClick={() => nudgeOut(+steps.fine)} />
+                        <JogBtn label={`${steps.midLabel}►`}    title={`Nudge OUT forward — ${steps.midLabel}`}    onClick={() => nudgeOut(+steps.mid)} />
+                        <JogBtn label={`${steps.coarseLabel}►`} title={`Nudge OUT forward — ${steps.coarseLabel}`} onClick={() => nudgeOut(+steps.coarse)} dim />
                     </div>
                 </div>
 

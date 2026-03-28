@@ -498,6 +498,7 @@ export function CentreWorkspace({
                     snapEnabled={snapEnabled}
                     regionStart={regionStart}
                     regionEnd={regionEnd}
+                    phraseMarkers={smartPhrases.map(p => p.start_time)}
                     wavesurferRef={wavesurferRef}
                     regionsRef={regionsRef}
                     onReady={dur => {

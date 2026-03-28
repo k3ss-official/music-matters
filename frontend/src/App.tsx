@@ -579,6 +579,7 @@ function App() {
 
               <ExportPanel
                 trackId={selectedTrackId || ''}
+                availableStems={trackDetail?.stems || []}
                 selectedStems={selectedStems}
                 regionStart={regionStart}
                 regionEnd={regionEnd}
