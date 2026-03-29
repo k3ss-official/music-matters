@@ -540,31 +540,28 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 if (!container) return;
                 const W = container.offsetWidth || 800;
                 const regionDuration = end - start;
-                // Fit region with 15% padding each side
-                const paddedDuration = regionDuration * 1.3;
+                const paddedDuration = regionDuration * 1.3; // 15% padding each side
                 const newZoom = Math.round(W / paddedDuration);
                 const clampedZoom = Math.min(Math.max(newZoom, 10), 2000);
                 const regionMid = start + regionDuration / 2;
 
-                // WaveSurfer v7 renderer.render() is synchronous — zoom applies immediately
                 try { ws.zoom(clampedZoom); } catch {}
-                setZoom(clampedZoom); // keep React state in sync
+                setZoom(clampedZoom);
 
-                // Scroll shadow DOM .scroll element to center the region
-                // rAF ensures browser has committed layout after zoom re-render
-                const scrollToMid = () => {
+                // Use WaveSurfer's public setScroll() API — renderer scrollContainer is
+                // updated synchronously by ws.zoom(), rAF ensures browser layout committed
+                const centerScroll = () => {
                     try {
-                        const shadowHost = container.firstElementChild as HTMLElement | null;
-                        const scrollEl = shadowHost?.shadowRoot?.querySelector('.scroll') as HTMLElement | null;
-                        if (scrollEl) {
-                            const dur = ws.getDuration() || 1;
-                            const pixelMid = (regionMid / dur) * scrollEl.scrollWidth;
-                            scrollEl.scrollLeft = Math.max(0, pixelMid - W / 2);
-                        }
+                        const renderer = (ws as any).renderer;
+                        if (!renderer) return;
+                        const { scrollWidth, clientWidth } = renderer.scrollContainer;
+                        const dur = ws.getDuration() || 1;
+                        const pixelMid = (regionMid / dur) * scrollWidth;
+                        ws.setScroll(Math.max(0, pixelMid - clientWidth / 2));
                     } catch {}
                 };
-                requestAnimationFrame(scrollToMid);
-                setTimeout(scrollToMid, 120); // fallback in case rAF fires before layout
+                requestAnimationFrame(centerScroll);
+                setTimeout(centerScroll, 80);
             },
             zoomToFitRegion: (start: number, end: number) => {
                 const ws = wsRef.current;
@@ -573,7 +570,6 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 if (!container) return;
                 const W = container.offsetWidth || 800;
                 const regionDuration = end - start;
-                // Fit region with 15% padding to ensure it doesn't go off screen
                 const paddedDuration = regionDuration * 1.15;
                 const newZoom = Math.round(W / paddedDuration);
                 const clampedZoom = Math.min(Math.max(newZoom, 20), 500);
@@ -582,19 +578,18 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 try { ws.zoom(clampedZoom); } catch {}
                 setZoom(clampedZoom);
 
-                const scrollToMid = () => {
+                const centerScroll = () => {
                     try {
-                        const shadowHost = container.firstElementChild as HTMLElement | null;
-                        const scrollEl = shadowHost?.shadowRoot?.querySelector('.scroll') as HTMLElement | null;
-                        if (scrollEl) {
-                            const dur = ws.getDuration() || 1;
-                            const pixelMid = (regionMid / dur) * scrollEl.scrollWidth;
-                            scrollEl.scrollLeft = Math.max(0, pixelMid - W / 2);
-                        }
+                        const renderer = (ws as any).renderer;
+                        if (!renderer) return;
+                        const { scrollWidth, clientWidth } = renderer.scrollContainer;
+                        const dur = ws.getDuration() || 1;
+                        const pixelMid = (regionMid / dur) * scrollWidth;
+                        ws.setScroll(Math.max(0, pixelMid - clientWidth / 2));
                     } catch {}
                 };
-                requestAnimationFrame(scrollToMid);
-                setTimeout(scrollToMid, 120);
+                requestAnimationFrame(centerScroll);
+                setTimeout(centerScroll, 80);
             },
         }));
 
@@ -663,12 +658,27 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                         )}
 
                         {/* ── Overview / minimap strip ── */}
-                        <div
-                            ref={minimapRef}
-                            className="w-full bg-[#06060e] border-b border-white/[0.04] overflow-hidden"
-                            style={{ height: MINIMAP_H }}
-                            title="Overview — click to navigate"
-                        />
+                        <div className="relative w-full" style={{ height: MINIMAP_H }}>
+                            <div
+                                ref={minimapRef}
+                                className="w-full h-full bg-[#06060e] border-b border-white/[0.04] overflow-hidden"
+                                title="Overview — click to navigate"
+                            />
+                            {/* Loop region indicator overlaid on the minimap (% of full track) */}
+                            {duration > 0 && regionStart !== undefined && regionEnd !== undefined && regionEnd > regionStart && (
+                                <div
+                                    className="absolute top-0 h-full pointer-events-none"
+                                    style={{
+                                        left: `${(regionStart / duration) * 100}%`,
+                                        width: `${Math.max(0.3, ((regionEnd - regionStart) / duration) * 100)}%`,
+                                        background: 'rgba(0, 212, 255, 0.18)',
+                                        borderLeft: '2px solid rgba(0, 212, 255, 0.8)',
+                                        borderRight: '2px solid rgba(0, 255, 136, 0.8)',
+                                        zIndex: 10,
+                                    }}
+                                />
+                            )}
+                        </div>
 
                         {/* BPM grid overlay canvas */}
                         <canvas

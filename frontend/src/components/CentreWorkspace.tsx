@@ -372,6 +372,23 @@ export function CentreWorkspace({
         });
     }, [regionStart, regionEnd, bpm, duration, handleRegionChange]);
 
+    // ── Shift+Up → re-center view on current loop (keyboard) ────────────────
+    useEffect(() => {
+        if (!trackId) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.shiftKey && e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (regionEnd > regionStart) {
+                    waveformRef.current?.zoomToFitRegion(regionStart, regionEnd);
+                } else {
+                    waveformRef.current?.zoomFit();
+                }
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [trackId, regionStart, regionEnd]);
+
     // ── Double-click anywhere → re-center the view on current loop/playhead ─
     const handleDoubleClickCenter = useCallback(() => {
         const w = waveformRef.current;
