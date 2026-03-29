@@ -50,7 +50,6 @@ export function ExportPanel({
     }, [externalStems, availableStems]);
 
     const [exporting, setExporting] = useState(false);
-    const [abletonLoading] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
     const toggleStem = useCallback((stem: string) => {
@@ -63,23 +62,21 @@ export function ExportPanel({
         try {
             setExporting(true);
             setErrorMsg(null);
-            if (mixdownSelected) {
-                // Export full mix (no stem filtering)
-                const { blob, filename } = await api.downloadAbletonExport(
-                    trackId, ['mixdown'], regionStart, regionEnd,
-                );
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url; a.download = filename;
-                document.body.appendChild(a); a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                if (onExportComplete) onExportComplete({ mixdown: true });
-            } else {
-                const stems = localStems.length > 0 ? localStems : availableStems;
-                const loop = await api.createCustomLoop(trackId, regionStart, regionEnd, stems);
-                if (onExportComplete) onExportComplete(loop);
-            }
+            // Build unified export list: full mix + any individual stems
+            const stemsToExport = [
+                ...(mixdownSelected ? ['mixdown'] : []),
+                ...(localStems.length > 0 ? localStems : (mixdownSelected ? [] : availableStems)),
+            ];
+            const { blob, filename } = await api.downloadAbletonExport(
+                trackId, stemsToExport, regionStart, regionEnd,
+            );
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = filename;
+            document.body.appendChild(a); a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            if (onExportComplete) onExportComplete({ stems: stemsToExport });
         } catch (e: any) {
             setErrorMsg(e.message || 'Export failed');
         } finally {
@@ -90,7 +87,7 @@ export function ExportPanel({
     const loopLen = Math.max(0, regionEnd - regionStart);
     const hasRegion = regionEnd > regionStart;
     const baseStemNames = availableStems.map(s => s.replace(/\.(wav|mp3|flac)$/i, ''));
-    const exportDisabled = disabled || exporting || abletonLoading || !hasRegion;
+    const exportDisabled = disabled || exporting || !hasRegion;
     const nothingSelected = !mixdownSelected && localStems.length === 0;
 
     return (
@@ -123,7 +120,7 @@ export function ExportPanel({
                     <span className="text-[9px] text-white/25 uppercase font-mono tracking-widest">Export stems</span>
                     <div className="flex gap-1">
                         <button
-                            onClick={() => { setLocalStems([...availableStems]); setMixdownSelected(false); }}
+                            onClick={() => setLocalStems([...availableStems])}
                             className="px-1.5 py-0.5 text-[8px] font-mono uppercase tracking-wider rounded
                                        bg-white/5 hover:bg-[#00ff88]/10 text-white/25 hover:text-[#00ff88]
                                        border border-white/5 transition-colors"
@@ -137,9 +134,9 @@ export function ExportPanel({
                     </div>
                 </div>
 
-                {/* Full Mix toggle — treated like a stem row */}
+                {/* Full Mix toggle — independent peer checkbox alongside stems */}
                 <button
-                    onClick={() => { setMixdownSelected(v => !v); setLocalStems([]); }}
+                    onClick={() => setMixdownSelected(v => !v)}
                     className={`w-full flex items-center gap-1.5 px-2 py-1.5 rounded border
                                 text-[10px] font-medium transition-all
                                 ${mixdownSelected
@@ -155,12 +152,12 @@ export function ExportPanel({
                 <div className="grid grid-cols-2 gap-1">
                     {availableStems.map((stem, i) => {
                         const base = baseStemNames[i];
-                        const sel  = localStems.includes(stem) && !mixdownSelected;
+                        const sel  = localStems.includes(stem);
                         const col  = stemColor(base);
                         return (
                             <button
                                 key={stem}
-                                onClick={() => { setMixdownSelected(false); toggleStem(stem); }}
+                                onClick={() => toggleStem(stem)}
                                 className={`flex items-center gap-1.5 px-2 py-1.5 rounded border
                                             text-[10px] font-medium capitalize transition-all
                                             ${sel
@@ -177,7 +174,11 @@ export function ExportPanel({
                     })}
                 </div>
                 <p className="text-[9px] text-white/15 font-mono text-center">
-                    {mixdownSelected ? 'Full mix selected' : `${localStems.length}/${availableStems.length} stems`}
+                    {mixdownSelected && localStems.length > 0
+                        ? `Full mix + ${localStems.length} stem${localStems.length !== 1 ? 's' : ''}`
+                        : mixdownSelected
+                            ? 'Full mix only'
+                            : `${localStems.length}/${availableStems.length} stems`}
                 </p>
             </div>
 

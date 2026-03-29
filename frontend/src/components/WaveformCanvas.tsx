@@ -163,6 +163,8 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
         const rafRef = useRef<number | null>(null);
         // Alt key tracking for snap bypass
         const altHeldRef = useRef(false);
+        // Guard: prevents syncRegion → region-updated → onRegionUpdate infinite loop
+        const isSyncingRef = useRef(false);
 
         snapEnabledRef.current = snapEnabled;
         downbeatsRef.current = downbeats;
@@ -347,6 +349,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             // ── Region events ────────────────────────────────────────────────
             // region-updated fires on every drag/resize tick
             wsRegions.on('region-updated', (region: any) => {
+                if (isSyncingRef.current) return; // programmatic update via syncRegion — skip to avoid loop
                 const s = snapEnabledRef.current ? snapTime(region.start) : region.start;
                 const e = snapEnabledRef.current ? snapTime(region.end) : region.end;
                 // Only update region handle if snap changed the value meaningfully
@@ -512,6 +515,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             syncRegion: (start: number, end: number) => {
                 const regions = wsRegionsRef.current;
                 if (!regions) return;
+                isSyncingRef.current = true;
                 if (activeRegionRef.current) {
                     activeRegionRef.current.setOptions({ start, end });
                 } else {
@@ -526,7 +530,8 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                     });
                     activeRegionRef.current = region;
                 }
-                if (onRegionUpdate) onRegionUpdate(start, end);
+                isSyncingRef.current = false;
+                // Do NOT call onRegionUpdate here — syncRegion is parent→child push, not user drag
             },
             zoomToRegion: (start: number, end: number) => {
                 const ws = wsRef.current;
@@ -539,15 +544,27 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 const paddedDuration = regionDuration * 1.3;
                 const newZoom = Math.round(W / paddedDuration);
                 const clampedZoom = Math.min(Math.max(newZoom, 10), 2000);
-                setZoom(clampedZoom);
-                // Apply zoom and center in middle of screen
-                setTimeout(() => {
-                    try { 
-                        ws.zoom(clampedZoom);
-                        const centerTime = start + regionDuration / 2;
-                        ws.setTime(centerTime);
+                const regionMid = start + regionDuration / 2;
+
+                // WaveSurfer v7 renderer.render() is synchronous — zoom applies immediately
+                try { ws.zoom(clampedZoom); } catch {}
+                setZoom(clampedZoom); // keep React state in sync
+
+                // Scroll shadow DOM .scroll element to center the region
+                // rAF ensures browser has committed layout after zoom re-render
+                const scrollToMid = () => {
+                    try {
+                        const shadowHost = container.firstElementChild as HTMLElement | null;
+                        const scrollEl = shadowHost?.shadowRoot?.querySelector('.scroll') as HTMLElement | null;
+                        if (scrollEl) {
+                            const dur = ws.getDuration() || 1;
+                            const pixelMid = (regionMid / dur) * scrollEl.scrollWidth;
+                            scrollEl.scrollLeft = Math.max(0, pixelMid - W / 2);
+                        }
                     } catch {}
-                }, 50);
+                };
+                requestAnimationFrame(scrollToMid);
+                setTimeout(scrollToMid, 120); // fallback in case rAF fires before layout
             },
             zoomToFitRegion: (start: number, end: number) => {
                 const ws = wsRef.current;
@@ -559,18 +576,25 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 // Fit region with 15% padding to ensure it doesn't go off screen
                 const paddedDuration = regionDuration * 1.15;
                 const newZoom = Math.round(W / paddedDuration);
-                // Clamp zoom to reasonable range for loop editing
                 const clampedZoom = Math.min(Math.max(newZoom, 20), 500);
+                const regionMid = start + regionDuration / 2;
+
+                try { ws.zoom(clampedZoom); } catch {}
                 setZoom(clampedZoom);
-                // Apply zoom and center immediately
-                setTimeout(() => {
-                    try { 
-                        ws.zoom(clampedZoom);
-                        // Center the region in the middle of screen
-                        const centerTime = start + regionDuration / 2;
-                        ws.setTime(centerTime);
+
+                const scrollToMid = () => {
+                    try {
+                        const shadowHost = container.firstElementChild as HTMLElement | null;
+                        const scrollEl = shadowHost?.shadowRoot?.querySelector('.scroll') as HTMLElement | null;
+                        if (scrollEl) {
+                            const dur = ws.getDuration() || 1;
+                            const pixelMid = (regionMid / dur) * scrollEl.scrollWidth;
+                            scrollEl.scrollLeft = Math.max(0, pixelMid - W / 2);
+                        }
                     } catch {}
-                }, 50);
+                };
+                requestAnimationFrame(scrollToMid);
+                setTimeout(scrollToMid, 120);
             },
         }));
 

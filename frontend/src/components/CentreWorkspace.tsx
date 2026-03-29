@@ -309,21 +309,14 @@ export function CentreWorkspace({
             // Get current playhead position
             const playhead = waveformRef.current?.getCurrentTime() ?? currentTime;
 
-            // Find anchor from current region or playhead
+            // Find anchor: use existing region start, or fall back to track beginning
             let anchorStart: number;
-            if (regionEnd > regionStart && regionStart > 0 && Math.abs(regionStart - playhead) < 5) {
-                // Use existing region start if it's close to playhead
+            if (regionEnd > regionStart && regionStart > 0) {
+                // Existing region — anchor from its start
                 anchorStart = regionStart;
             } else {
-                // Otherwise find nearest downbeat at or before playhead
-                if (downbeats.length > 0) {
-                    anchorStart = downbeats[0];
-                    for (const db of downbeats) {
-                        if (db <= playhead + beatDur * 0.25) anchorStart = db;
-                    }
-                } else {
-                    anchorStart = Math.floor(playhead / barDur) * barDur;
-                }
+                // No region yet — always start from the beginning of the track
+                anchorStart = 0;
             }
 
             const newEnd = Math.min(anchorStart + barDur * bars, duration);
@@ -378,6 +371,17 @@ export function CentreWorkspace({
             return next;
         });
     }, [regionStart, regionEnd, bpm, duration, handleRegionChange]);
+
+    // ── Double-click anywhere → re-center the view on current loop/playhead ─
+    const handleDoubleClickCenter = useCallback(() => {
+        const w = waveformRef.current;
+        if (!w) return;
+        if (regionEnd > regionStart) {
+            w.zoomToFitRegion(regionStart, regionEnd);
+        } else {
+            w.zoomFit();
+        }
+    }, [regionStart, regionEnd]);
 
     // ── Export to Ableton (Cmd+E) ─────────────────────────────────────────
     const handleExportAbleton = useCallback(() => {
@@ -440,6 +444,7 @@ export function CentreWorkspace({
         <div
             className="flex flex-col flex-1 min-h-0 bg-[#0a0a0f] overflow-hidden outline-none focus-within:ring-1 focus-within:ring-[#00d4ff]/20"
             tabIndex={-1}
+            onDoubleClick={handleDoubleClickCenter}
         >
 
             {/* ── Pipeline job progress ───────────────────────────────────── */}
