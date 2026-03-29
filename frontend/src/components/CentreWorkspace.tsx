@@ -108,7 +108,8 @@ export function CentreWorkspace({
     const [duration, setDuration] = useState(0);
     const [volume, setVolume] = useState(0.8);
     // Single snap state — controls both WaveformCanvas region snap AND EditLoopSection quantize
-    const [snapEnabled, setSnapEnabled] = useState(false);
+    // ON by default (Ableton/Rekordbox standard — adaptive snap is industry standard)
+    const [snapEnabled, setSnapEnabled] = useState(true);
 
     // ── Error / save state ───────────────────────────────────────────────
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -190,7 +191,7 @@ export function CentreWorkspace({
             waveformRef.current?.setVolume(volume);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [stemsActive, volume]);
+    }, [stemsActive, volume, waveformReady]);
 
     // ── Loop toggle ───────────────────────────────────────────────────────
     const handleToggleLoop = useCallback(() => {
@@ -199,13 +200,22 @@ export function CentreWorkspace({
             const w = waveformRef.current;
             // Keep WaveformCanvas regionLoopRef in sync with React state
             w?.setLooping(next);
-            if (next && isPlaying) {
-                // Turning ON while playing — switch to region loop immediately
-                w?.playRegion();
+            if (next) {
+                // Center the loop in the middle of the screen
+                if (regionEnd > regionStart) {
+                    w?.zoomToFitRegion(regionStart, regionEnd);
+                }
+                if (isPlaying) {
+                    // Turning ON while playing — switch to region loop immediately
+                    w?.playRegion();
+                }
+            } else {
+                // Turning OFF — zoom back to full track view
+                w?.zoomFit();
             }
             return next;
         });
-    }, [isPlaying]);
+    }, [isPlaying, regionStart, regionEnd]);
 
     // ── Region change (from toolbar nudge / preset) ───────────────────────
     const handleRegionChange = useCallback((s: number, e: number) => {
@@ -236,32 +246,102 @@ export function CentreWorkspace({
     }, [trackId, trackDetail, saving]);
 
 
+    // ── Quantize current region to nearest clean bar boundaries ────────────────
+    const handleQuantize = useCallback(() => {
+        if (!bpm || regionEnd <= regionStart) return;
+        const beatDur = 60 / bpm;
+        const barDur = beatDur * 4;
+        const BAR_PRESETS = [1, 4, 8, 16];
+
+        // Snap start to nearest downbeat (or BPM-estimated bar)
+        let newStart = regionStart;
+        if (downbeats.length > 0) {
+            // Find nearest downbeat at or before start (backward snap)
+            let bestDb = downbeats[0];
+            for (const db of downbeats) {
+                if (db <= regionStart + beatDur * 0.25) bestDb = db;
+            }
+            newStart = bestDb;
+        } else {
+            // Fallback: estimate from BPM
+            newStart = Math.round(regionStart / barDur) * barDur;
+        }
+
+        // Quantize length to nearest standard bar count (1/4/8/16)
+        const rawBars = (regionEnd - newStart) / barDur;
+        let bestBars = BAR_PRESETS[0];
+        let bestDist = Math.abs(rawBars - bestBars);
+        for (const nb of BAR_PRESETS) {
+            const d = Math.abs(rawBars - nb);
+            if (d < bestDist) { bestDist = d; bestBars = nb; }
+        }
+        const newEnd = Math.min(newStart + bestBars * barDur, duration);
+
+        handleRegionChange(newStart, newEnd);
+        setActiveBarPreset(bestBars);
+        waveformRef.current?.zoomToRegion(newStart, newEnd);
+    }, [bpm, regionStart, regionEnd, downbeats, duration, handleRegionChange]);
+
+
     // ── Bar preset toggle ─────────────────────────────────────────────────
     const handleBarPresetToggle = useCallback((bars: number) => {
+        console.log('Bar preset toggle:', bars, 'bpm:', bpm, 'duration:', duration);
+        
         if (activeBarPreset === bars) {
             // Deselect — stop loop, return to normal play
             setActiveBarPreset(null);
             setEditLoopOpen(false);
             waveformRef.current?.stopRegion();
             setIsLooping(false);
+            waveformRef.current?.setLooping(false);
             return;
         }
+        
         setActiveBarPreset(bars);
-        if (bpm && duration > 0) {
-            const beatDur = 60 / bpm;
+        
+        // Use BPM from track or default to 120
+        const effectiveBpm = bpm || 120;
+        
+        if (duration > 0) {
+            const beatDur = 60 / effectiveBpm;
             const barDur = beatDur * 4;
+
+            // Get current playhead position
             const playhead = waveformRef.current?.getCurrentTime() ?? currentTime;
-            // Snap ON → align to nearest bar boundary; Snap OFF → start exactly at playhead
-            const snappedStart = snapEnabled
-                ? Math.round(playhead / barDur) * barDur
-                : playhead;
-            const newEnd = Math.min(snappedStart + barDur * bars, duration);
-            // Just set the region — do NOT auto-start the loop.
-            // User must press LOOP to activate looping.
-            handleRegionChange(snappedStart, newEnd);
-            waveformRef.current?.zoomToRegion(snappedStart, newEnd);
+
+            // Find anchor from current region or playhead
+            let anchorStart: number;
+            if (regionEnd > regionStart && regionStart > 0 && Math.abs(regionStart - playhead) < 5) {
+                // Use existing region start if it's close to playhead
+                anchorStart = regionStart;
+            } else {
+                // Otherwise find nearest downbeat at or before playhead
+                if (downbeats.length > 0) {
+                    anchorStart = downbeats[0];
+                    for (const db of downbeats) {
+                        if (db <= playhead + beatDur * 0.25) anchorStart = db;
+                    }
+                } else {
+                    anchorStart = Math.floor(playhead / barDur) * barDur;
+                }
+            }
+
+            const newEnd = Math.min(anchorStart + barDur * bars, duration);
+            console.log('Creating loop:', anchorStart, 'to', newEnd, 'bars:', bars);
+            
+            handleRegionChange(anchorStart, newEnd);
+
+            // Auto-enable looping (Rekordbox/Serato convention)
+            setIsLooping(true);
+            waveformRef.current?.setLooping(true);
+
+            // Center the loop in the middle of screen and zoom to fit
+            console.log('Calling zoomToFitRegion...');
+            waveformRef.current?.zoomToFitRegion(anchorStart, newEnd);
+        } else {
+            console.log('No duration yet, cannot create loop');
         }
-    }, [bpm, duration, activeBarPreset, currentTime, handleRegionChange]);
+    }, [bpm, duration, activeBarPreset, currentTime, downbeats, regionStart, regionEnd, handleRegionChange]);
 
     // ── Stem solo + play ──────────────────────────────────────────────────
     const handlePlayStem = useCallback((name: string) => {
@@ -448,7 +528,9 @@ export function CentreWorkspace({
                 onToggleLoop={handleToggleLoop}
                 onVolumeChange={vol => {
                     setVolume(vol);
-                    waveformRef.current?.setVolume(vol);
+                    if (!stemsActive) {
+                        waveformRef.current?.setVolume(vol);
+                    }
                 }}
                 activeBarPreset={activeBarPreset}
                 onBarPresetToggle={handleBarPresetToggle}
@@ -456,6 +538,7 @@ export function CentreWorkspace({
                 onEditToggle={handleEditToggle}
                 snapEnabled={snapEnabled}
                 onSnapToggle={() => setSnapEnabled(v => !v)}
+                onQuantize={handleQuantize}
             />
 
             {/* ── Waveform ───────────────────────────────────────────────── */}
@@ -510,13 +593,42 @@ export function CentreWorkspace({
                         setWaveformReady(false);
                     }}
                     onRegionUpdate={(s, e) => {
-                        onUpdateRegion(s, e);
-                        // If user dragged a custom region, clear the bar preset badge
-                        // unless the new region length matches the active preset exactly
-                        if (bpm && activeBarPreset) {
-                            const expectedLen = (60 / bpm) * 4 * activeBarPreset;
-                            if (Math.abs((e - s) - expectedLen) > 0.1) {
-                                setActiveBarPreset(null);
+                        // Auto-quantize on freehand drag: snap to nearest bar + detect bar count
+                        if (bpm && e > s && snapEnabled && downbeats.length > 0) {
+                            const beatDur = 60 / bpm;
+                            const barDur = beatDur * 4;
+                            const BAR_PRESETS = [1, 4, 8, 16];
+
+                            // Find nearest downbeat to start (Serato-style: snap to first downbeat at or before position)
+                            let snappedStart = downbeats[0];
+                            for (const db of downbeats) {
+                                if (db <= s + beatDur * 0.25) snappedStart = db;
+                            }
+
+                            // Calculate duration in bars and find nearest standard bar count
+                            const rawBars = (e - snappedStart) / barDur;
+                            let bestBars = BAR_PRESETS[0];
+                            let bestDist = Math.abs(rawBars - bestBars);
+                            for (const nb of BAR_PRESETS) {
+                                const d = Math.abs(rawBars - nb);
+                                if (d < bestDist) { bestDist = d; bestBars = nb; }
+                            }
+
+                            // Quantize end to nearest bar boundary
+                            const snappedEnd = Math.min(snappedStart + bestBars * barDur, duration);
+
+                            // Apply the quantized region
+                            onUpdateRegion(snappedStart, snappedEnd);
+                            setActiveBarPreset(bestBars);
+                            waveformRef.current?.syncRegion(snappedStart, snappedEnd);
+                        } else {
+                            onUpdateRegion(s, e);
+                            // Clear bar preset if it doesn't match
+                            if (bpm && activeBarPreset) {
+                                const expectedLen = (60 / bpm) * 4 * activeBarPreset;
+                                if (Math.abs((e - s) - expectedLen) > 0.1) {
+                                    setActiveBarPreset(null);
+                                }
                             }
                         }
                     }}

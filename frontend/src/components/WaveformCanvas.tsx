@@ -45,6 +45,8 @@ export interface WaveformHandle {
     syncRegion: (start: number, end: number) => void;
     /** Zoom and scroll to show only the region between start and end */
     zoomToRegion: (start: number, end: number) => void;
+    /** Zoom to fit region in center of screen */
+    zoomToFitRegion: (start: number, end: number) => void;
     /** Current playhead position in seconds */
     getCurrentTime: () => number;
 }
@@ -197,17 +199,16 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             };
         }, []);
 
-        // ── Shift+scroll = zoom ───────────────────────────────────────────────
+        // ── Mouse wheel = zoom ────────────────────────────────────────────────
         useEffect(() => {
             const el = outerRef.current;
             if (!el) return;
             const onWheel = (e: WheelEvent) => {
-                if (!e.shiftKey) return;
                 e.preventDefault();
-                // deltaY > 0 = scroll down = zoom out; < 0 = scroll up = zoom in
+                // Standard convention: scroll up = zoom out (see more), scroll down = zoom in (see less)
                 setZoom(z => e.deltaY < 0
-                    ? Math.min(z * 1.15, 2000)
-                    : Math.max(z / 1.15, 10));
+                    ? Math.max(z / 1.15, 10)   // scroll up = zoom out
+                    : Math.min(z * 1.15, 2000)); // scroll down = zoom in
             };
             el.addEventListener('wheel', onWheel, { passive: false });
             return () => el.removeEventListener('wheel', onWheel);
@@ -537,11 +538,39 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 // Fit region with 15% padding each side
                 const paddedDuration = regionDuration * 1.3;
                 const newZoom = Math.round(W / paddedDuration);
-                setZoom(Math.min(Math.max(newZoom, 10), 2000));
-                // Scroll to start of region after zoom settles
+                const clampedZoom = Math.min(Math.max(newZoom, 10), 2000);
+                setZoom(clampedZoom);
+                // Apply zoom and center in middle of screen
                 setTimeout(() => {
-                    try { ws.setTime(Math.max(0, start - regionDuration * 0.15)); } catch {}
-                }, 120);
+                    try { 
+                        ws.zoom(clampedZoom);
+                        const centerTime = start + regionDuration / 2;
+                        ws.setTime(centerTime);
+                    } catch {}
+                }, 50);
+            },
+            zoomToFitRegion: (start: number, end: number) => {
+                const ws = wsRef.current;
+                if (!ws || end <= start) return;
+                const container = containerRef.current;
+                if (!container) return;
+                const W = container.offsetWidth || 800;
+                const regionDuration = end - start;
+                // Fit region with 15% padding to ensure it doesn't go off screen
+                const paddedDuration = regionDuration * 1.15;
+                const newZoom = Math.round(W / paddedDuration);
+                // Clamp zoom to reasonable range for loop editing
+                const clampedZoom = Math.min(Math.max(newZoom, 20), 500);
+                setZoom(clampedZoom);
+                // Apply zoom and center immediately
+                setTimeout(() => {
+                    try { 
+                        ws.zoom(clampedZoom);
+                        // Center the region in the middle of screen
+                        const centerTime = start + regionDuration / 2;
+                        ws.setTime(centerTime);
+                    } catch {}
+                }, 50);
             },
         }));
 

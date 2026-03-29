@@ -45,6 +45,7 @@ export interface TransportBarProps {
     onEditToggle?: () => void;
     snapEnabled?: boolean;
     onSnapToggle?: () => void;
+    onQuantize?: () => void;
 }
 
 // Format seconds → MM:SS.ms (e.g. "01:23.456")
@@ -72,6 +73,7 @@ export const TransportBar: React.FC<TransportBarProps> = ({
     onEditToggle,
     snapEnabled,
     onSnapToggle,
+    onQuantize,
 }) => {
     const handlePlayPause = useCallback(() => {
         const w = waveformRef.current;
@@ -256,6 +258,22 @@ export const TransportBar: React.FC<TransportBarProps> = ({
                     `}
                 >
                     EDIT
+                </button>
+            )}
+
+            {/* ── Quantize ────────────────────────────────────────────────────── */}
+            {onQuantize && (
+                <button
+                    onClick={onQuantize}
+                    title="Quantize region to nearest bar boundaries"
+                    className={`
+                        flex items-center justify-center px-2.5 h-8 rounded
+                        font-mono text-[11px] font-bold tracking-widest transition-all focus:outline-none
+                        bg-[#8b5cf6]/15 text-[#8b5cf6] border border-[#8b5cf6]/30
+                        hover:bg-[#8b5cf6]/25
+                    `}
+                >
+                    QUANTIZE
                 </button>
             )}
 
