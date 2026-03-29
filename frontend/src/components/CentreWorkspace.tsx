@@ -180,8 +180,10 @@ export function CentreWorkspace({
         }
     }, [trackId]);
 
-    // ── Volume routing: mute WaveSurfer when stems are loaded (stems ARE the audio) ──
-    const stemsActive = stemMixer.isLoaded && stemNames.length > 0;
+    // ── Volume routing: mute WaveSurfer only when stem audio is confirmed loaded
+    // isAudioReady = false until play() succeeds; prevents silence when stems are
+    // listed in trackDetail but the WAV files don't exist on disk yet
+    const stemsActive = stemMixer.isLoaded && stemMixer.isAudioReady && stemNames.length > 0;
     useEffect(() => {
         if (stemsActive) {
             // Silence WaveSurfer — stem mixer provides all audio
@@ -309,14 +311,22 @@ export function CentreWorkspace({
             // Get current playhead position
             const playhead = waveformRef.current?.getCurrentTime() ?? currentTime;
 
-            // Find anchor: use existing region start, or fall back to track beginning
+            // Find anchor: existing region start, or snap playhead to nearest bar boundary
             let anchorStart: number;
             if (regionEnd > regionStart && regionStart > 0) {
                 // Existing region — anchor from its start
                 anchorStart = regionStart;
             } else {
-                // No region yet — always start from the beginning of the track
-                anchorStart = 0;
+                // No region — snap playhead to nearest downbeat at or before current time
+                const playhead = waveformRef.current?.getCurrentTime() ?? currentTime;
+                if (downbeats.length > 0) {
+                    anchorStart = downbeats[0];
+                    for (const db of downbeats) {
+                        if (db <= playhead + beatDur * 0.5) anchorStart = db;
+                    }
+                } else {
+                    anchorStart = Math.floor(playhead / barDur) * barDur;
+                }
             }
 
             const newEnd = Math.min(anchorStart + barDur * bars, duration);

@@ -20,6 +20,8 @@ export interface StemMixerState {
 interface StemMixerReturn {
     stemStates: StemMixerState[];
     isLoaded: boolean;
+    /** True only after play() has confirmed at least one stem buffer loaded */
+    isAudioReady: boolean;
     play: (offset: number) => Promise<void>;
     pause: () => void;
     seek: (offset: number) => void;
@@ -47,6 +49,7 @@ export function useStemMixer(
 
     const [stemStates, setStemStates] = useState<StemMixerState[]>([]);
     const [isLoaded, setIsLoaded]     = useState(false);
+    const [isAudioReady, setIsAudioReady] = useState(false);
 
     // ── Load stems whenever track / stem list changes ─────────────────────────
     useEffect(() => {
@@ -63,6 +66,7 @@ export function useStemMixer(
         }
         playingRef.current = false;
         setIsLoaded(false);
+        setIsAudioReady(false);
 
         if (!trackId || stemNames.length === 0) {
             setStemStates([]);
@@ -155,6 +159,7 @@ export function useStemMixer(
         // Re-sync ctx time after async load
         startCtxTimeRef.current = ctx.currentTime;
 
+        let startedAny = false;
         buffersRef.current.forEach((buffer, name) => {
             const gain = gainNodesRef.current.get(name);
             if (!gain) return;
@@ -164,7 +169,10 @@ export function useStemMixer(
             const safeOffset = Math.max(0, Math.min(offset, buffer.duration - 0.001));
             source.start(0, safeOffset);
             sourceNodesRef.current.set(name, source);
+            startedAny = true;
         });
+        // Only mark audio ready when at least one stem actually loaded
+        if (startedAny) setIsAudioReady(true);
     }, [stopSources, loadStemBuffer]);
 
     // ── Pause — record current position ──────────────────────────────────────
@@ -222,5 +230,5 @@ export function useStemMixer(
         if (masterGainRef.current) masterGainRef.current.gain.value = v;
     }, []);
 
-    return { stemStates, isLoaded, play, pause, seek, toggleMute, toggleSolo, setMasterVolume };
+    return { stemStates, isLoaded, isAudioReady, play, pause, seek, toggleMute, toggleSolo, setMasterVolume };
 }
