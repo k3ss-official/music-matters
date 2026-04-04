@@ -7,7 +7,7 @@ import shutil
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 from uuid import UUID, uuid4
 
 import logging
@@ -24,7 +24,7 @@ from app.services.db import db
 
 StageStatus = str  # alias for readability
 
-_STAGE_TEMPLATE: List[Tuple[str, str]] = [
+_STAGE_TEMPLATE: list[tuple[str, str]] = [
     ("ingest", "Ingest"),
     ("analysis", "Analysis"),
     ("separation", "Separation"),
@@ -32,15 +32,14 @@ _STAGE_TEMPLATE: List[Tuple[str, str]] = [
     ("project", "Project Assembly"),
 ]
 
-
 @dataclass
 class StageState:
     id: str
     label: str
     status: StageStatus = "pending"
     progress: float = 0.0
-    detail: Optional[str] = None
-    eta_seconds: Optional[int] = None
+    detail: str | None = None
+    eta_seconds: int | None = None
 
     def to_schema(self) -> schemas.StageProgress:
         return schemas.StageProgress(
@@ -52,18 +51,17 @@ class StageState:
             eta_seconds=self.eta_seconds,
         )
 
-
 @dataclass
 class JobRecord:
     job_id: UUID
     track_id: UUID
     status: StageStatus = "queued"
-    current_stage: Optional[str] = None
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    detail: Optional[str] = None
-    stages: Dict[str, StageState] = field(default_factory=dict)
-    task: Optional[asyncio.Task[None]] = None
+    current_stage: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    detail: str | None = None
+    stages: dict[str, StageState] = field(default_factory=dict)
+    task: asyncio.Task[None] | None = None
 
     def progress(self) -> float:
         total = len(self.stages)
@@ -76,7 +74,6 @@ class JobRecord:
             return min(1.0, base + running.progress / total)
         return base
 
-
 @dataclass
 class LoopRecord:
     id: str
@@ -86,9 +83,9 @@ class LoopRecord:
     bar_count: int
     stem: str
     bpm: float
-    musical_key: Optional[str]
-    energy: Optional[float] = None
-    tags: List[str] = field(default_factory=list)
+    musical_key: str | None
+    energy: float | None = None
+    tags: list[str] = field(default_factory=list)
 
     def to_preview(self, track_id: UUID) -> schemas.LoopPreview:
         return schemas.LoopPreview(
@@ -104,23 +101,22 @@ class LoopRecord:
             file_url=f"/api/v1/library/tracks/{track_id}/loops/{self.id}/audio",
         )
 
-
 @dataclass
 class TrackRecord:
     track_id: UUID
     slug: str
     title: str
-    artist: Optional[str]
+    artist: str | None
     status: str
     created_at: datetime
-    bpm: Optional[float] = None
-    musical_key: Optional[str] = None
-    original_path: Optional[Path] = None
-    stems_dir: Optional[Path] = None
-    loops_dir: Optional[Path] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    stems: List[str] = field(default_factory=list)
-    loops: List[str] = field(default_factory=list)
+    bpm: float | None = None
+    musical_key: str | None = None
+    original_path: Path | None = None
+    stems_dir: Path | None = None
+    loops_dir: Path | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    stems: list[str] = field(default_factory=list)
+    loops: list[str] = field(default_factory=list)
 
     def to_summary(self) -> schemas.TrackSummary:
         return schemas.TrackSummary(
@@ -148,14 +144,13 @@ class TrackRecord:
             provenance={"slug": self.slug},
         )
 
-
 class PipelineOrchestrator:
     """Coordinates ingest + loop generation pipeline."""
 
     def __init__(self) -> None:
-        self._jobs: Dict[UUID, JobRecord] = {}
-        self._tracks: Dict[UUID, TrackRecord] = {}
-        self._loop_records: Dict[UUID, Dict[str, LoopRecord]] = {}
+        self._jobs: dict[UUID, JobRecord] = {}
+        self._tracks: dict[UUID, TrackRecord] = {}
+        self._loop_records: dict[UUID, dict[str, LoopRecord]] = {}
 
         # Hydrate from DB on boot
         raw_tracks = db.load_all_tracks()
@@ -209,7 +204,7 @@ class PipelineOrchestrator:
         self._shutting_down = False
 
         # SSE Event Queues
-        self._event_queues: Dict[UUID, List[asyncio.Queue]] = {}
+        self._event_queues: dict[UUID, list[asyncio.Queue]] = {}
 
     # ------------------------------------------------------------------
     # Job management
@@ -327,6 +322,14 @@ class PipelineOrchestrator:
             completed_at=job.completed_at,
             stages=[stage.to_schema() for stage in job.stages.values()],
         )
+
+    def list_active_jobs(self) -> list[schemas.JobResponse]:
+        """Return all queued or running jobs."""
+        return [
+            self.get_job(job.job_id)
+            for job in self._jobs.values()
+            if job.status in ("queued", "running")
+        ]
 
     def delete_track(self, track_id: UUID) -> None:
         if track_id not in self._tracks:
@@ -522,11 +525,11 @@ class PipelineOrchestrator:
         stage: StageState,
         track: TrackRecord,
         audio_path: Path,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         stage.detail = "Running allin1 analysis (beats · key · chords · structure)"
         stage.progress = 0.2
 
-        def _compute() -> Dict[str, Any]:
+        def _compute() -> dict[str, Any]:
             from app.services.analysis.mlx_analyzer import analyze_track
             return analyze_track(audio_path)
 
@@ -561,7 +564,7 @@ class PipelineOrchestrator:
         stems_dir = self._stems_dir(track.slug)
         stems_dir.mkdir(parents=True, exist_ok=True)
 
-        def _separate() -> Dict[str, Path]:
+        def _separate() -> dict[str, Path]:
             # --- Tier 2: MelBand-Roformer (SDR 12.6, vocal quality mode) ---
             if separation_mode == "vocal_quality":
                 try:
@@ -581,7 +584,7 @@ class PipelineOrchestrator:
                     output_files = sep.separate(str(audio_path))
 
                     # output_files: list of stem paths written to stems_dir
-                    stem_map: Dict[str, Path] = {}
+                    stem_map: dict[str, Path] = {}
                     for fpath in output_files:
                         p = Path(fpath)
                         # Roformer names are like "trackname_(Vocals).wav"
@@ -622,7 +625,7 @@ class PipelineOrchestrator:
                 # stems: {"drums": ndarray, "bass": ndarray, "vocals": ndarray,
                 #         "guitar": ndarray, "piano": ndarray, "other": ndarray}
 
-                stem_map: Dict[str, Path] = {}
+                stem_map: dict[str, Path] = {}
                 for stem_name, audio in stems.items():
                     out_path = stems_dir / f"{stem_name}.wav"
                     save_audio(audio, out_path, sep.samplerate, bits_per_sample=24)
@@ -653,7 +656,7 @@ class PipelineOrchestrator:
                 stage.progress = 0.4
                 _, stems_dict = sep.separate_audio_file(audio_path)
 
-                stem_map: Dict[str, Path] = {}
+                stem_map: dict[str, Path] = {}
                 for stem_name, audio_tensor in stems_dict.items():
                     out_path = stems_dir / f"{stem_name}.wav"
                     # demucs returns torch tensors: (channels, samples)
@@ -740,9 +743,9 @@ class PipelineOrchestrator:
         return max(0.0, min(1.0, (db + 60) / 60))
 
     @staticmethod
-    def _auto_tags(energy: float, bpm: float, key: Optional[str]) -> List[str]:
+    def _auto_tags(energy: float, bpm: float, key: str | None) -> list[str]:
         """Generate automatic tags from loop properties."""
-        tags: List[str] = []
+        tags: list[str] = []
         if energy >= 0.75:
             tags.append("high-energy")
         elif energy <= 0.25:
@@ -764,13 +767,13 @@ class PipelineOrchestrator:
         stage: StageState,
         track: TrackRecord,
         audio_path: Path,
-    ) -> List[LoopRecord]:
+    ) -> list[LoopRecord]:
         bpm = track.bpm or 120.0
         loops_dir = self._loops_dir(track.slug)
         stage.detail = "Quantising audio and slicing loops"
         stage.progress = 0.1
 
-        def _generate() -> List[LoopRecord]:
+        def _generate() -> list[LoopRecord]:
             info = sf.info(str(audio_path))
             sr = int(info.samplerate)
             data, _ = sf.read(str(audio_path))
@@ -781,7 +784,7 @@ class PipelineOrchestrator:
             samples_per_beat = int(sr * (60.0 / bpm))
             loop_samples = samples_per_beat * 4 * bars
             total_loops = max(1, data.shape[0] // loop_samples)
-            results: List[LoopRecord] = []
+            results: list[LoopRecord] = []
             loops_dir.mkdir(parents=True, exist_ok=True)
 
             # Clear existing loops for this run
@@ -888,12 +891,12 @@ class PipelineOrchestrator:
         if record:
             record.status = status
 
-    def search_tracks(self, query: schemas.SearchRequest) -> List[schemas.SearchResult]:
+    def search_tracks(self, query: schemas.SearchRequest) -> list[schemas.SearchResult]:
         needle = query.query.strip().lower()
         if not needle:
             return []
 
-        results: List[schemas.SearchResult] = []
+        results: list[schemas.SearchResult] = []
         for record in self._tracks.values():
             haystack = " ".join(
                 filter(
@@ -925,8 +928,8 @@ class PipelineOrchestrator:
         return results[:20]
 
     def list_loops(
-        self, track_id: UUID, bar_length: Optional[int] = None
-    ) -> List[schemas.LoopPreview]:
+        self, track_id: UUID, bar_length: int | None = None
+    ) -> list[schemas.LoopPreview]:
         loop_map = self._loop_records.get(track_id, {})
         previews = [loop.to_preview(track_id) for loop in loop_map.values()]
         if bar_length is not None:
@@ -935,13 +938,13 @@ class PipelineOrchestrator:
 
     async def reslice_loops(
         self, track_id: UUID, bar_length: int
-    ) -> List[schemas.LoopPreview]:
+    ) -> list[schemas.LoopPreview]:
         track = self._tracks.get(track_id)
         if track is None or track.original_path is None:
             raise KeyError(f"Track {track_id} not registered")
         bpm = track.bpm or 120.0
 
-        def _generate() -> List[LoopRecord]:
+        def _generate() -> list[LoopRecord]:
             info = sf.info(str(track.original_path))
             sr = int(info.samplerate)
             data, _ = sf.read(str(track.original_path))
@@ -952,7 +955,7 @@ class PipelineOrchestrator:
             loop_samples = samples_per_beat * 4 * bar_length
             loops_dir = self._library.loops_dir(track.slug)
             loops_dir.mkdir(parents=True, exist_ok=True)
-            records: List[LoopRecord] = []
+            records: list[LoopRecord] = []
 
             total_loops = max(1, data.shape[0] // loop_samples)
             for index in range(int(total_loops)):
@@ -1083,7 +1086,7 @@ class PipelineOrchestrator:
         return self._ensure_category_dir(base, "projects", slug)
 
     def _ensure_category_dir(
-        self, preferred: Path, category: str, slug: Optional[str] = None
+        self, preferred: Path, category: str, slug: str | None = None
     ) -> Path:
         target = preferred / slug if slug else preferred
         try:
@@ -1125,7 +1128,6 @@ class PipelineOrchestrator:
         if hits == 0:
             return 0.0
         return min(1.0, hits / len(tokens))
-
 
 pipeline = PipelineOrchestrator()
 

@@ -21,6 +21,22 @@ import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.js';
 import TimelinePlugin from 'wavesurfer.js/dist/plugins/timeline.js';
 import MinimapPlugin from 'wavesurfer.js/dist/plugins/minimap.js';
 
+// Minimal type for WaveSurfer's internal renderer — not part of the public API.
+interface WaveSurferInternal extends WaveSurfer {
+    renderer: { scrollContainer: { scrollWidth: number; clientWidth: number } };
+    options: Record<string, unknown>;
+}
+
+// Minimal type for a WaveSurfer RegionsPlugin region handle.
+// The full Region class is not exported as a named type in WaveSurfer v7.
+interface WaveSurferRegion {
+    id: string;
+    start: number;
+    end: number;
+    setOptions(opts: { start?: number; end?: number; color?: string; drag?: boolean; resize?: boolean }): void;
+    remove(): void;
+}
+
 // Heights (px) for layout coordinate calculations
 const MINIMAP_H = 48;
 const TIMELINE_H = 18;
@@ -348,7 +364,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
 
             // ── Region events ────────────────────────────────────────────────
             // region-updated fires on every drag/resize tick
-            wsRegions.on('region-updated', (region: any) => {
+            wsRegions.on('region-updated', (region: WaveSurferRegion) => {
                 if (isSyncingRef.current) return; // programmatic update via syncRegion — skip to avoid loop
                 const s = snapEnabledRef.current ? snapTime(region.start) : region.start;
                 const e = snapEnabledRef.current ? snapTime(region.end) : region.end;
@@ -361,7 +377,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             });
 
             // Allow dragging anywhere to create a new region (delete old first)
-            wsRegions.on('region-created', (region: any) => {
+            wsRegions.on('region-created', (region: WaveSurferRegion) => {
                 // Remove any existing region
                 if (activeRegionRef.current && activeRegionRef.current.id !== region.id) {
                     activeRegionRef.current.remove();
@@ -406,7 +422,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 }
             });
 
-            ws.on('error', (err: any) => {
+            ws.on('error', (err: Error | string) => {
                 if (destroyed) return;
                 const msg = typeof err === 'string' ? err : err?.message || 'Failed to load audio';
                 // Ignore abort errors — caused by React StrictMode double-invoke cleanup
@@ -495,8 +511,9 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             },
             setLooping: (enabled: boolean) => {
                 regionLoopRef.current = enabled;
-                // Lock the view on the region when looping — stop WaveSurfer scrolling away
-                const ws = wsRef.current as any;
+                // Lock the view on the region when looping — stop WaveSurfer scrolling away.
+                // ws.options is internal state not exposed by the public WaveSurfer type.
+                const ws = wsRef.current as WaveSurferInternal;
                 if (ws) {
                     ws.options.autoScroll = !enabled;
                     ws.options.autoCenter = !enabled;
@@ -552,7 +569,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 // updated synchronously by ws.zoom(), rAF ensures browser layout committed
                 const centerScroll = () => {
                     try {
-                        const renderer = (ws as any).renderer;
+                        const renderer = (ws as WaveSurferInternal).renderer;
                         if (!renderer) return;
                         const { scrollWidth, clientWidth } = renderer.scrollContainer;
                         const dur = ws.getDuration() || 1;
@@ -580,7 +597,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
 
                 const centerScroll = () => {
                     try {
-                        const renderer = (ws as any).renderer;
+                        const renderer = (ws as WaveSurferInternal).renderer;
                         if (!renderer) return;
                         const { scrollWidth, clientWidth } = renderer.scrollContainer;
                         const dur = ws.getDuration() || 1;

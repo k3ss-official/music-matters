@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-def analyze_with_allin1(audio_path: Path) -> Dict[str, Any]:
+def analyze_with_allin1(audio_path: Path) -> dict[str, Any]:
     """
     Run allin1.analyze() and return a normalised dict ready for pipeline.
 
@@ -65,7 +65,7 @@ def analyze_with_allin1(audio_path: Path) -> Dict[str, Any]:
     }
 
 
-def analyze_with_beatnet(audio_path: Path) -> Dict[str, Any]:
+def analyze_with_beatnet(audio_path: Path) -> dict[str, Any]:
     """
     BeatNet offline DBN — beats + downbeats in a single model pass.
     Replaces madmom: more accurate downbeat detection, no separate RNN pass.
@@ -114,7 +114,7 @@ def analyze_with_beatnet(audio_path: Path) -> Dict[str, Any]:
     }
 
 
-def analyze_fallback(audio_path: Path) -> Dict[str, Any]:
+def analyze_fallback(audio_path: Path) -> dict[str, Any]:
     """Librosa beat tracker — last resort when allin1 and BeatNet both fail."""
     import librosa
     import soundfile as sf
@@ -148,7 +148,7 @@ def analyze_fallback(audio_path: Path) -> Dict[str, Any]:
     }
 
 
-def analyze_track(audio_path: Path) -> Dict[str, Any]:
+def analyze_track(audio_path: Path) -> dict[str, Any]:
     """
     Primary entry-point.  Tries allin1 → madmom → librosa (last resort).
     Always returns the same dict shape.

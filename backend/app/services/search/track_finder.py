@@ -8,7 +8,7 @@ import logging
 import hashlib
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any
+from typing import Any
 from datetime import datetime
 import urllib.request
 import urllib.parse
@@ -23,32 +23,31 @@ from app.config import (
 
 logger = logging.getLogger(__name__)
 
-
 @dataclass
 class TrackResult:
     """A track found by search."""
     id: str
     title: str
     artist: str
-    year: Optional[int] = None
+    year: int | None = None
     track_type: str = "original"  # original, remix, collab, edit
-    duration_ms: Optional[int] = None
+    duration_ms: int | None = None
     
     # Source info
     source: str = "unknown"  # musicbrainz, spotify, youtube, etc.
-    source_url: Optional[str] = None
-    preview_url: Optional[str] = None
+    source_url: str | None = None
+    preview_url: str | None = None
     
     # Search metadata
     confidence: float = 0.0  # How well it matches the query
-    section_hint: Optional[str] = None  # Where the good bit probably is
+    section_hint: str | None = None  # Where the good bit probably is
     
     # Extra metadata
-    bpm: Optional[float] = None
-    key: Optional[str] = None
-    genres: List[str] = field(default_factory=list)
+    bpm: float | None = None
+    key: str | None = None
+    genres: list[str] = field(default_factory=list)
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "title": self.title,
@@ -66,7 +65,6 @@ class TrackResult:
             "genres": self.genres
         }
 
-
 class TrackFinder:
     """
     Find tracks from multiple sources.
@@ -82,11 +80,11 @@ class TrackFinder:
     def search(
         self,
         artist: str,
-        year_from: Optional[int] = None,
-        year_to: Optional[int] = None,
+        year_from: int | None = None,
+        year_to: int | None = None,
         track_type: str = "all",
         hints: str = ""
-    ) -> List[TrackResult]:
+    ) -> list[TrackResult]:
         """
         Search for tracks matching criteria.
         
@@ -98,7 +96,7 @@ class TrackFinder:
             hints: Free text hints ("white label", lyrics, vibes, etc.)
         
         Returns:
-            List of matching tracks, sorted by relevance
+            list of matching tracks, sorted by relevance
         """
         logger.info(f"Searching: {artist} ({year_from}-{year_to}) type={track_type} hints='{hints}'")
         
@@ -138,7 +136,7 @@ class TrackFinder:
         logger.info(f"Found {len(results)} tracks")
         return results[:50]  # Return top 50
     
-    def get_preview_url(self, track: TrackResult) -> Optional[str]:
+    def get_preview_url(self, track: TrackResult) -> str | None:
         """Get a playable preview URL for a track."""
         # If we already have a preview URL, use it
         if track.preview_url:
@@ -153,7 +151,7 @@ class TrackFinder:
         # Fallback: search YouTube for a preview
         return self._get_youtube_preview(track.artist, track.title)
     
-    def download(self, track: TrackResult, output_dir: Path) -> Optional[Path]:
+    def download(self, track: TrackResult, output_dir: Path) -> Path | None:
         """
         Download full track in best quality.
         Returns path to downloaded file.
@@ -195,9 +193,9 @@ class TrackFinder:
     def _search_musicbrainz(
         self, 
         artist: str, 
-        year_from: Optional[int], 
-        year_to: Optional[int]
-    ) -> List[TrackResult]:
+        year_from: int | None, 
+        year_to: int | None
+    ) -> list[TrackResult]:
         """Search MusicBrainz for tracks."""
         results = []
         
@@ -260,7 +258,7 @@ class TrackFinder:
     # Spotify Search
     # =========================================================================
     
-    def _get_spotify_token(self) -> Optional[str]:
+    def _get_spotify_token(self) -> str | None:
         """Get Spotify API access token."""
         import time
         
@@ -300,9 +298,9 @@ class TrackFinder:
     def _search_spotify(
         self, 
         artist: str, 
-        year_from: Optional[int], 
-        year_to: Optional[int]
-    ) -> List[TrackResult]:
+        year_from: int | None, 
+        year_to: int | None
+    ) -> list[TrackResult]:
         """Search Spotify for tracks."""
         results = []
         token = self._get_spotify_token()
@@ -362,7 +360,7 @@ class TrackFinder:
         
         return results
     
-    def _get_spotify_preview(self, artist: str, title: str) -> Optional[str]:
+    def _get_spotify_preview(self, artist: str, title: str) -> str | None:
         """Get Spotify preview URL for a specific track."""
         token = self._get_spotify_token()
         if not token:
@@ -394,9 +392,9 @@ class TrackFinder:
     def _search_youtube(
         self, 
         artist: str, 
-        year_from: Optional[int], 
-        year_to: Optional[int]
-    ) -> List[TrackResult]:
+        year_from: int | None, 
+        year_to: int | None
+    ) -> list[TrackResult]:
         """Search YouTube for tracks (via yt-dlp search)."""
         results = []
         
@@ -449,7 +447,7 @@ class TrackFinder:
         
         return results
     
-    def _get_youtube_preview(self, artist: str, title: str) -> Optional[str]:
+    def _get_youtube_preview(self, artist: str, title: str) -> str | None:
         """Get YouTube URL for preview."""
         try:
             import subprocess
@@ -474,7 +472,7 @@ class TrackFinder:
         
         return None
     
-    def _download_ytdlp(self, query: str, output_dir: Path, music: bool = False) -> Optional[Path]:
+    def _download_ytdlp(self, query: str, output_dir: Path, music: bool = False) -> Path | None:
         """Download audio using yt-dlp."""
         import subprocess
         
@@ -514,7 +512,7 @@ class TrackFinder:
         
         return None
     
-    def _download_soundcloud(self, query: str, output_dir: Path) -> Optional[Path]:
+    def _download_soundcloud(self, query: str, output_dir: Path) -> Path | None:
         """Download from SoundCloud using yt-dlp."""
         import subprocess
         
@@ -545,7 +543,7 @@ class TrackFinder:
     # Helper Methods
     # =========================================================================
     
-    def _determine_track_type(self, title: str, artists: List[Dict]) -> str:
+    def _determine_track_type(self, title: str, artists: list[dict]) -> str:
         """Determine if track is original, remix, collab, etc."""
         title_lower = title.lower()
         
@@ -601,7 +599,7 @@ class TrackFinder:
         
         return len(overlap) >= min(2, len(needle_words))
     
-    def _dedupe_results(self, results: List[TrackResult]) -> List[TrackResult]:
+    def _dedupe_results(self, results: list[TrackResult]) -> list[TrackResult]:
         """Remove duplicate tracks, keeping highest confidence."""
         seen = {}
         
@@ -615,7 +613,7 @@ class TrackFinder:
         
         return list(seen.values())
     
-    def _apply_hints(self, results: List[TrackResult], hints: str) -> List[TrackResult]:
+    def _apply_hints(self, results: list[TrackResult], hints: str) -> list[TrackResult]:
         """Boost confidence of tracks matching hints."""
         hints_lower = hints.lower()
         hint_words = set(hints_lower.split())
@@ -661,7 +659,6 @@ class TrackFinder:
         
         # Default: assume the main hook is in the chorus/drop
         return "MAIN HOOK"
-
 
 # Singleton instance
 _track_finder = None

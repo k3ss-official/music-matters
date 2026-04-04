@@ -34,6 +34,14 @@ class SurgicalExtractRequest(BaseModel):
 router = APIRouter(prefix="/library", tags=["library"])
 
 
+def _parse_uuid(value: str) -> UUID:
+    """Parse a UUID string, raising HTTP 400 on invalid input."""
+    try:
+        return UUID(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
 @router.post("/search", response_model=list[SearchResult])
 async def search_tracks(payload: SearchRequest) -> list[SearchResult]:
     return pipeline.search_tracks(payload)
@@ -49,10 +57,7 @@ async def list_tracks(
 
 @router.get("/tracks/{track_id}", response_model=TrackDetailResponse)
 async def track_detail(track_id: str) -> TrackDetailResponse:
-    try:
-        track_uuid = UUID(track_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    track_uuid = _parse_uuid(track_id)
 
     try:
         return pipeline.get_track(track_uuid)
@@ -62,10 +67,7 @@ async def track_detail(track_id: str) -> TrackDetailResponse:
 
 @router.delete("/tracks/{track_id}")
 async def delete_track(track_id: str) -> Response:
-    try:
-        track_uuid = UUID(track_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    track_uuid = _parse_uuid(track_id)
 
     try:
         pipeline.delete_track(track_uuid)
@@ -77,10 +79,7 @@ async def delete_track(track_id: str) -> Response:
 
 @router.post("/tracks/{track_id}/refresh", response_model=JobResponse, status_code=202)
 async def refresh_track(track_id: str) -> JobResponse:
-    try:
-        track_uuid = UUID(track_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    track_uuid = _parse_uuid(track_id)
 
     payload = ProcessJobRequest(track_id=track_uuid)
     job = pipeline.queue_processing(payload)
@@ -92,10 +91,7 @@ async def refresh_track(track_id: str) -> JobResponse:
 async def track_loops(
     track_id: str, bar_length: int | None = Query(default=None, ge=1, le=32)
 ) -> list[LoopPreview]:
-    try:
-        track_uuid = UUID(track_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    track_uuid = _parse_uuid(track_id)
 
     try:
         return pipeline.list_loops(track_uuid, bar_length=bar_length)
@@ -107,10 +103,7 @@ async def track_loops(
 async def reslice_loops(
     track_id: str, payload: LoopResliceRequest
 ) -> list[LoopPreview]:
-    try:
-        track_uuid = UUID(track_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    track_uuid = _parse_uuid(track_id)
 
     try:
         return await pipeline.reslice_loops(track_uuid, bar_length=payload.bar_length)
@@ -120,10 +113,7 @@ async def reslice_loops(
 
 @router.get("/tracks/{track_id}/loops/{loop_id}/audio")
 async def loop_audio(track_id: str, loop_id: str) -> FileResponse:
-    try:
-        track_uuid = UUID(track_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    track_uuid = _parse_uuid(track_id)
 
     try:
         path = pipeline.get_loop_audio(track_uuid, loop_id)
@@ -136,10 +126,7 @@ async def loop_audio(track_id: str, loop_id: str) -> FileResponse:
 
 @router.post("/tracks/{track_id}/loops/custom", response_model=LoopPreview)
 async def create_custom_loop(track_id: str, payload: CustomLoopRequest) -> LoopPreview:
-    try:
-        track_uuid = UUID(track_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    track_uuid = _parse_uuid(track_id)
 
     try:
         return await pipeline.extract_custom_loop(
@@ -157,10 +144,7 @@ async def get_smart_phrases(track_id: str):
     """Get smart phrase suggestions (chorus, drop, intro, outro) for a track."""
     from pathlib import Path
 
-    try:
-        track_uuid = UUID(track_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    track_uuid = _parse_uuid(track_id)
 
     try:
         track = pipeline.get_track(track_uuid)
@@ -216,10 +200,7 @@ async def stem_to_midi(track_id: str, stem_name: str) -> FileResponse:
     import tempfile
     from pathlib import Path
 
-    try:
-        track_uuid = UUID(track_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    track_uuid = _parse_uuid(track_id)
 
     try:
         stem_path = pipeline.get_stem_path(track_uuid, stem_name)
@@ -250,10 +231,7 @@ async def surgical_extract(track_id: str, payload: SurgicalExtractRequest) -> Fi
     import tempfile
     from pathlib import Path
 
-    try:
-        track_uuid = UUID(track_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    track_uuid = _parse_uuid(track_id)
 
     try:
         track = pipeline.get_track(track_uuid)

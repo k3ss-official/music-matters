@@ -7,7 +7,7 @@ import subprocess
 import shutil
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Tuple, Any
+from typing import Any
 import json
 
 from app.config import (
@@ -20,7 +20,6 @@ from app.config import (
 )
 
 logger = logging.getLogger(__name__)
-
 
 @dataclass
 class Section:
@@ -37,7 +36,6 @@ class Section:
     def duration(self) -> float:
         return self.end_time - self.start_time
 
-
 @dataclass 
 class AnalysisResult:
     """Complete analysis of a track."""
@@ -46,13 +44,13 @@ class AnalysisResult:
     camelot: str
     duration: float
     sample_rate: int
-    sections: List[Section] = field(default_factory=list)
-    beats: List[float] = field(default_factory=list)  # Beat timestamps
-    downbeats: List[float] = field(default_factory=list)  # Bar starts
-    energy_profile: List[float] = field(default_factory=list)
+    sections: list[Section] = field(default_factory=list)
+    beats: list[float] = field(default_factory=list)  # Beat timestamps
+    downbeats: list[float] = field(default_factory=list)  # Bar starts
+    energy_profile: list[float] = field(default_factory=list)
     
     @property
-    def compatible_keys(self) -> List[str]:
+    def compatible_keys(self) -> list[str]:
         return get_compatible_keys(self.camelot)
     
     @property
@@ -60,7 +58,7 @@ class AnalysisResult:
         """Duration of one bar in seconds."""
         return 60.0 / self.bpm * 4  # Assuming 4/4
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "bpm": self.bpm,
             "key": self.key,
@@ -80,7 +78,6 @@ class AnalysisResult:
                 for s in self.sections
             ]
         }
-
 
 class AudioProcessor:
     """
@@ -104,7 +101,7 @@ class AudioProcessor:
         audio_path: Path,
         artist: str,
         title: str,
-        year: Optional[int] = None
+        year: int | None = None
     ) -> TrackOutput:
         """
         Full processing pipeline:
@@ -268,11 +265,11 @@ class AudioProcessor:
         y,
         sr: int,
         bpm: float,
-        beats: List[float],
-        downbeats: List[float],
-        energy_profile: List[float],
+        beats: list[float],
+        downbeats: list[float],
+        energy_profile: list[float],
         duration: float
-    ) -> List[Section]:
+    ) -> list[Section]:
         """
         Detect track sections using energy and spectral analysis.
         """
@@ -344,7 +341,7 @@ class AudioProcessor:
         
         return sections
     
-    def _find_transitions(self, bar_energies) -> List[int]:
+    def _find_transitions(self, bar_energies) -> list[int]:
         """Find significant energy transitions between bars."""
         import numpy as np
         
@@ -371,10 +368,10 @@ class AudioProcessor:
         section_idx: int,
         total_sections: int,
         energy: float,
-        all_energies: List[float],
+        all_energies: list[float],
         start_bar: int,
         end_bar: int
-    ) -> Tuple[str, bool]:
+    ) -> tuple[str, bool]:
         """Classify a section by type."""
         
         # First section is intro
@@ -413,7 +410,7 @@ class AudioProcessor:
         
         return "verse", False
     
-    def _create_basic_sections(self, duration: float, bar_duration: float) -> List[Section]:
+    def _create_basic_sections(self, duration: float, bar_duration: float) -> list[Section]:
         """Create basic intro/main/outro sections when detection fails."""
         intro_duration = min(bar_duration * 8, duration * 0.15)
         outro_duration = min(bar_duration * 8, duration * 0.15)
@@ -453,7 +450,7 @@ class AudioProcessor:
     # STEP 2: Stem Separation
     # =========================================================================
     
-    def separate_stems(self, audio_path: Path, output_dir: Path) -> Dict[str, Path]:
+    def separate_stems(self, audio_path: Path, output_dir: Path) -> dict[str, Path]:
         """
         Separate track into 6 stems using Demucs.
         Returns dict of {stem_name: path}
@@ -522,7 +519,7 @@ class AudioProcessor:
             logger.error(f"Demucs error: {e}")
             return self._hpss_fallback(audio_path, output_dir)
     
-    def _hpss_fallback(self, audio_path: Path, output_dir: Path) -> Dict[str, Path]:
+    def _hpss_fallback(self, audio_path: Path, output_dir: Path) -> dict[str, Path]:
         """Fallback: Use HPSS to separate harmonic/percussive."""
         import librosa
         import soundfile as sf
@@ -584,9 +581,9 @@ class AudioProcessor:
     def extract_sections(
         self,
         audio_path: Path,
-        sections: List[Section],
+        sections: list[Section],
         output_dir: Path
-    ) -> Dict[str, Path]:
+    ) -> dict[str, Path]:
         """Extract each section as a separate audio file."""
         import soundfile as sf
         
@@ -645,7 +642,7 @@ class AudioProcessor:
         audio_path: Path,
         analysis: AnalysisResult,
         output_dir: Path
-    ) -> Dict[int, Dict[str, List[Path]]]:
+    ) -> dict[int, dict[str, list[Path]]]:
         """
         Generate loops at multiple bar lengths from key sections.
         Returns {bar_count: {section_name: [paths]}}
@@ -748,7 +745,6 @@ class AudioProcessor:
                 sf.write(str(output_path), y, sr)
         
         return output_path
-
 
 # Singleton instance
 _processor = None

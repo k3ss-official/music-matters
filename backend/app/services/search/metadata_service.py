@@ -4,7 +4,7 @@ Combines MusicBrainz, Discogs, and Spotify for comprehensive artist/track data
 """
 import time
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Any
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from functools import lru_cache
@@ -31,7 +31,6 @@ artist_cache = TTLCache(maxsize=1000, ttl=METADATA_CACHE_TTL)
 track_cache = TTLCache(maxsize=5000, ttl=METADATA_CACHE_TTL)
 search_cache = TTLCache(maxsize=500, ttl=SEARCH_CACHE_TTL)
 
-
 @dataclass
 class TrackInfo:
     """Unified track information from all sources"""
@@ -39,26 +38,26 @@ class TrackInfo:
     title: str
     artist: str
     artist_id: str
-    album: Optional[str] = None
-    release_date: Optional[str] = None
-    duration_ms: Optional[int] = None
+    album: str | None = None
+    release_date: str | None = None
+    duration_ms: int | None = None
     track_type: str = 'original'  # original, remix, collaboration, production
-    bpm: Optional[float] = None
-    key: Optional[str] = None
-    genres: List[str] = None
-    labels: List[str] = None
-    producers: List[str] = None
-    remixers: List[str] = None
-    featuring: List[str] = None
-    isrc: Optional[str] = None
-    spotify_id: Optional[str] = None
-    musicbrainz_id: Optional[str] = None
-    discogs_id: Optional[str] = None
-    youtube_url: Optional[str] = None
-    soundcloud_url: Optional[str] = None
-    bandcamp_url: Optional[str] = None
-    cover_art_url: Optional[str] = None
-    popularity: Optional[int] = None
+    bpm: float | None = None
+    key: str | None = None
+    genres: list[str] = None
+    labels: list[str] = None
+    producers: list[str] = None
+    remixers: list[str] = None
+    featuring: list[str] = None
+    isrc: str | None = None
+    spotify_id: str | None = None
+    musicbrainz_id: str | None = None
+    discogs_id: str | None = None
+    youtube_url: str | None = None
+    soundcloud_url: str | None = None
+    bandcamp_url: str | None = None
+    cover_art_url: str | None = None
+    popularity: int | None = None
     source: str = 'unknown'
     
     def __post_init__(self):
@@ -73,23 +72,22 @@ class TrackInfo:
         if self.featuring is None:
             self.featuring = []
     
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return asdict(self)
-
 
 @dataclass
 class ArtistInfo:
     """Unified artist information"""
     id: str
     name: str
-    aliases: List[str] = None
-    genres: List[str] = None
-    country: Optional[str] = None
-    formed_year: Optional[int] = None
-    image_url: Optional[str] = None
-    spotify_id: Optional[str] = None
-    musicbrainz_id: Optional[str] = None
-    discogs_id: Optional[str] = None
+    aliases: list[str] = None
+    genres: list[str] = None
+    country: str | None = None
+    formed_year: int | None = None
+    image_url: str | None = None
+    spotify_id: str | None = None
+    musicbrainz_id: str | None = None
+    discogs_id: str | None = None
     
     def __post_init__(self):
         if self.aliases is None:
@@ -97,9 +95,8 @@ class ArtistInfo:
         if self.genres is None:
             self.genres = []
     
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return asdict(self)
-
 
 class MetadataService:
     """Aggregates metadata from multiple music databases"""
@@ -155,7 +152,7 @@ class MetadataService:
             time.sleep(SPOTIFY_RATE_LIMIT - elapsed)
         self._last_spotify_request = time.time()
     
-    def search_artist(self, query: str) -> List[ArtistInfo]:
+    def search_artist(self, query: str) -> list[ArtistInfo]:
         """Search for artists across all sources"""
         cache_key = f"artist_search:{query.lower()}"
         if cache_key in search_cache:
@@ -219,10 +216,10 @@ class MetadataService:
     def get_artist_tracks(
         self,
         artist_name: str,
-        date_from: Optional[str] = None,
-        date_to: Optional[str] = None,
-        track_types: Optional[List[str]] = None
-    ) -> List[TrackInfo]:
+        date_from: str | None = None,
+        date_to: str | None = None,
+        track_types: Optional[list[str]] = None
+    ) -> list[TrackInfo]:
         """
         Get all tracks by an artist with filtering options
         
@@ -446,7 +443,7 @@ class MetadataService:
         
         return 'original'
     
-    def search_tracks(self, query: str, limit: int = 20) -> List[TrackInfo]:
+    def search_tracks(self, query: str, limit: int = 20) -> list[TrackInfo]:
         """Search for tracks by title/query"""
         cache_key = f"track_search:{query.lower()}"
         if cache_key in search_cache:
@@ -484,7 +481,6 @@ class MetadataService:
         
         search_cache[cache_key] = tracks
         return tracks
-
 
 # Singleton instance
 _metadata_service = None

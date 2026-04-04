@@ -22,11 +22,7 @@ async def enqueue_processing(payload: ProcessJobRequest) -> JobResponse:
 @router.get("/active", response_model=list[JobResponse])
 async def active_jobs() -> list[JobResponse]:
     """Return all currently running or queued jobs."""
-    return [
-        pipeline.get_job(job.job_id)
-        for job in pipeline._jobs.values()
-        if job.status in ("queued", "running")
-    ]
+    return pipeline.list_active_jobs()
 
 
 @router.get("/{job_id}", response_model=JobResponse)

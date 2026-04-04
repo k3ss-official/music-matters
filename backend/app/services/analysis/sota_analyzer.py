@@ -6,7 +6,7 @@ Uses advanced segmentation algorithms for intelligent section detection
 import logging
 import hashlib
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Any
 from dataclasses import dataclass, asdict, field
 import numpy as np
 import json
@@ -19,20 +19,18 @@ from scipy.spatial.distance import cdist
 
 logger = logging.getLogger(__name__)
 
-
 @dataclass
 class BeatGrid:
     """Beat and downbeat information"""
 
     bpm: float
-    beats: List[float]  # Beat timestamps in seconds
-    downbeats: List[float]  # Downbeat (bar start) timestamps
+    beats: list[float]  # Beat timestamps in seconds
+    downbeats: list[float]  # Downbeat (bar start) timestamps
     time_signature: int  # Beats per bar (usually 4)
     confidence: float
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return asdict(self)
-
 
 @dataclass
 class StructureSegment:
@@ -53,7 +51,7 @@ class StructureSegment:
     is_silent: bool
     is_transition: bool
     confidence: float
-    feature_vector: List[float] = field(default_factory=list)
+    feature_vector: list[float] = field(default_factory=list)
 
     @property
     def duration(self) -> float:
@@ -63,12 +61,11 @@ class StructureSegment:
     def bar_count(self) -> int:
         return self.end_bar - self.start_bar
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         d = asdict(self)
         d["duration"] = self.duration
         d["bar_count"] = self.bar_count
         return d
-
 
 @dataclass
 class HarmonicInfo:
@@ -77,12 +74,11 @@ class HarmonicInfo:
     key: str  # e.g., "C major"
     camelot: str  # e.g., "8B"
     confidence: float
-    compatible_keys: List[Dict[str, str]]  # List of harmonically compatible keys
-    energy_keys: List[Dict[str, str]]  # Keys for energy boost mixing
+    compatible_keys: list[dict[str, str]]  # list of harmonically compatible keys
+    energy_keys: list[dict[str, str]]  # Keys for energy boost mixing
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return asdict(self)
-
 
 @dataclass
 class SamplePoint:
@@ -100,11 +96,10 @@ class SamplePoint:
     section_coherence_score: float
     silence_score: float  # 0 = lots of silence, 100 = no silence
     loop_score: float  # How well it loops
-    feature_summary: Dict[str, float]
+    feature_summary: dict[str, float]
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return asdict(self)
-
 
 @dataclass
 class SOTAAnalysisResult:
@@ -114,15 +109,15 @@ class SOTAAnalysisResult:
     duration: float
     beat_grid: BeatGrid
     harmonic: HarmonicInfo
-    segments: List[StructureSegment]
-    sample_points: List[SamplePoint]
-    waveform_peaks: List[float]
-    energy_curve: List[float]
-    loudness_curve: List[float]
-    spectral_curve: List[float]
+    segments: list[StructureSegment]
+    sample_points: list[SamplePoint]
+    waveform_peaks: list[float]
+    energy_curve: list[float]
+    loudness_curve: list[float]
+    spectral_curve: list[float]
     fingerprint: str  # Audio fingerprint for similarity matching
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             "file_path": self.file_path,
             "duration": self.duration,
@@ -136,7 +131,6 @@ class SOTAAnalysisResult:
             "spectral_curve": self.spectral_curve,
             "fingerprint": self.fingerprint,
         }
-
 
 class SOTAAudioAnalyzer:
     """
@@ -198,7 +192,7 @@ class SOTAAudioAnalyzer:
         self.sr = sample_rate
 
     def analyze(
-        self, file_path: Path, bar_options: List[int] = None
+        self, file_path: Path, bar_options: list[int] = None
     ) -> SOTAAnalysisResult:
         """Perform comprehensive SOTA analysis"""
         if bar_options is None:
@@ -374,7 +368,7 @@ class SOTAAudioAnalyzer:
                 energy_keys=[],
             )
 
-    def _get_compatible_keys(self, camelot: str) -> List[Dict[str, str]]:
+    def _get_compatible_keys(self, camelot: str) -> list[dict[str, str]]:
         """Get harmonically compatible keys using Camelot wheel rules"""
         if not camelot or camelot == "?":
             return []
@@ -423,7 +417,7 @@ class SOTAAudioAnalyzer:
 
         return compatible
 
-    def _get_energy_boost_keys(self, camelot: str) -> List[Dict[str, str]]:
+    def _get_energy_boost_keys(self, camelot: str) -> list[dict[str, str]]:
         """Get keys for energy boost mixing (+7 semitones)"""
         if not camelot or camelot == "?":
             return []
@@ -449,7 +443,7 @@ class SOTAAudioAnalyzer:
 
     def _extract_features(
         self, y: np.ndarray, sr: int, beat_grid: BeatGrid
-    ) -> Dict[str, np.ndarray]:
+    ) -> dict[str, np.ndarray]:
         """Extract comprehensive audio features"""
         features = {}
 
@@ -485,9 +479,9 @@ class SOTAAudioAnalyzer:
         y: np.ndarray,
         sr: int,
         beat_grid: BeatGrid,
-        features: Dict[str, np.ndarray],
+        features: dict[str, np.ndarray],
         duration: float,
-    ) -> List[StructureSegment]:
+    ) -> list[StructureSegment]:
         """Advanced structure segmentation using self-similarity"""
         segments = []
 
@@ -700,11 +694,11 @@ class SOTAAudioAnalyzer:
         y: np.ndarray,
         sr: int,
         beat_grid: BeatGrid,
-        segments: List[StructureSegment],
-        features: Dict[str, np.ndarray],
-        bar_options: List[int],
+        segments: list[StructureSegment],
+        features: dict[str, np.ndarray],
+        bar_options: list[int],
         duration: float,
-    ) -> List[SamplePoint]:
+    ) -> list[SamplePoint]:
         """Find optimal sample extraction points"""
         sample_points = []
 
@@ -821,11 +815,11 @@ class SOTAAudioAnalyzer:
         segment: StructureSegment,
         sample_duration: float,
         beat_grid: BeatGrid,
-        features: Dict[str, np.ndarray],
+        features: dict[str, np.ndarray],
         y: np.ndarray,
         sr: int,
         duration: float,
-    ) -> Optional[float]:
+    ) -> float | None:
         """Find the best starting point within a segment"""
         if segment.duration < sample_duration:
             return None
@@ -959,7 +953,7 @@ class SOTAAudioAnalyzer:
 
         return 50.0
 
-    def _generate_waveform(self, y: np.ndarray, num_points: int = 1000) -> List[float]:
+    def _generate_waveform(self, y: np.ndarray, num_points: int = 1000) -> list[float]:
         """Generate waveform peaks for visualization"""
         samples_per_point = len(y) // num_points
         peaks = []
@@ -974,7 +968,7 @@ class SOTAAudioAnalyzer:
         max_peak = max(peaks) if peaks else 1
         return [p / max_peak for p in peaks]
 
-    def _smooth_curve(self, data: np.ndarray, num_points: int) -> List[float]:
+    def _smooth_curve(self, data: np.ndarray, num_points: int) -> list[float]:
         """Smooth and downsample a curve for visualization"""
         # Normalize
         data_norm = (data - np.min(data)) / (np.max(data) - np.min(data) + 1e-6)
@@ -1009,7 +1003,7 @@ class SOTAAudioAnalyzer:
 
         return fingerprint
 
-    def _snap_to_bar(self, time: float, downbeats: List[float]) -> float:
+    def _snap_to_bar(self, time: float, downbeats: list[float]) -> float:
         """Snap a time to the nearest bar (downbeat)"""
         if not downbeats:
             return time
@@ -1017,14 +1011,14 @@ class SOTAAudioAnalyzer:
         closest = min(downbeats, key=lambda x: abs(x - time))
         return closest
 
-    def _time_to_beat(self, time: float, beats: List[float]) -> int:
+    def _time_to_beat(self, time: float, beats: list[float]) -> int:
         """Convert time to beat number"""
         for i, beat_time in enumerate(beats):
             if beat_time >= time:
                 return i
         return len(beats)
 
-    def _time_to_bar(self, time: float, downbeats: List[float]) -> int:
+    def _time_to_bar(self, time: float, downbeats: list[float]) -> int:
         """Convert time to bar number"""
         for i, bar_time in enumerate(downbeats):
             if bar_time >= time:
@@ -1032,8 +1026,8 @@ class SOTAAudioAnalyzer:
         return len(downbeats)
 
     def _create_fallback_segments(
-        self, duration: float, beat_grid: BeatGrid, features: Dict[str, np.ndarray]
-    ) -> List[StructureSegment]:
+        self, duration: float, beat_grid: BeatGrid, features: dict[str, np.ndarray]
+    ) -> list[StructureSegment]:
         """Create basic fallback segmentation"""
         segments = []
 
@@ -1075,14 +1069,14 @@ class SOTAAudioAnalyzer:
         return segments
 
     def detect_smart_phrases(
-        self, file_path: Path, bar_options: List[int] = None
-    ) -> Dict[str, Any]:
+        self, file_path: Path, bar_options: list[int] = None
+    ) -> dict[str, Any]:
         """
         Detect smart phrases - high-energy sections like chorus, drop, intro, outro.
         Uses onset strength, energy envelope, and downbeat alignment.
 
         Returns:
-            Dict with 'phrases' list containing detected musical phrases
+            dict with 'phrases' list containing detected musical phrases
         """
         if bar_options is None:
             bar_options = [4, 8, 16]
@@ -1211,10 +1205,8 @@ class SOTAAudioAnalyzer:
             logger.error(f"Smart phrase detection failed: {e}")
             return {"phrases": [], "duration": 0, "bpm": 120}
 
-
 # Singleton
 _sota_analyzer = None
-
 
 def get_sota_analyzer() -> SOTAAudioAnalyzer:
     global _sota_analyzer

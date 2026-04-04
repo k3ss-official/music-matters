@@ -3,7 +3,7 @@ import sqlite3
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Any
 from uuid import UUID
 
 from app.config import settings
@@ -11,7 +11,6 @@ from app.api import schemas
 
 # Use the music library dir for the DB
 DB_PATH = settings.MUSIC_LIBRARY / "library.db"
-
 
 class DatabaseService:
     """SQLite Persistence layer for Music Matters tracks and loops."""
@@ -132,7 +131,7 @@ class DatabaseService:
             ),
         )
 
-    def load_all_tracks(self) -> Dict[UUID, Any]:
+    def load_all_tracks(self) -> dict[UUID, Any]:
         """Load all tracks from DB to bootstrap pipeline._tracks."""
         # Note: We return raw dicts that pipeline can inflate into TrackRecord objects
         conn = self._get_conn()
@@ -198,7 +197,7 @@ class DatabaseService:
             ),
         )
 
-    def load_all_loops(self) -> Dict[UUID, Dict[str, Any]]:
+    def load_all_loops(self) -> dict[UUID, dict[str, Any]]:
         """Load loops organized by track_id."""
         conn = self._get_conn()
         cursor = conn.execute("SELECT * FROM loop_records")
@@ -228,7 +227,7 @@ class DatabaseService:
         """Upsert a JobRecord."""
         conn = self._get_conn()
         
-        # Serialize stages Dict[str, StageState] to JSON
+        # Serialize stages dict[str, StageState] to JSON
         stages_data = {}
         for sid, stage in job_record.stages.items():
             stages_data[sid] = {
@@ -269,7 +268,7 @@ class DatabaseService:
             ),
         )
 
-    def load_all_jobs(self) -> List[Dict[str, Any]]:
+    def load_all_jobs(self) -> list[dict[str, Any]]:
         """Load all jobs from DB."""
         conn = self._get_conn()
         cursor = conn.execute("SELECT * FROM jobs")
@@ -292,6 +291,5 @@ class DatabaseService:
     def delete_job(self, job_id: UUID) -> None:
         conn = self._get_conn()
         conn.execute("DELETE FROM jobs WHERE job_id = ?", (str(job_id),))
-
 
 db = DatabaseService()
