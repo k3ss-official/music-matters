@@ -83,6 +83,11 @@ class Settings(BaseSettings):
     MAX_BPM: int = 200
     ENABLE_SOTA_ANALYSIS: bool = True  # Advanced structure analysis
     ENABLE_FINGERPRINTING: bool = True
+    # AcoustID client key — get a free one at https://acoustid.org/new-application
+    # Requires `fpcalc` (Chromaprint CLI) installed on the system:
+    #   macOS:  brew install chromaprint
+    #   Linux:  apt install libchromaprint-tools
+    ACOUSTID_API_KEY: str = ""
 
     # Performance
     MAX_CONCURRENT_JOBS: int = 3

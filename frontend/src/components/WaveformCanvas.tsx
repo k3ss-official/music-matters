@@ -422,6 +422,17 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 }
             });
 
+            // ── Click-to-play (Audacity-style) ──────────────────────────────
+            // 'interaction' fires only on direct user clicks — not on programmatic
+            // setTime() calls — so this won't cause feedback loops.
+            ws.on('interaction', () => {
+                if (destroyed) return;
+                if (!ws.isPlaying()) {
+                    ws.play();
+                    if (onPlayStateChange) onPlayStateChange(true);
+                }
+            });
+
             ws.on('error', (err: Error | string) => {
                 if (destroyed) return;
                 const msg = typeof err === 'string' ? err : err?.message || 'Failed to load audio';

@@ -48,6 +48,7 @@ import { ExportPanel } from './components/ExportPanel';
 import { ExportDialog } from './components/ExportDialog';
 import { ProcessingView } from './components/ProcessingView';
 import { ShortcutLegend } from './components/ShortcutLegend';
+import { RecognizeButton } from './components/RecognizeButton';
 import type WaveSurfer from 'wavesurfer.js';
 
 // Icons (inline SVGs for zero-dep)
@@ -491,6 +492,24 @@ function App() {
                 <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#ff3b5c]/10 border border-[#ff3b5c]/20 text-[#ff3b5c] text-xs font-mono">
                   <AlertIcon />
                   Backend offline — start the server first
+                </div>
+              )}
+
+              {/* Identify a track by ear (Shazam-style) */}
+              {isConnected && (
+                <div className="flex flex-col items-center gap-2 w-full max-w-md">
+                  <div className="text-[10px] font-mono tracking-[0.2em] text-white/20 text-center">OR</div>
+                  <RecognizeButton
+                    onLibraryMatch={(trackId) => {
+                      setSelectedTrackId(trackId);
+                      setDetailLoading(true);
+                      api.getTrackDetail(trackId).then(detail => {
+                        setTrackDetail(detail);
+                        setDetailLoading(false);
+                        setView('workspace');
+                      }).catch(() => setDetailLoading(false));
+                    }}
+                  />
                 </div>
               )}
 

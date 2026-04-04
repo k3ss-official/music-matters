@@ -1,9 +1,11 @@
 """
 Music Matters - Audio Fingerprinting Routes
-Similarity detection, duplicate finding, semantic search
+Similarity detection, duplicate finding, semantic search, Shazam-style recognition
 """
-from typing import List
-from fastapi import APIRouter, HTTPException
+import tempfile
+from pathlib import Path
+
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/fingerprint", tags=["fingerprint"])
@@ -84,3 +86,27 @@ async def find_similar_tracks(request: FindSimilarRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/recognize")
+async def recognize_track(audio: UploadFile = File(...)):
+    """
+    Shazam-style track recognition.
+
+    Upload a short audio clip (≥10 s recommended).  Returns an AcoustID match
+    when fpcalc is installed and ACOUSTID_API_KEY is configured in settings,
+    plus the best similarity match within the local library.
+    """
+    suffix = Path(audio.filename or "clip.wav").suffix or ".wav"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(await audio.read())
+        tmp_path = Path(tmp.name)
+
+    try:
+        from app.services.fingerprint.recognizer import recognize_audio
+        result = await recognize_audio(tmp_path)
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        tmp_path.unlink(missing_ok=True)

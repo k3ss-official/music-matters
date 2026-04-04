@@ -329,4 +329,40 @@ export const generateAceStep = async (payload: GenerateRequest): Promise<{ blob:
     }
 };
 
+// ---------------------------------------------------------------------------
+// Track recognition (Shazam-style)
+// ---------------------------------------------------------------------------
+
+export interface RecognizeResult {
+    acoustid: {
+        score: number;
+        title: string | null;
+        artist: string | null;
+        album: string | null;
+        year: number | null;
+        mbid: string | null;
+    } | null;
+    library_match: {
+        track_id: string;
+        title: string;
+        artist: string | null;
+        similarity: number;
+    } | null;
+    fpcalc_available: boolean;
+    acoustid_key_configured: boolean;
+}
+
+export const recognizeTrack = async (audioBlob: Blob): Promise<RecognizeResult> => {
+    try {
+        const form = new FormData();
+        form.append('audio', audioBlob, 'clip.wav');
+        const resp = await api.post<RecognizeResult>('/fingerprint/recognize', form, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        return resp.data;
+    } catch (err) {
+        handleAxiosError(err);
+    }
+};
+
 export default api;
