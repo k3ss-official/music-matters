@@ -6,7 +6,6 @@ import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
-from typing import Optional, List
 from pydantic import BaseModel as _BaseModel
 
 from app.api.schemas import IngestRequest, IngestResponse, ProcessingOptions
@@ -18,14 +17,14 @@ router = APIRouter(prefix="/ingest", tags=["ingest"])
 
 
 class BatchIngestRequest(_BaseModel):
-    queries: List[str]
+    queries: list[str]
     options: ProcessingOptions = ProcessingOptions()
-    collection: Optional[str] = None
-    tags: List[str] = []
+    collection: str | None = None
+    tags: list[str] = []
 
 
 class BatchIngestResponse(_BaseModel):
-    jobs: List[IngestResponse]
+    jobs: list[IngestResponse]
     total: int
 
 
@@ -40,9 +39,9 @@ async def enqueue_ingest(payload: IngestRequest) -> IngestResponse:
 @router.post("/upload", response_model=IngestResponse, status_code=202)
 async def upload_and_ingest(
     file: UploadFile = File(...),
-    tags: Optional[str] = Form(None),
-    collection: Optional[str] = Form(None),
-    options: Optional[str] = Form(None),  # JSON string
+    tags: str | None = Form(None),
+    collection: str | None = Form(None),
+    options: str | None = Form(None),  # JSON string
 ) -> IngestResponse:
     """Upload an audio file and ingest it into the pipeline."""
     try:
@@ -94,8 +93,8 @@ async def batch_ingest(payload: BatchIngestRequest) -> BatchIngestResponse:
     if len(payload.queries) > 50:
         raise HTTPException(status_code=400, detail="Maximum 50 queries per batch")
 
-    jobs: List[IngestResponse] = []
-    errors: List[str] = []
+    jobs: list[IngestResponse] = []
+    errors: list[str] = []
 
     for query in payload.queries:
         try:
@@ -117,3 +116,62 @@ async def batch_ingest(payload: BatchIngestRequest) -> BatchIngestResponse:
         )
 
     return BatchIngestResponse(jobs=jobs, total=len(jobs))
+
+
+# ---------------------------------------------------------------------------
+# Traktor NML beatgrid import
+# ---------------------------------------------------------------------------
+
+@router.post("/traktor-nml")
+async def import_traktor_nml(
+    nml: UploadFile = File(...),
+    reslice: bool = False,
+):
+    """
+    Import beatgrid data from a Traktor Pro collection.nml file.
+
+    Upload your Traktor ``collection.nml`` (found in
+    ``~/Documents/Native Instruments/Traktor X.Y/``).  The endpoint matches
+    each entry to a library track by filename, writes the Traktor BPM and
+    beatgrid anchor (INIZIO) into the track's metadata, and returns a report.
+
+    Set ``?reslice=true`` to automatically re-slice loops for every matched
+    track using the imported anchor — this makes loops line up exactly where
+    Traktor's grid says bar 1 is.
+
+    The data Traktor uses:
+    - **BPM** — the confirmed tempo
+    - **INIZIO** — the beatgrid anchor in seconds (position of bar 1, beat 1)
+    """
+    import tempfile
+
+    suffix = Path(nml.filename or "collection.nml").suffix or ".nml"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(await nml.read())
+        tmp_path = Path(tmp.name)
+
+    try:
+        from app.services.import_traktor import parse_traktor_nml, match_and_apply
+
+        entries = parse_traktor_nml(tmp_path)
+        report = match_and_apply(entries, pipeline)
+
+        if reslice and report["matched_count"] > 0:
+            import asyncio
+            from uuid import UUID
+
+            resliced: list[str] = []
+            for m in report["matched"]:
+                try:
+                    tid = UUID(m["track_id"])
+                    await pipeline.reslice_loops(tid, bar_length=4)
+                    resliced.append(m["track_id"])
+                except Exception as exc:
+                    pass  # non-fatal — report still useful
+            report["resliced"] = resliced
+
+        return report
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        tmp_path.unlink(missing_ok=True)

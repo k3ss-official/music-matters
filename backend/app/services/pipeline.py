@@ -783,7 +783,16 @@ class PipelineOrchestrator:
             bars = 4
             samples_per_beat = int(sr * (60.0 / bpm))
             loop_samples = samples_per_beat * 4 * bars
-            total_loops = max(1, data.shape[0] // loop_samples)
+
+            # Beatgrid anchor — the first true downbeat (Traktor-style).
+            # All bar positions derive from: anchor + N * bar_duration.
+            # This prevents accumulated drift caused by phase uncertainty.
+            raw_anchor: float = track.metadata.get("beatgrid_anchor") or 0.0
+            anchor_samples = max(0, int(raw_anchor * sr))
+
+            # How many complete 4-bar loops fit after the anchor?
+            usable_samples = data.shape[0] - anchor_samples
+            total_loops = max(1, usable_samples // loop_samples)
             results: list[LoopRecord] = []
             loops_dir.mkdir(parents=True, exist_ok=True)
 
@@ -792,7 +801,7 @@ class PipelineOrchestrator:
                 file.unlink(missing_ok=True)
 
             for index in range(int(total_loops)):
-                start = index * loop_samples
+                start = anchor_samples + index * loop_samples
                 end = start + loop_samples
                 if end > data.shape[0]:
                     if index == 0:
@@ -957,9 +966,13 @@ class PipelineOrchestrator:
             loops_dir.mkdir(parents=True, exist_ok=True)
             records: list[LoopRecord] = []
 
-            total_loops = max(1, data.shape[0] // loop_samples)
+            # Use stored beatgrid anchor so bars are phase-locked
+            raw_anchor: float = track.metadata.get("beatgrid_anchor") or 0.0
+            anchor_samples = max(0, int(raw_anchor * sr))
+            usable_samples = data.shape[0] - anchor_samples
+            total_loops = max(1, usable_samples // loop_samples)
             for index in range(int(total_loops)):
-                start = index * loop_samples
+                start = anchor_samples + index * loop_samples
                 end = start + loop_samples
                 if end > data.shape[0]:
                     if index == 0:

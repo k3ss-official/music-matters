@@ -44,7 +44,6 @@ import { subscribeToJob } from './services/sse';
 
 import { CentreWorkspace } from './components/CentreWorkspace';
 import { AnalysisPanel } from './components/AnalysisPanel';
-import { ExportPanel } from './components/ExportPanel';
 import { ExportDialog } from './components/ExportDialog';
 import { ProcessingView } from './components/ProcessingView';
 import { ShortcutLegend } from './components/ShortcutLegend';
@@ -596,16 +595,35 @@ function App() {
                 onRequestSeparation={selectedTrackId ? handleRequestSeparation : undefined}
               />
 
-              <ExportPanel
-                trackId={selectedTrackId || ''}
-                availableStems={trackDetail?.stems || []}
-                selectedStems={selectedStems}
-                regionStart={regionStart}
-                regionEnd={regionEnd}
-                onExportComplete={() => {}}
-                onOpenDialog={() => setExportDialogOpen(true)}
-                disabled={!selectedTrackId || !waveformReady || detailLoading}
-              />
+              {/* Export button — opens the full Export dialog */}
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => setExportDialogOpen(true)}
+                  disabled={!selectedTrackId || !waveformReady || detailLoading || regionEnd <= regionStart}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl
+                             bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-[#00d4ff]
+                             hover:bg-[#00d4ff]/20 hover:border-[#00d4ff]/60
+                             disabled:opacity-30 disabled:cursor-not-allowed
+                             transition-all font-semibold text-sm"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  Save / Export…
+                </button>
+                {regionEnd > regionStart && (
+                  <div className="text-center text-[10px] font-mono text-white/25">
+                    {(regionEnd - regionStart).toFixed(2)} s selected
+                  </div>
+                )}
+                {(!waveformReady || regionEnd <= regionStart) && selectedTrackId && !detailLoading && (
+                  <div className="text-center text-[10px] text-white/20">
+                    Set a loop region first
+                  </div>
+                )}
+              </div>
             </aside>
           </>
         )}

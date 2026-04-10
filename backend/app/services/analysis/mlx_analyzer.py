@@ -148,10 +148,52 @@ def analyze_fallback(audio_path: Path) -> dict[str, Any]:
     }
 
 
+def _compute_beatgrid_anchor(beats: list[float], bpm: float, time_sig: int = 4) -> float:
+    """
+    Find the optimal beatgrid anchor using phase-alignment scoring.
+
+    Traktor's approach: a single authoritative first-downbeat timestamp is used
+    to derive every bar boundary as ``anchor + N × bar_duration``.  This prevents
+    the accumulated drift that occurs when downbeats are taken as every Nth
+    librosa beat (which may start mid-bar).
+
+    Algorithm: score each of the first ``time_sig`` detected beats as a
+    candidate anchor by counting how many predicted bar positions have a
+    detected beat within ±35 % of one beat interval.  The candidate with the
+    highest score wins.
+    """
+    if not beats or bpm <= 0:
+        return 0.0
+
+    beat_dur = 60.0 / bpm
+    bar_dur = beat_dur * time_sig
+    last_beat = beats[-1]
+
+    best_score = -1.0
+    best_anchor = beats[0]
+
+    # Only test the first bar's worth of beats as candidates (4 beats for 4/4)
+    for candidate in beats[:time_sig]:
+        score = 0.0
+        t = candidate
+        while t <= last_beat + bar_dur:
+            # Count a hit if any detected beat lands within ±35 % of a beat interval
+            if any(abs(b - t) < beat_dur * 0.35 for b in beats):
+                score += 1.0
+            t += bar_dur
+        if score > best_score:
+            best_score = score
+            best_anchor = candidate
+
+    logger.debug("beatgrid anchor=%.4fs score=%.1f bpm=%.1f", best_anchor, best_score, bpm)
+    return best_anchor
+
+
 def analyze_track(audio_path: Path) -> dict[str, Any]:
     """
-    Primary entry-point.  Tries allin1 → madmom → librosa (last resort).
-    Always returns the same dict shape.
+    Primary entry-point.  Tries allin1 → BeatNet → librosa (last resort).
+    Always returns the same dict shape, including a ``beatgrid_anchor`` key
+    that downstream loop slicers use to derive bar positions without drift.
     """
     import soundfile as sf
 
@@ -172,17 +214,20 @@ def analyze_track(audio_path: Path) -> dict[str, Any]:
             len(result["downbeats"]),
             len(result["segments"]),
         )
-        return result
     except Exception as exc:
         logger.warning("allin1 failed (%s), trying BeatNet", exc)
+        try:
+            result = analyze_with_beatnet(audio_path)
+            result.update(base)
+        except Exception as exc2:
+            logger.warning("BeatNet failed (%s), falling back to librosa", exc2)
+            result = analyze_fallback(audio_path)
+            result.update(base)
 
-    try:
-        result = analyze_with_beatnet(audio_path)
-        result.update(base)
-        return result
-    except Exception as exc:
-        logger.warning("BeatNet failed (%s), falling back to librosa", exc)
+    # Compute phase-aligned beatgrid anchor (Traktor-style)
+    beats: list[float] = result.get("beats") or []
+    bpm: float = result.get("bpm") or 120.0
+    anchor = _compute_beatgrid_anchor(beats, bpm)
+    result["beatgrid_anchor"] = anchor
 
-    result = analyze_fallback(audio_path)
-    result.update(base)
     return result
