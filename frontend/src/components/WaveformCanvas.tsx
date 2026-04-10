@@ -65,10 +65,18 @@ export interface WaveformHandle {
     zoomToFitRegion: (start: number, end: number) => void;
     /** Current playhead position in seconds */
     getCurrentTime: () => number;
+    /** Return the underlying HTMLMediaElement so a second WaveSurfer instance can share it */
+    getMediaElement: () => HTMLMediaElement | null;
 }
 
 export interface WaveformCanvasProps {
     audioUrl: string | null;
+    /**
+     * Optional shared HTMLMediaElement from a parent WaveformCanvas.
+     * When provided, WaveSurfer uses this element instead of fetching audioUrl again
+     * (zero extra network/decode cost). Use for the loop-editor pane.
+     */
+    mediaElement?: HTMLMediaElement | null;
     onReady?: (duration: number) => void;
     onError?: (error: Error, url: string) => void;
     /** Called whenever the region changes (drag, resize, snap, toolbar nudge) */
@@ -95,6 +103,8 @@ export interface WaveformCanvasProps {
     phraseMarkers?: number[];
     /** Whether loop mode is active — controls region dim overlay visibility */
     isLooping?: boolean;
+    /** If true, hide the overview minimap strip (e.g. in the loop-editor pane) */
+    hideOverview?: boolean;
 }
 
 // How close (seconds) to a beat before we snap
@@ -131,6 +141,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
     function WaveformCanvas(
         {
             audioUrl,
+            mediaElement,
             onReady,
             onError,
             onRegionUpdate,
@@ -146,6 +157,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             regionEnd,
             phraseMarkers = [],
             isLooping = false,
+            hideOverview = false,
         },
         ref
     ) {
@@ -286,7 +298,8 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
 
         // ── Init WaveSurfer ───────────────────────────────────────────────────
         useEffect(() => {
-            if (!containerRef.current || !timelineRef.current || !minimapRef.current || !audioUrl) return;
+            if (!containerRef.current || !timelineRef.current || !minimapRef.current) return;
+            if (!audioUrl && !mediaElement) return;
 
             // Clean up previous instance
             if (wsRef.current) {
@@ -302,7 +315,9 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
 
             const ws = WaveSurfer.create({
                 container: containerRef.current,
-                url: audioUrl,
+                // If a shared media element is provided, reuse it (no re-fetch / re-decode).
+                // Otherwise load from URL as normal.
+                ...(mediaElement ? { media: mediaElement } : { url: audioUrl! }),
                 waveColor: 'rgba(139, 92, 246, 0.45)',
                 progressColor: '#8b5cf6',
                 cursorColor: '#00d4ff',
@@ -540,6 +555,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             getDuration: () => wsRef.current?.getDuration() ?? 0,
             getCurrentTime: () => wsRef.current?.getCurrentTime() ?? 0,
             isPlaying: () => wsRef.current?.isPlaying() ?? false,
+            getMediaElement: () => wsRef.current?.getMediaElement() ?? null,
             syncRegion: (start: number, end: number) => {
                 const regions = wsRegionsRef.current;
                 if (!regions) return;
@@ -685,8 +701,8 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                             </div>
                         )}
 
-                        {/* ── Overview / minimap strip ── */}
-                        <div className="relative w-full" style={{ height: MINIMAP_H }}>
+                        {/* ── Overview / minimap strip (hidden in loop-editor pane) ── */}
+                        <div className="relative w-full" style={{ height: hideOverview ? 0 : MINIMAP_H, overflow: 'hidden' }}>
                             <div
                                 ref={minimapRef}
                                 className="w-full h-full bg-[#06060e] border-b border-white/[0.04] overflow-hidden"
@@ -712,7 +728,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                         <canvas
                             ref={gridCanvasRef}
                             className="absolute inset-0 z-[1] pointer-events-none w-full h-full"
-                            style={{ top: MINIMAP_H + TIMELINE_H }} // below minimap + timeline
+                            style={{ top: (hideOverview ? 0 : MINIMAP_H) + TIMELINE_H }}
                         />
 
                         {/* Timeline ruler + IN/OUT marker overlay */}
@@ -812,7 +828,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                             const rightL = Math.max(0, (regionEnd   - visibleStart) * zoom);
                             const shade  = 'rgba(8,8,15,0.58)';
                             const style: React.CSSProperties = {
-                                top: MINIMAP_H + TIMELINE_H,   // below minimap + timeline ruler
+                                top: (hideOverview ? 0 : MINIMAP_H) + TIMELINE_H,
                                 bottom: chords.length > 0 ? 18 : 0,
                                 pointerEvents: 'none',
                                 position: 'absolute',

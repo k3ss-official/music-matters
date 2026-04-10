@@ -98,8 +98,10 @@ export function CentreWorkspace({
     onOpenExportDialog,
     onSelectedStemsChange,
 }: CentreWorkspaceProps) {
-    // ── Waveform ref ─────────────────────────────────────────────────────
+    // ── Waveform refs ─────────────────────────────────────────────────────
     const waveformRef = useRef<WaveformHandle>(null);
+    // Ref for the loop-editor pane (3rd waveform — zoomed into the region)
+    const loopEditorRef = useRef<WaveformHandle>(null);
 
     // ── Transport state ──────────────────────────────────────────────────
     const [isPlaying, setIsPlaying] = useState(false);
@@ -253,7 +255,7 @@ export function CentreWorkspace({
         if (!bpm || regionEnd <= regionStart) return;
         const beatDur = 60 / bpm;
         const barDur = beatDur * 4;
-        const BAR_PRESETS = [1, 4, 8, 16];
+        const BAR_PRESETS = [4, 8, 16, 32];
 
         // Snap start to nearest downbeat (or BPM-estimated bar)
         let newStart = regionStart;
@@ -356,31 +358,12 @@ export function CentreWorkspace({
         }
     }, [stemMixer, isPlaying]);
 
-    // ── EDIT toggle — zoom waveform into loop region ──────────────────────
+    // ── EDIT toggle — shows/hides the 3rd loop-editor pane below ─────────
+    // The main (loop chooser) waveform stays at full-track view.
+    // The 3rd pane renders its own WaveformCanvas zoomed to the region.
     const handleEditToggle = useCallback(() => {
-        setEditLoopOpen(prev => {
-            const next = !prev;
-            if (next) {
-                const s = regionStart;
-                const e = regionEnd;
-                if (e > s) {
-                    // Zoom in: force at least 200px/s so the region is always prominent
-                    waveformRef.current?.zoomToRegion(s, e);
-                } else if (bpm && duration > 0) {
-                    // No region — snap a 4-bar region from playhead and zoom to it
-                    const barDur = (60 / bpm) * 4;
-                    const playhead = waveformRef.current?.getCurrentTime() ?? 0;
-                    const snappedStart = Math.round(playhead / barDur) * barDur;
-                    const newEnd = Math.min(snappedStart + barDur * 4, duration);
-                    handleRegionChange(snappedStart, newEnd);
-                    setTimeout(() => waveformRef.current?.zoomToRegion(snappedStart, newEnd), 30);
-                }
-            } else {
-                waveformRef.current?.zoomFit();
-            }
-            return next;
-        });
-    }, [regionStart, regionEnd, bpm, duration, handleRegionChange]);
+        setEditLoopOpen(prev => !prev);
+    }, []);
 
     // ── Shift+Up → re-center view on current loop (keyboard) ────────────────
     useEffect(() => {
@@ -629,7 +612,7 @@ export function CentreWorkspace({
                         if (bpm && e > s && snapEnabled && downbeats.length > 0) {
                             const beatDur = 60 / bpm;
                             const barDur = beatDur * 4;
-                            const BAR_PRESETS = [1, 4, 8, 16];
+                            const BAR_PRESETS = [4, 8, 16, 32];
 
                             // Find nearest downbeat to start (Serato-style: snap to first downbeat at or before position)
                             let snappedStart = downbeats[0];
@@ -697,19 +680,69 @@ export function CentreWorkspace({
                 />
             </div>
 
-            {/* ── Edit Loop section — sits above toolbar so it's always visible ── */}
-            {editLoopOpen && (
-                <EditLoopSection
-                    regionStart={regionStart}
-                    regionEnd={regionEnd}
-                    bpm={bpm}
-                    barCount={activeBarPreset ?? 0}
-                    quantizeEnabled={snapEnabled}
-                    onQuantizeToggle={() => setSnapEnabled(v => !v)}
-                    onClose={() => setEditLoopOpen(false)}
-                    onRegionChange={handleRegionChange}
-                    duration={duration}
-                />
+            {/* ── Loop editor pane (3rd pane — fine-tune the loop) ──────────── */}
+            {editLoopOpen && waveformReady && (
+                <div className="border-t-2 border-[#00d4ff]/30 bg-[#08080f] flex flex-col shrink-0">
+                    {/* Header row */}
+                    <div className="flex items-center justify-between px-4 py-2 border-b border-white/5 bg-[#0d0d18] shrink-0">
+                        <div className="flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-[#00d4ff] animate-pulse" />
+                            <span className="text-[10px] font-mono uppercase tracking-widest text-[#00d4ff]/70">
+                                Loop Editor
+                            </span>
+                            {regionEnd > regionStart && bpm && (
+                                <span className="text-[10px] font-mono text-white/25 ml-1">
+                                    {((regionEnd - regionStart) / ((60 / bpm) * 4)).toFixed(1)} bars
+                                </span>
+                            )}
+                        </div>
+                        <button
+                            onClick={() => onOpenExportDialog?.()}
+                            disabled={!trackId || regionEnd <= regionStart}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-[#00d4ff] hover:bg-[#00d4ff]/20 hover:border-[#00d4ff]/60 disabled:opacity-30 disabled:cursor-not-allowed transition-all font-semibold text-xs"
+                        >
+                            Save / Export…
+                        </button>
+                    </div>
+
+                    {/* Zoomed waveform — auto-fitted to the loop region */}
+                    <div className="relative" style={{ minHeight: 160 }}>
+                        <WaveformCanvas
+                            ref={loopEditorRef}
+                            audioUrl={audioUrl}
+                            mediaElement={waveformRef.current?.getMediaElement()}
+                            hideOverview={true}
+                            downbeats={downbeats}
+                            bpm={bpm}
+                            snapEnabled={snapEnabled}
+                            isLooping={isLooping}
+                            regionStart={regionStart}
+                            regionEnd={regionEnd}
+                            onReady={() => {
+                                if (regionEnd > regionStart) {
+                                    loopEditorRef.current?.zoomToFitRegion(regionStart, regionEnd);
+                                }
+                            }}
+                            onRegionUpdate={(s, e) => {
+                                onUpdateRegion(s, e);
+                                waveformRef.current?.syncRegion(s, e);
+                            }}
+                        />
+                    </div>
+
+                    {/* Fine-tune controls */}
+                    <EditLoopSection
+                        regionStart={regionStart}
+                        regionEnd={regionEnd}
+                        bpm={bpm}
+                        barCount={activeBarPreset ?? 0}
+                        quantizeEnabled={snapEnabled}
+                        onQuantizeToggle={() => setSnapEnabled(v => !v)}
+                        onClose={() => setEditLoopOpen(false)}
+                        onRegionChange={handleRegionChange}
+                        duration={duration}
+                    />
+                </div>
             )}
 
             {/* ── Loop editor toolbar ────────────────────────────────────── */}
