@@ -4,6 +4,7 @@ Similarity detection, duplicate finding, semantic search, Shazam-style recogniti
 """
 import tempfile
 from pathlib import Path
+from typing import List
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
