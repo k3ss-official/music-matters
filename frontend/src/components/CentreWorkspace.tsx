@@ -102,6 +102,8 @@ export function CentreWorkspace({
     const waveformRef = useRef<WaveformHandle>(null);
     // Ref for the loop-editor pane (3rd waveform — zoomed into the region)
     const loopEditorRef = useRef<WaveformHandle>(null);
+    // Cached media element — updated onReady so we never call getMediaElement() during render
+    const cachedMediaElementRef = useRef<HTMLMediaElement | null>(null);
 
     // ── Transport state ──────────────────────────────────────────────────
     const [isPlaying, setIsPlaying] = useState(false);
@@ -602,6 +604,8 @@ export function CentreWorkspace({
                     onReady={dur => {
                         setDuration(dur);
                         setWaveformReady(true);
+                        // Cache the media element so loop editor can share it without a render-phase call
+                        cachedMediaElementRef.current = waveformRef.current?.getMediaElement() ?? null;
                     }}
                     onError={(err) => {
                         setLoadError(err.message);
@@ -710,7 +714,7 @@ export function CentreWorkspace({
                         <WaveformCanvas
                             ref={loopEditorRef}
                             audioUrl={audioUrl}
-                            mediaElement={waveformRef.current?.getMediaElement()}
+                            mediaElement={cachedMediaElementRef.current}
                             hideOverview={true}
                             downbeats={downbeats}
                             bpm={bpm}
