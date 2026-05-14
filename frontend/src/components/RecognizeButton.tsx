@@ -179,13 +179,24 @@ export function RecognizeButton({ onLibraryMatch }: Props) {
     // phase === 'result'
     if (!result) return null;
 
-    const { acoustid, library_match, fpcalc_available, acoustid_key_configured } = result;
-    const noMatch = !acoustid && !library_match;
+    const { shazam, acoustid, library_match, fpcalc_available, acoustid_key_configured } = result;
+    const noMatch = !shazam && !acoustid && !library_match;
 
     return (
         <div className="flex flex-col gap-3 w-full max-w-md">
+            {/* Shazam result */}
+            {shazam && (
+                <div className="px-4 py-3 rounded-xl bg-[#00d4ff]/5 border border-[#00d4ff]/20">
+                    <div className="text-[10px] font-mono tracking-[0.15em] text-[#00d4ff]/60 mb-1">SHAZAM MATCH</div>
+                    <div className="text-white font-semibold text-sm">{shazam.title ?? '—'}</div>
+                    <div className="text-white/50 text-xs mt-0.5">
+                        {[shazam.artist, shazam.album, shazam.year].filter(Boolean).join(' · ')}
+                    </div>
+                </div>
+            )}
+
             {/* AcoustID result */}
-            {acoustid && (
+            {!shazam && acoustid && (
                 <div className="px-4 py-3 rounded-xl bg-[#00d4ff]/5 border border-[#00d4ff]/20">
                     <div className="text-[10px] font-mono tracking-[0.15em] text-[#00d4ff]/60 mb-1">ACOUSTID MATCH · {Math.round(acoustid.score * 100)}%</div>
                     <div className="text-white font-semibold text-sm">{acoustid.title ?? '—'}</div>
@@ -219,8 +230,8 @@ export function RecognizeButton({ onLibraryMatch }: Props) {
                     {(!fpcalc_available || !acoustid_key_configured) && (
                         <p className="text-[10px] text-white/25 mt-1 font-mono">
                             {!fpcalc_available
-                                ? 'Install fpcalc (brew install chromaprint) for global search'
-                                : 'Set ACOUSTID_API_KEY in .env for global search'}
+                                ? 'Install fpcalc (brew install chromaprint) for fallback search'
+                                : 'Set ACOUSTID_API_KEY in .env for fallback search'}
                         </p>
                     )}
                 </div>

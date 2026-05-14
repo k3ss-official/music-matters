@@ -334,6 +334,14 @@ export const generateAceStep = async (payload: GenerateRequest): Promise<{ blob:
 // ---------------------------------------------------------------------------
 
 export interface RecognizeResult {
+    shazam: {
+        score: number;
+        title: string | null;
+        artist: string | null;
+        album: string | null;
+        year: number | null;
+        mbid: string | null;
+    } | null;
     acoustid: {
         score: number;
         title: string | null;
