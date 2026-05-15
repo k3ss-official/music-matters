@@ -48,6 +48,8 @@ import { ExportDialog } from './components/ExportDialog';
 import { ProcessingView } from './components/ProcessingView';
 import { ShortcutLegend } from './components/ShortcutLegend';
 import { RecognizeButton } from './components/RecognizeButton';
+import { ResourceChecker } from './components/ResourceChecker';
+import { ShazamImport } from './components/ShazamImport';
 import type WaveSurfer from 'wavesurfer.js';
 
 // Icons (inline SVGs for zero-dep)
@@ -111,6 +113,8 @@ function App() {
   // Modal state
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [shortcutLegendOpen, setShortcutLegendOpen] = useState(false);
+  const [resourceCheckerOpen, setResourceCheckerOpen] = useState(false);
+  const [shazamImportOpen, setShazamImportOpen] = useState(false);
 
   // Upload state
   const [uploading, setUploading] = useState(false);
@@ -624,6 +628,34 @@ function App() {
                   </div>
                 )}
               </div>
+
+              {/* My Shazams import */}
+              <button
+                onClick={() => setShazamImportOpen(true)}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl
+                           bg-white/[0.03] border border-white/10 text-white/50
+                           hover:bg-white/[0.06] hover:text-white/80 hover:border-white/20
+                           transition-all text-sm"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+                </svg>
+                My Shazams
+              </button>
+
+              {/* Resource checker */}
+              <button
+                onClick={() => setResourceCheckerOpen(true)}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl
+                           bg-white/[0.03] border border-white/10 text-white/50
+                           hover:bg-white/[0.06] hover:text-white/80 hover:border-white/20
+                           transition-all text-sm"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+                </svg>
+                RAM Check
+              </button>
             </aside>
           </>
         )}
@@ -647,6 +679,27 @@ function App() {
         isOpen={shortcutLegendOpen}
         onClose={() => setShortcutLegendOpen(false)}
       />
+
+      {/* ── Resource Checker ─────────────────────────────────────────── */}
+      {resourceCheckerOpen && (
+        <ResourceChecker onClose={() => setResourceCheckerOpen(false)} />
+      )}
+
+      {/* ── Shazam Import ────────────────────────────────────────────── */}
+      {shazamImportOpen && (
+        <ShazamImport
+          onClose={() => setShazamImportOpen(false)}
+          onIngest={(query, title) => {
+            setShazamImportOpen(false);
+            api.enqueueIngest({ source: query, tags: ['shazam'], collection: 'shazam' })
+              .then(job => {
+                setActiveJob({ jobId: job.job_id, status: 'running', progress: 0, stages: [], currentStage: 'ingest' } as any);
+                setView('processing');
+              })
+              .catch(err => console.error('Shazam ingest failed:', err));
+          }}
+        />
+      )}
     </div>
   );
 }
