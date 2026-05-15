@@ -188,37 +188,55 @@ async def import_shazam_history(
     """
     Import track history from a Shazam CSV export.
 
-    To export from Shazam:
-    - iPhone: Shazam app → My Library → ⋯ → Export CSV
-    - Web: shazam.com → My Library → Export
-
-    Returns a list of recognised tracks with ingest status.
+    Handles both known Shazam export formats:
+    - Web export (shazam.com): first line is "Shazam Library", headers on line 2:
+      Index, TagTime, Title, Artist, URL, TrackKey
+    - App export (iOS): headers on line 1:
+      Title, Artist, Date Shazamed, Shazam Link, Apple Music Link
     """
     import csv
     import io
 
     content = await csv_file.read()
     text = content.decode("utf-8-sig")  # handle BOM from Excel/iOS export
+    lines = text.splitlines()
 
-    reader = csv.DictReader(io.StringIO(text))
+    # Detect web export: first line is bare "Shazam Library" with no commas
+    if lines and lines[0].strip().lower() == "shazam library":
+        lines = lines[1:]  # skip the banner, real headers are on line 2
+
+    reader = csv.DictReader(io.StringIO("\n".join(lines)))
     tracks = []
+    seen = set()
+
     for row in reader:
-        # Shazam CSV columns: Title, Artist, Date Shazamed, Shazam Link, Apple Music Link
+        # Web format: Title, Artist, TagTime, URL, TrackKey
+        # App format: Title, Artist, Date Shazamed, Shazam Link, Apple Music Link
         title = (row.get("Title") or row.get("title") or "").strip()
         artist = (row.get("Artist") or row.get("artist") or "").strip()
-        shazam_link = (row.get("Shazam Link") or row.get("shazam_link") or "").strip()
-        date_shazamed = (row.get("Date Shazamed") or row.get("date_shazamed") or "").strip()
-        apple_music_link = (row.get("Apple Music Link") or row.get("apple_music_link") or "").strip()
+        shazam_link = (
+            row.get("URL") or row.get("Shazam Link") or
+            row.get("url") or row.get("shazam_link") or ""
+        ).strip()
+        date_shazamed = (
+            row.get("TagTime") or row.get("Date Shazamed") or
+            row.get("tagtime") or row.get("date_shazamed") or ""
+        ).strip()
 
         if not title:
             continue
+
+        # Deduplicate by title+artist
+        key = f"{title.lower()}|{artist.lower()}"
+        if key in seen:
+            continue
+        seen.add(key)
 
         tracks.append({
             "title": title,
             "artist": artist,
             "date_shazamed": date_shazamed,
             "shazam_link": shazam_link,
-            "apple_music_link": apple_music_link,
             "search_query": f"{artist} {title}".strip(),
         })
 
