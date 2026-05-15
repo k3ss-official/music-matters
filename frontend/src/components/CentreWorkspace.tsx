@@ -256,32 +256,29 @@ export function CentreWorkspace({
     const handleQuantize = useCallback(() => {
         if (!bpm || regionEnd <= regionStart) return;
         const beatDur = 60 / bpm;
-        const barDur = beatDur * 4;
-        const BAR_PRESETS = [4, 8, 16, 32];
+        const BEAT_PRESETS = [4, 8, 16, 32];
 
-        // Snap start to nearest downbeat (or BPM-estimated bar)
+        // Snap start to nearest beat boundary
         let newStart = regionStart;
         if (downbeats.length > 0) {
-            // Find nearest downbeat at or before start (backward snap)
             let bestDb = downbeats[0];
             for (const db of downbeats) {
                 if (db <= regionStart + beatDur * 0.25) bestDb = db;
             }
             newStart = bestDb;
         } else {
-            // Fallback: estimate from BPM
-            newStart = Math.round(regionStart / barDur) * barDur;
+            newStart = Math.round(regionStart / beatDur) * beatDur;
         }
 
-        // Quantize length to nearest standard bar count (1/4/8/16)
-        const rawBars = (regionEnd - newStart) / barDur;
-        let bestBars = BAR_PRESETS[0];
-        let bestDist = Math.abs(rawBars - bestBars);
-        for (const nb of BAR_PRESETS) {
-            const d = Math.abs(rawBars - nb);
+        // Quantize length to nearest standard beat count (4/8/16/32)
+        const rawBeats = (regionEnd - newStart) / beatDur;
+        let bestBars = BEAT_PRESETS[0];
+        let bestDist = Math.abs(rawBeats - bestBars);
+        for (const nb of BEAT_PRESETS) {
+            const d = Math.abs(rawBeats - nb);
             if (d < bestDist) { bestDist = d; bestBars = nb; }
         }
-        const newEnd = Math.min(newStart + bestBars * barDur, duration);
+        const newEnd = Math.min(newStart + bestBars * beatDur, duration);
 
         handleRegionChange(newStart, newEnd);
         setActiveBarPreset(bestBars);
@@ -310,23 +307,22 @@ export function CentreWorkspace({
         
         if (duration > 0) {
             const beatDur = 60 / effectiveBpm;
-            const barDur = beatDur * 4;
 
-            // Always snap the anchor to the nearest bar boundary from the beatgrid anchor
+            // Snap the anchor to the nearest beat boundary from the beatgrid anchor
             const beatgridAnchor = (trackDetail?.metadata?.beatgrid_anchor as number) ?? 0;
             const playhead = waveformRef.current?.getCurrentTime() ?? currentTime;
-            const barsFromAnchor = Math.floor(Math.max(0, playhead - beatgridAnchor) / barDur);
-            let anchorStart = beatgridAnchor + barsFromAnchor * barDur;
+            const beatsFromAnchor = Math.floor(Math.max(0, playhead - beatgridAnchor) / beatDur);
+            let anchorStart = beatgridAnchor + beatsFromAnchor * beatDur;
             // Fallback: if no beatgrid_anchor, use nearest downbeat
             if (!trackDetail?.metadata?.beatgrid_anchor && downbeats.length > 0) {
                 anchorStart = downbeats[0];
                 for (const db of downbeats) {
-                    if (db <= playhead + (60 / effectiveBpm) * 0.5) anchorStart = db;
+                    if (db <= playhead + beatDur * 0.5) anchorStart = db;
                 }
             }
 
-            const newEnd = Math.min(anchorStart + barDur * bars, duration);
-            console.log('Creating loop:', anchorStart, 'to', newEnd, 'bars:', bars);
+            const newEnd = Math.min(anchorStart + beatDur * bars, duration);
+            console.log('Creating loop:', anchorStart, 'to', newEnd, 'beats:', bars);
             
             handleRegionChange(anchorStart, newEnd);
 
@@ -664,7 +660,7 @@ export function CentreWorkspace({
                             </span>
                             {regionEnd > regionStart && bpm && (
                                 <span className="text-[10px] font-mono text-white/25 ml-1">
-                                    {((regionEnd - regionStart) / ((60 / bpm) * 4)).toFixed(1)} bars
+                                    {Math.round((regionEnd - regionStart) / (60 / bpm))} beats
                                 </span>
                             )}
                         </div>

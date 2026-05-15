@@ -212,7 +212,7 @@ export const TransportBar: React.FC<TransportBarProps> = ({
                         <button
                             key={bars}
                             onClick={() => onBarPresetToggle(bars)}
-                            title={`${bars}-bar loop`}
+                            title={`${bars}-beat loop`}
                             className={`
                                 w-7 h-7 flex items-center justify-center rounded
                                 font-mono text-[10px] font-bold transition-all focus:outline-none
