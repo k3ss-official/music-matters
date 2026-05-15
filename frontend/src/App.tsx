@@ -50,6 +50,7 @@ import { ShortcutLegend } from './components/ShortcutLegend';
 import { RecognizeButton } from './components/RecognizeButton';
 import { ResourceChecker } from './components/ResourceChecker';
 import { ShazamImport } from './components/ShazamImport';
+import { StartupCheck } from './components/StartupCheck';
 import type WaveSurfer from 'wavesurfer.js';
 
 // Icons (inline SVGs for zero-dep)
@@ -109,6 +110,9 @@ function App() {
   // Playback state
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+
+  // Startup resource check — clears once user has passed it
+  const [startupDone, setStartupDone] = useState(false);
 
   // Modal state
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
@@ -369,6 +373,10 @@ function App() {
   // ═══════════════════════════════════════════════════════════════════════════
   return (
     <div className="h-screen w-full bg-[#0a0a0f] text-gray-300 flex flex-col overflow-hidden font-sans">
+
+      {/* ── Startup resource check — blocks UI until system is ready ─── */}
+      {!startupDone && <StartupCheck onClear={() => setStartupDone(true)} />}
+
       {/* ─── Hidden file input ──────────────────────────────────────────── */}
       <input
         ref={fileInputRef}

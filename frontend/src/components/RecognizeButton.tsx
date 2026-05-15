@@ -17,7 +17,6 @@ type Phase = 'idle' | 'recording' | 'processing' | 'result' | 'error';
 const RECORD_SECONDS = 10;
 
 interface Props {
-    /** Called when a library match is clicked (to open that track). */
     onLibraryMatch?: (trackId: string) => void;
 }
 
@@ -26,14 +25,32 @@ export function RecognizeButton({ onLibraryMatch }: Props) {
     const [countdown, setCountdown] = useState(RECORD_SECONDS);
     const [result, setResult] = useState<RecognizeResult | null>(null);
     const [errorMsg, setErrorMsg] = useState('');
+    const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+    const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const chunksRef = useRef<Blob[]>([]);
     const streamRef = useRef<MediaStream | null>(null);
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    // Clean up mic + timer on unmount
+    // Enumerate audio input devices on mount
     useEffect(() => {
+        const enumerate = async () => {
+            try {
+                // Request permission first so labels are populated
+                const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+                s.getTracks().forEach(t => t.stop());
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const inputs = devices.filter(d => d.kind === 'audioinput');
+                setAudioDevices(inputs);
+                // Auto-select BlackHole if present, otherwise default
+                const bh = inputs.find(d => d.label.toLowerCase().includes('blackhole') || d.label.toLowerCase().includes('loopback'));
+                setSelectedDeviceId(bh?.deviceId ?? inputs[0]?.deviceId ?? '');
+            } catch {
+                // Permission denied — leave device list empty, will use default
+            }
+        };
+        enumerate();
         return () => {
             timerRef.current && clearInterval(timerRef.current);
             streamRef.current?.getTracks().forEach(t => t.stop());
@@ -43,7 +60,7 @@ export function RecognizeButton({ onLibraryMatch }: Props) {
     const stopRecording = useCallback(() => {
         timerRef.current && clearInterval(timerRef.current);
         if (mediaRecorderRef.current?.state === 'recording') {
-            mediaRecorderRef.current.stop(); // triggers ondataavailable + onstop
+            mediaRecorderRef.current.stop();
         }
     }, []);
 
@@ -53,9 +70,13 @@ export function RecognizeButton({ onLibraryMatch }: Props) {
 
         let stream: MediaStream;
         try {
-            stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            const constraints: MediaStreamConstraints = {
+                audio: selectedDeviceId ? { deviceId: { exact: selectedDeviceId } } : true,
+                video: false,
+            };
+            stream = await navigator.mediaDevices.getUserMedia(constraints);
         } catch {
-            setErrorMsg('Microphone access denied. Allow mic permission and try again.');
+            setErrorMsg('Audio access denied. Allow microphone permission and try again.');
             setPhase('error');
             return;
         }
@@ -64,16 +85,13 @@ export function RecognizeButton({ onLibraryMatch }: Props) {
         chunksRef.current = [];
 
         const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-            ? 'audio/webm;codecs=opus'
-            : 'audio/webm';
-
+            ? 'audio/webm;codecs=opus' : 'audio/webm';
         const recorder = new MediaRecorder(stream, { mimeType });
         mediaRecorderRef.current = recorder;
 
         recorder.ondataavailable = (e) => {
             if (e.data.size > 0) chunksRef.current.push(e.data);
         };
-
         recorder.onstop = async () => {
             stream.getTracks().forEach(t => t.stop());
             const clip = new Blob(chunksRef.current, { type: mimeType });
@@ -88,11 +106,9 @@ export function RecognizeButton({ onLibraryMatch }: Props) {
             }
         };
 
-        recorder.start(250); // collect chunks every 250 ms
+        recorder.start(250);
         setPhase('recording');
         setCountdown(RECORD_SECONDS);
-
-        // Countdown ticker — stop recorder when it hits 0
         timerRef.current = setInterval(() => {
             setCountdown(prev => {
                 if (prev <= 1) {
@@ -103,7 +119,7 @@ export function RecognizeButton({ onLibraryMatch }: Props) {
                 return prev - 1;
             });
         }, 1000);
-    }, []);
+    }, [selectedDeviceId]);
 
     const reset = () => {
         setPhase('idle');
@@ -112,20 +128,52 @@ export function RecognizeButton({ onLibraryMatch }: Props) {
         setCountdown(RECORD_SECONDS);
     };
 
-    // ── Render ────────────────────────────────────────────────────────────────
+    const isBlackHole = audioDevices.find(d => d.deviceId === selectedDeviceId)?.label.toLowerCase().includes('blackhole');
+    const isLoopback  = audioDevices.find(d => d.deviceId === selectedDeviceId)?.label.toLowerCase().includes('loopback');
+    const isSystemAudio = isBlackHole || isLoopback;
+
+    // ── Render ─────────────────────────────────────────────────────────────────
 
     if (phase === 'idle') {
         return (
-            <button
-                onClick={startRecording}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl
-                           bg-white/[0.04] border border-white/[0.08]
-                           hover:bg-[#8b5cf6]/10 hover:border-[#8b5cf6]/40
-                           transition-all text-white/60 hover:text-white text-sm font-medium"
-            >
-                <MicIcon />
-                Identify Track
-            </button>
+            <div className="flex flex-col items-center gap-2 w-full max-w-md">
+                {/* Device picker — shown if more than one input available */}
+                {audioDevices.length > 1 && (
+                    <div className="w-full">
+                        <select
+                            value={selectedDeviceId}
+                            onChange={e => setSelectedDeviceId(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/10 text-white/60 text-xs font-mono focus:outline-none focus:border-[#8b5cf6]/40"
+                        >
+                            {audioDevices.map(d => (
+                                <option key={d.deviceId} value={d.deviceId} className="bg-[#12121a]">
+                                    {d.label || `Input ${d.deviceId.slice(0, 8)}`}
+                                </option>
+                            ))}
+                        </select>
+                        {isSystemAudio && (
+                            <p className="text-[10px] text-[#00ff88]/60 font-mono mt-1 text-center">
+                                System audio capture active — will identify what's playing on your Mac
+                            </p>
+                        )}
+                        {!isSystemAudio && audioDevices.length > 0 && (
+                            <p className="text-[10px] text-white/25 font-mono mt-1 text-center">
+                                To capture Mac audio: install <span className="text-white/40">BlackHole</span> (free) and select it here
+                            </p>
+                        )}
+                    </div>
+                )}
+                <button
+                    onClick={startRecording}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl
+                               bg-white/[0.04] border border-white/[0.08]
+                               hover:bg-[#8b5cf6]/10 hover:border-[#8b5cf6]/40
+                               transition-all text-white/60 hover:text-white text-sm font-medium"
+                >
+                    <MicIcon />
+                    {isSystemAudio ? 'Identify Playing Track' : 'Identify Track'}
+                </button>
+            </div>
         );
     }
 
@@ -138,13 +186,12 @@ export function RecognizeButton({ onLibraryMatch }: Props) {
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#ff3b5c] opacity-75" />
                         <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#ff3b5c]" />
                     </span>
-                    <span className="text-sm font-medium flex-1">Listening…</span>
+                    <span className="text-sm font-medium flex-1">
+                        {isSystemAudio ? 'Capturing system audio…' : 'Listening…'}
+                    </span>
                     <span className="font-mono text-lg font-bold tabular-nums">{countdown}s</span>
                 </div>
-                <button
-                    onClick={stopRecording}
-                    className="text-xs text-white/30 hover:text-white/60 transition-colors"
-                >
+                <button onClick={stopRecording} className="text-xs text-white/30 hover:text-white/60 transition-colors">
                     Stop early
                 </button>
             </div>
@@ -176,15 +223,12 @@ export function RecognizeButton({ onLibraryMatch }: Props) {
         );
     }
 
-    // phase === 'result'
     if (!result) return null;
-
     const { shazam, acoustid, library_match, fpcalc_available, acoustid_key_configured } = result;
     const noMatch = !shazam && !acoustid && !library_match;
 
     return (
         <div className="flex flex-col gap-3 w-full max-w-md">
-            {/* Shazam result */}
             {shazam && (
                 <div className="px-4 py-3 rounded-xl bg-[#00d4ff]/5 border border-[#00d4ff]/20">
                     <div className="text-[10px] font-mono tracking-[0.15em] text-[#00d4ff]/60 mb-1">SHAZAM MATCH</div>
@@ -194,8 +238,6 @@ export function RecognizeButton({ onLibraryMatch }: Props) {
                     </div>
                 </div>
             )}
-
-            {/* AcoustID result */}
             {!shazam && acoustid && (
                 <div className="px-4 py-3 rounded-xl bg-[#00d4ff]/5 border border-[#00d4ff]/20">
                     <div className="text-[10px] font-mono tracking-[0.15em] text-[#00d4ff]/60 mb-1">ACOUSTID MATCH · {Math.round(acoustid.score * 100)}%</div>
@@ -205,38 +247,30 @@ export function RecognizeButton({ onLibraryMatch }: Props) {
                     </div>
                 </div>
             )}
-
-            {/* Library match */}
             {library_match && (
                 <button
                     onClick={() => onLibraryMatch?.(library_match.track_id)}
-                    className="text-left px-4 py-3 rounded-xl bg-[#8b5cf6]/5 border border-[#8b5cf6]/20
-                               hover:border-[#8b5cf6]/50 transition-all"
+                    className="text-left px-4 py-3 rounded-xl bg-[#8b5cf6]/5 border border-[#8b5cf6]/20 hover:border-[#8b5cf6]/50 transition-all"
                 >
                     <div className="text-[10px] font-mono tracking-[0.15em] text-[#8b5cf6]/60 mb-1">
                         LIBRARY MATCH · {Math.round(library_match.similarity * 100)}% similar
                     </div>
                     <div className="text-white font-semibold text-sm">{library_match.title}</div>
-                    {library_match.artist && (
-                        <div className="text-white/50 text-xs mt-0.5">{library_match.artist}</div>
-                    )}
+                    {library_match.artist && <div className="text-white/50 text-xs mt-0.5">{library_match.artist}</div>}
                 </button>
             )}
-
-            {/* No match found */}
             {noMatch && (
                 <div className="px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.08] text-white/40 text-sm text-center">
                     No match found
                     {(!fpcalc_available || !acoustid_key_configured) && (
                         <p className="text-[10px] text-white/25 mt-1 font-mono">
                             {!fpcalc_available
-                                ? 'Install fpcalc (brew install chromaprint) for fallback search'
+                                ? 'Install fpcalc (brew install chromaprint) for fallback'
                                 : 'Set ACOUSTID_API_KEY in .env for fallback search'}
                         </p>
                     )}
                 </div>
             )}
-
             <button onClick={reset} className="text-xs text-white/30 hover:text-white/60 transition-colors self-center">
                 Try again
             </button>
