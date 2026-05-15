@@ -437,23 +437,23 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 }
             });
 
-            // ── Click-to-seek (Audacity-style) ──────────────────────────────
-            // 'interaction' fires on direct waveform body clicks — seek only, no auto-play.
+            // ── Mouse interaction (Audacity model) ──────────────────────────
+            // Waveform body click  → WaveSurfer seeks automatically (interact:true),
+            //                        we do NOT auto-play here.
+            // Timeline ruler click → seek + play (see DOM listener below).
             ws.on('interaction', () => {
-                // Seek happens automatically via WaveSurfer; we just don't start playback.
+                // intentionally empty — seek only on waveform click
             });
 
-            // ── Timeline ruler click → seek AND play ────────────────────────
-            // Clicking the timeline strip (above the waveform) seeks the playhead
-            // and immediately starts playback (like Audacity's ruler behaviour).
+            // Timeline ruler click → seek to that position and start playing
             const timelineEl = timelineRef.current;
             const handleTimelineClick = (e: MouseEvent) => {
                 if (destroyed) return;
                 const rect = containerRef.current?.getBoundingClientRect();
                 if (!rect) return;
-                const rawTime = visibleStartRef.current + (e.clientX - rect.left) / zoomRef.current;
-                const clampedTime = Math.max(0, Math.min(rawTime, ws.getDuration()));
-                ws.setTime(clampedTime);
+                const t = visibleStartRef.current + (e.clientX - rect.left) / Math.max(zoomRef.current, 1);
+                const clamped = Math.max(0, Math.min(t, ws.getDuration()));
+                ws.setTime(clamped);
                 if (!ws.isPlaying()) {
                     ws.play();
                     if (onPlayStateChange) onPlayStateChange(true);
