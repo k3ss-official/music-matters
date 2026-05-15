@@ -14,6 +14,7 @@ import subprocess
 from pathlib import Path
 
 import httpx
+from shazamio import Shazam
 
 from app.config import settings
 
@@ -53,15 +54,37 @@ async def recognize_audio(audio_path: Path) -> dict:
     key_ok = bool(settings.ACOUSTID_API_KEY)
 
     acoustid_result: dict | None = None
-    if fpcalc_ok and key_ok:
+    shazam_result: dict | None = None
+
+    # 1. Try Shazam first (no API key required)
+    try:
+        shazam = Shazam()
+        out = await shazam.recognize_song(str(audio_path))
+        if out and out.get("track"):
+            t = out["track"]
+            shazam_result = {
+                "score": 1.0,  # Shazam matches are highly confident
+                "title": t.get("title"),
+                "artist": t.get("subtitle"),
+                "album": t.get("sections", [{}])[0].get("metadata", [{}])[0].get("text"), # approx album
+                "year": t.get("sections", [{}])[0].get("metadata", [{}])[2].get("text"), # approx year
+                "mbid": t.get("key"), # Shazam key
+            }
+    except Exception as exc:
+        logger.warning("Shazam lookup failed: %s", exc)
+
+    # 2. Try AcoustID if Shazam didn't find anything
+    if not shazam_result and fpcalc_ok and key_ok:
         try:
             acoustid_result = await _acoustid_lookup(audio_path)
         except Exception as exc:
             logger.warning("AcoustID lookup failed: %s", exc)
 
+    # 3. Try library match
     library_result = _library_match(audio_path)
 
     return {
+        "shazam": shazam_result,
         "acoustid": acoustid_result,
         "library_match": library_result,
         "fpcalc_available": fpcalc_ok,

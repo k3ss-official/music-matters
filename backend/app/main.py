@@ -95,7 +95,7 @@ async def serve_audio(path: str):
     )
 
 
-@app.get("/health")
+@app.get("/api/health")
 async def health_check():
     """Health check endpoint."""
     return {
