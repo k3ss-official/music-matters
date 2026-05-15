@@ -310,24 +310,16 @@ export function CentreWorkspace({
             const beatDur = 60 / effectiveBpm;
             const barDur = beatDur * 4;
 
-            // Get current playhead position
+            // Always snap the anchor to the nearest bar boundary from the beatgrid anchor
+            const beatgridAnchor = (trackDetail?.metadata?.beatgrid_anchor as number) ?? 0;
             const playhead = waveformRef.current?.getCurrentTime() ?? currentTime;
-
-            // Find anchor: existing region start, or snap playhead to nearest bar boundary
-            let anchorStart: number;
-            if (regionEnd > regionStart && regionStart > 0) {
-                // Existing region — anchor from its start
-                anchorStart = regionStart;
-            } else {
-                // No region — snap playhead to nearest downbeat at or before current time
-                const playhead = waveformRef.current?.getCurrentTime() ?? currentTime;
-                if (downbeats.length > 0) {
-                    anchorStart = downbeats[0];
-                    for (const db of downbeats) {
-                        if (db <= playhead + beatDur * 0.5) anchorStart = db;
-                    }
-                } else {
-                    anchorStart = Math.floor(playhead / barDur) * barDur;
+            const barsFromAnchor = Math.floor(Math.max(0, playhead - beatgridAnchor) / barDur);
+            let anchorStart = beatgridAnchor + barsFromAnchor * barDur;
+            // Fallback: if no beatgrid_anchor, use nearest downbeat
+            if (!trackDetail?.metadata?.beatgrid_anchor && downbeats.length > 0) {
+                anchorStart = downbeats[0];
+                for (const db of downbeats) {
+                    if (db <= playhead + (60 / effectiveBpm) * 0.5) anchorStart = db;
                 }
             }
 
@@ -364,6 +356,13 @@ export function CentreWorkspace({
     const handleEditToggle = useCallback(() => {
         setEditLoopOpen(prev => !prev);
     }, []);
+
+    // ── Re-zoom loop editor when region changes while editor is open ─────────
+    useEffect(() => {
+        if (editLoopOpen && loopEditorRef.current && regionEnd > regionStart) {
+            loopEditorRef.current.zoomToFitRegion(regionStart, regionEnd);
+        }
+    }, [editLoopOpen, regionStart, regionEnd]);
 
     // ── Shift+Up → re-center view on current loop (keyboard) ────────────────
     useEffect(() => {
@@ -608,42 +607,11 @@ export function CentreWorkspace({
                         setWaveformReady(false);
                     }}
                     onRegionUpdate={(s, e) => {
-                        // Auto-quantize on freehand drag: snap to nearest bar + detect bar count
-                        if (bpm && e > s && snapEnabled && downbeats.length > 0) {
-                            const beatDur = 60 / bpm;
-                            const barDur = beatDur * 4;
-                            const BAR_PRESETS = [4, 8, 16, 32];
-
-                            // Find nearest downbeat to start (Serato-style: snap to first downbeat at or before position)
-                            let snappedStart = downbeats[0];
-                            for (const db of downbeats) {
-                                if (db <= s + beatDur * 0.25) snappedStart = db;
-                            }
-
-                            // Calculate duration in bars and find nearest standard bar count
-                            const rawBars = (e - snappedStart) / barDur;
-                            let bestBars = BAR_PRESETS[0];
-                            let bestDist = Math.abs(rawBars - bestBars);
-                            for (const nb of BAR_PRESETS) {
-                                const d = Math.abs(rawBars - nb);
-                                if (d < bestDist) { bestDist = d; bestBars = nb; }
-                            }
-
-                            // Quantize end to nearest bar boundary
-                            const snappedEnd = Math.min(snappedStart + bestBars * barDur, duration);
-
-                            // Apply the quantized region
-                            onUpdateRegion(snappedStart, snappedEnd);
-                            setActiveBarPreset(bestBars);
-                            waveformRef.current?.syncRegion(snappedStart, snappedEnd);
-                        } else {
-                            onUpdateRegion(s, e);
-                            // Clear bar preset if it doesn't match
-                            if (bpm && activeBarPreset) {
-                                const expectedLen = (60 / bpm) * 4 * activeBarPreset;
-                                if (Math.abs((e - s) - expectedLen) > 0.1) {
-                                    setActiveBarPreset(null);
-                                }
+                        onUpdateRegion(s, e);
+                        if (bpm && activeBarPreset) {
+                            const expectedLen = (60 / bpm) * 4 * activeBarPreset;
+                            if (Math.abs((e - s) - expectedLen) > 0.1) {
+                                setActiveBarPreset(null);
                             }
                         }
                     }}
@@ -708,9 +676,9 @@ export function CentreWorkspace({
                     {/* Zoomed waveform — auto-fitted to the loop region */}
                     <div className="relative" style={{ minHeight: 160 }}>
                         <WaveformCanvas
+                            key={`loop-editor-${trackId}`}
                             ref={loopEditorRef}
                             audioUrl={audioUrl}
-                            mediaElement={waveformRef.current?.getMediaElement()}
                             hideOverview={true}
                             downbeats={downbeats}
                             bpm={bpm}
@@ -726,6 +694,14 @@ export function CentreWorkspace({
                             onRegionUpdate={(s, e) => {
                                 onUpdateRegion(s, e);
                                 waveformRef.current?.syncRegion(s, e);
+                            }}
+                            onPlayStateChange={playing => {
+                                setIsPlaying(playing);
+                                onPlayStateChangeProp?.(playing);
+                            }}
+                            onTimeUpdate={t => {
+                                setCurrentTime(t);
+                                onTimeUpdateProp?.(t);
                             }}
                         />
                     </div>

@@ -437,16 +437,29 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 }
             });
 
-            // ── Click-to-play (Audacity-style) ──────────────────────────────
-            // 'interaction' fires only on direct user clicks — not on programmatic
-            // setTime() calls — so this won't cause feedback loops.
+            // ── Click-to-seek (Audacity-style) ──────────────────────────────
+            // 'interaction' fires on direct waveform body clicks — seek only, no auto-play.
             ws.on('interaction', () => {
+                // Seek happens automatically via WaveSurfer; we just don't start playback.
+            });
+
+            // ── Timeline ruler click → seek AND play ────────────────────────
+            // Clicking the timeline strip (above the waveform) seeks the playhead
+            // and immediately starts playback (like Audacity's ruler behaviour).
+            const timelineEl = timelineRef.current;
+            const handleTimelineClick = (e: MouseEvent) => {
                 if (destroyed) return;
+                const rect = containerRef.current?.getBoundingClientRect();
+                if (!rect) return;
+                const rawTime = visibleStartRef.current + (e.clientX - rect.left) / zoomRef.current;
+                const clampedTime = Math.max(0, Math.min(rawTime, ws.getDuration()));
+                ws.setTime(clampedTime);
                 if (!ws.isPlaying()) {
                     ws.play();
                     if (onPlayStateChange) onPlayStateChange(true);
                 }
-            });
+            };
+            if (timelineEl) timelineEl.addEventListener('click', handleTimelineClick);
 
             ws.on('error', (err: Error | string) => {
                 if (destroyed) return;
@@ -468,6 +481,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             return () => {
                 destroyed = true;
                 regionLoopRef.current = false;
+                if (timelineEl) timelineEl.removeEventListener('click', handleTimelineClick);
                 ws.destroy();
                 wsRef.current = null;
                 activeRegionRef.current = null;
