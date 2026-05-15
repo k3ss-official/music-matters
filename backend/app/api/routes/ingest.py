@@ -175,3 +175,55 @@ async def import_traktor_nml(
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
         tmp_path.unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# Shazam history CSV import
+# ---------------------------------------------------------------------------
+
+@router.post("/shazam-history")
+async def import_shazam_history(
+    csv_file: UploadFile = File(...),
+):
+    """
+    Import track history from a Shazam CSV export.
+
+    To export from Shazam:
+    - iPhone: Shazam app → My Library → ⋯ → Export CSV
+    - Web: shazam.com → My Library → Export
+
+    Returns a list of recognised tracks with ingest status.
+    """
+    import csv
+    import io
+
+    content = await csv_file.read()
+    text = content.decode("utf-8-sig")  # handle BOM from Excel/iOS export
+
+    reader = csv.DictReader(io.StringIO(text))
+    tracks = []
+    for row in reader:
+        # Shazam CSV columns: Title, Artist, Date Shazamed, Shazam Link, Apple Music Link
+        title = (row.get("Title") or row.get("title") or "").strip()
+        artist = (row.get("Artist") or row.get("artist") or "").strip()
+        shazam_link = (row.get("Shazam Link") or row.get("shazam_link") or "").strip()
+        date_shazamed = (row.get("Date Shazamed") or row.get("date_shazamed") or "").strip()
+        apple_music_link = (row.get("Apple Music Link") or row.get("apple_music_link") or "").strip()
+
+        if not title:
+            continue
+
+        tracks.append({
+            "title": title,
+            "artist": artist,
+            "date_shazamed": date_shazamed,
+            "shazam_link": shazam_link,
+            "apple_music_link": apple_music_link,
+            "search_query": f"{artist} {title}".strip(),
+        })
+
+    return {
+        "tracks": tracks,
+        "total": len(tracks),
+        "message": f"Parsed {len(tracks)} tracks from Shazam export",
+    }
