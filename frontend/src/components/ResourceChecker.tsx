@@ -174,15 +174,13 @@ export function ResourceChecker({ onClose }: ResourceCheckerProps) {
                                             }`}>
                                                 {proc.rss_mb.toFixed(0)} MB
                                             </span>
-                                            {proc.is_heavy && (
-                                                <button
-                                                    onClick={() => killProcess(proc.pid)}
-                                                    disabled={killing === proc.pid}
-                                                    className="px-2 py-0.5 text-[10px] font-mono rounded border border-[#ff3b5c]/30 text-[#ff3b5c]/70 hover:bg-[#ff3b5c]/10 hover:text-[#ff3b5c] transition-all disabled:opacity-30"
-                                                >
-                                                    {killing === proc.pid ? '...' : 'Quit'}
-                                                </button>
-                                            )}
+                                            <button
+                                                onClick={() => killProcess(proc.pid)}
+                                                disabled={killing === proc.pid}
+                                                className="px-2 py-0.5 text-[10px] font-mono rounded border border-[#ff3b5c]/30 text-[#ff3b5c]/70 hover:bg-[#ff3b5c]/10 hover:text-[#ff3b5c] transition-all disabled:opacity-30"
+                                            >
+                                                {killing === proc.pid ? '...' : 'Quit'}
+                                            </button>
                                         </div>
                                     </div>
                                 ))}

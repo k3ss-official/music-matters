@@ -128,6 +128,7 @@ export function CentreWorkspace({
     // ── Loop selection state ──────────────────────────────────────────────
     const [activeBarPreset, setActiveBarPreset] = useState<number | null>(null);
     const [editLoopOpen, setEditLoopOpen] = useState(false);
+    const [loopMode, setLoopMode] = useState<'beat' | 'bar'>('beat');
 
     const bpm: number | null = trackDetail?.bpm ?? null;
     const downbeats: number[] = (trackDetail?.metadata?.downbeats as number[]) ?? [];
@@ -285,6 +286,24 @@ export function CentreWorkspace({
         waveformRef.current?.zoomToRegion(newStart, newEnd);
     }, [bpm, regionStart, regionEnd, downbeats, duration, handleRegionChange]);
 
+    // ── Jog loop forward/back by one step ─────────────────────────────────
+    const handleJogLoop = useCallback((direction: 1 | -1) => {
+        if (!bpm || regionEnd <= regionStart) return;
+        const stepDur = loopMode === 'bar' ? (60 / bpm) * 4 : (60 / bpm);
+        const loopLen = regionEnd - regionStart;
+        const newStart = Math.max(0, regionStart + direction * stepDur);
+        const newEnd = Math.min(duration, newStart + loopLen);
+        if (newEnd > newStart) handleRegionChange(newStart, newEnd);
+    }, [bpm, loopMode, regionStart, regionEnd, duration, handleRegionChange]);
+
+    // ── Clear loop ────────────────────────────────────────────────────────
+    const handleClearLoop = useCallback(() => {
+        setActiveBarPreset(null);
+        setIsLooping(false);
+        waveformRef.current?.setLooping(false);
+        waveformRef.current?.stopRegion();
+        onUpdateRegion(0, 0);
+    }, [onUpdateRegion]);
 
     // ── Bar preset toggle ─────────────────────────────────────────────────
     const handleBarPresetToggle = useCallback((bars: number) => {
@@ -307,22 +326,23 @@ export function CentreWorkspace({
         
         if (duration > 0) {
             const beatDur = 60 / effectiveBpm;
+            const stepDur = loopMode === 'bar' ? beatDur * 4 : beatDur;
 
-            // Snap the anchor to the nearest beat boundary from the beatgrid anchor
+            // Snap the anchor to the nearest step boundary from the beatgrid anchor
             const beatgridAnchor = (trackDetail?.metadata?.beatgrid_anchor as number) ?? 0;
             const playhead = waveformRef.current?.getCurrentTime() ?? currentTime;
-            const beatsFromAnchor = Math.floor(Math.max(0, playhead - beatgridAnchor) / beatDur);
-            let anchorStart = beatgridAnchor + beatsFromAnchor * beatDur;
+            const stepsFromAnchor = Math.floor(Math.max(0, playhead - beatgridAnchor) / stepDur);
+            let anchorStart = beatgridAnchor + stepsFromAnchor * stepDur;
             // Fallback: if no beatgrid_anchor, use nearest downbeat
             if (!trackDetail?.metadata?.beatgrid_anchor && downbeats.length > 0) {
                 anchorStart = downbeats[0];
                 for (const db of downbeats) {
-                    if (db <= playhead + beatDur * 0.5) anchorStart = db;
+                    if (db <= playhead + stepDur * 0.5) anchorStart = db;
                 }
             }
 
-            const newEnd = Math.min(anchorStart + beatDur * bars, duration);
-            console.log('Creating loop:', anchorStart, 'to', newEnd, 'beats:', bars);
+            const newEnd = Math.min(anchorStart + stepDur * bars, duration);
+            console.log('Creating loop:', anchorStart, 'to', newEnd, loopMode === 'bar' ? 'bars' : 'beats', bars);
             
             handleRegionChange(anchorStart, newEnd);
 
@@ -336,7 +356,7 @@ export function CentreWorkspace({
         } else {
             console.log('No duration yet, cannot create loop');
         }
-    }, [bpm, duration, activeBarPreset, currentTime, downbeats, regionStart, regionEnd, handleRegionChange]);
+    }, [bpm, duration, activeBarPreset, loopMode, currentTime, downbeats, trackDetail, handleRegionChange]);
 
     // ── Stem solo + play ──────────────────────────────────────────────────
     const handlePlayStem = useCallback((name: string) => {
@@ -358,9 +378,21 @@ export function CentreWorkspace({
     // ── Re-zoom loop editor when region changes while editor is open ─────────
     useEffect(() => {
         if (editLoopOpen && loopEditorRef.current && regionEnd > regionStart) {
+            loopEditorRef.current.syncRegion(regionStart, regionEnd);
             loopEditorRef.current.zoomToFitRegion(regionStart, regionEnd);
         }
     }, [editLoopOpen, regionStart, regionEnd]);
+
+    // ── Pause main waveform when loop editor opens to prevent dual audio ─────
+    useEffect(() => {
+        if (editLoopOpen && waveformRef.current?.isPlaying()) {
+            waveformRef.current.pause();
+            stemMixer.pause();
+            setIsPlaying(false);
+            isPlayingRef.current = false;
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [editLoopOpen]);
 
     // ── Shift+Up → re-center view on current loop (keyboard) ────────────────
     useEffect(() => {
@@ -530,7 +562,7 @@ export function CentreWorkspace({
 
             {/* ── Transport bar ──────────────────────────────────────────── */}
             <TransportBar
-                waveformRef={waveformRef}
+                waveformRef={editLoopOpen ? loopEditorRef : waveformRef}
                 isPlaying={isPlaying}
                 isLooping={isLooping}
                 currentTime={currentTime}
@@ -551,6 +583,10 @@ export function CentreWorkspace({
                 snapEnabled={snapEnabled}
                 onSnapToggle={() => setSnapEnabled(v => !v)}
                 onQuantize={handleQuantize}
+                onJogLoop={handleJogLoop}
+                onClearLoop={handleClearLoop}
+                loopMode={loopMode}
+                onLoopModeToggle={() => setLoopMode(m => m === 'beat' ? 'bar' : 'beat')}
             />
 
             {/* ── Waveform ───────────────────────────────────────────────── */}
@@ -609,7 +645,8 @@ export function CentreWorkspace({
                     onRegionUpdate={(s, e) => {
                         onUpdateRegion(s, e);
                         if (bpm && activeBarPreset) {
-                            const expectedLen = (60 / bpm) * 4 * activeBarPreset;
+                            const stepDur = loopMode === 'bar' ? (60 / bpm) * 4 : (60 / bpm);
+                            const expectedLen = stepDur * activeBarPreset;
                             if (Math.abs((e - s) - expectedLen) > 0.1) {
                                 setActiveBarPreset(null);
                             }
@@ -660,7 +697,9 @@ export function CentreWorkspace({
                             </span>
                             {regionEnd > regionStart && bpm && (
                                 <span className="text-[10px] font-mono text-white/25 ml-1">
-                                    {Math.round((regionEnd - regionStart) / (60 / bpm))} beats
+                                    {loopMode === 'bar'
+                                        ? `${((regionEnd - regionStart) / ((60 / bpm) * 4)).toFixed(1)} bars`
+                                        : `${Math.round((regionEnd - regionStart) / (60 / bpm))} beats`}
                                 </span>
                             )}
                         </div>
@@ -688,6 +727,7 @@ export function CentreWorkspace({
                             regionEnd={regionEnd}
                             onReady={() => {
                                 if (regionEnd > regionStart) {
+                                    loopEditorRef.current?.syncRegion(regionStart, regionEnd);
                                     loopEditorRef.current?.zoomToFitRegion(regionStart, regionEnd);
                                 }
                             }}

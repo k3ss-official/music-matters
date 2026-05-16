@@ -46,6 +46,10 @@ export interface TransportBarProps {
     snapEnabled?: boolean;
     onSnapToggle?: () => void;
     onQuantize?: () => void;
+    onJogLoop?: (direction: 1 | -1) => void;
+    onClearLoop?: () => void;
+    loopMode?: 'beat' | 'bar';
+    onLoopModeToggle?: () => void;
 }
 
 // Format seconds → MM:SS.ms (e.g. "01:23.456")
@@ -74,6 +78,10 @@ export const TransportBar: React.FC<TransportBarProps> = ({
     snapEnabled,
     onSnapToggle,
     onQuantize,
+    onJogLoop,
+    onClearLoop,
+    loopMode = 'beat',
+    onLoopModeToggle,
 }) => {
     const handlePlayPause = useCallback(() => {
         const w = waveformRef.current;
@@ -182,6 +190,19 @@ export const TransportBar: React.FC<TransportBarProps> = ({
                 >
                     LOOP
                 </button>
+                {/* Clear loop */}
+                {onClearLoop && (
+                    <button
+                        onClick={onClearLoop}
+                        title="Clear loop region"
+                        className="w-7 h-7 flex items-center justify-center rounded
+                                   bg-white/5 hover:bg-[#ff3b5c]/15 text-white/30 hover:text-[#ff3b5c]
+                                   border border-white/10 hover:border-[#ff3b5c]/30
+                                   font-mono text-[11px] transition-all focus:outline-none"
+                    >
+                        ✕
+                    </button>
+                )}
             </div>
 
             {/* ── Time display ─────────────────────────────────────────────── */}
@@ -205,14 +226,42 @@ export const TransportBar: React.FC<TransportBarProps> = ({
             )}
 
 
-            {/* ── Bar presets ──────────────────────────────────────────────── */}
+            {/* ── Loop mode + presets + jog ────────────────────────────────── */}
             {onBarPresetToggle && (
                 <div className="flex items-center gap-1">
+                    {/* Beat/Bar mode toggle */}
+                    {onLoopModeToggle && (
+                        <button
+                            onClick={onLoopModeToggle}
+                            title={loopMode === 'beat' ? 'Mode: BEAT — click for BAR' : 'Mode: BAR — click for BEAT'}
+                            className={`
+                                px-2 h-7 flex items-center justify-center rounded
+                                font-mono text-[9px] font-bold tracking-widest transition-all focus:outline-none
+                                ${loopMode === 'bar'
+                                    ? 'bg-[#f59e0b]/20 text-[#f59e0b] border border-[#f59e0b]/40'
+                                    : 'bg-[#00d4ff]/10 text-[#00d4ff]/70 border border-[#00d4ff]/20 hover:bg-[#00d4ff]/20'}
+                            `}
+                        >
+                            {loopMode === 'beat' ? 'BT' : 'BAR'}
+                        </button>
+                    )}
+                    {/* Jog back */}
+                    {onJogLoop && (
+                        <button
+                            onClick={() => onJogLoop(-1)}
+                            title={`Jog loop back 1 ${loopMode}`}
+                            className="w-7 h-7 flex items-center justify-center rounded
+                                       bg-white/5 hover:bg-white/10 text-white/40 hover:text-white
+                                       border border-white/10 font-mono text-[11px] transition-all focus:outline-none"
+                        >
+                            ‹
+                        </button>
+                    )}
                     {BAR_PRESETS.map(bars => (
                         <button
                             key={bars}
                             onClick={() => onBarPresetToggle(bars)}
-                            title={`${bars}-beat loop`}
+                            title={`${bars}-${loopMode} loop`}
                             className={`
                                 w-7 h-7 flex items-center justify-center rounded
                                 font-mono text-[10px] font-bold transition-all focus:outline-none
@@ -224,6 +273,18 @@ export const TransportBar: React.FC<TransportBarProps> = ({
                             {bars}
                         </button>
                     ))}
+                    {/* Jog forward */}
+                    {onJogLoop && (
+                        <button
+                            onClick={() => onJogLoop(1)}
+                            title={`Jog loop forward 1 ${loopMode}`}
+                            className="w-7 h-7 flex items-center justify-center rounded
+                                       bg-white/5 hover:bg-white/10 text-white/40 hover:text-white
+                                       border border-white/10 font-mono text-[11px] transition-all focus:outline-none"
+                        >
+                            ›
+                        </button>
+                    )}
                 </div>
             )}
 

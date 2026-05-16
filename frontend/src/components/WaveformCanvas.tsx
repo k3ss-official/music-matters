@@ -237,8 +237,8 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 e.preventDefault();
                 // Standard convention: scroll up = zoom out (see more), scroll down = zoom in (see less)
                 setZoom(z => e.deltaY < 0
-                    ? Math.max(z / 1.15, 10)   // scroll up = zoom out
-                    : Math.min(z * 1.15, 2000)); // scroll down = zoom in
+                    ? Math.min(z * 1.15, 2000)   // scroll up = zoom in
+                    : Math.max(z / 1.15, 10));    // scroll down = zoom out
             };
             el.addEventListener('wheel', onWheel, { passive: false });
             return () => el.removeEventListener('wheel', onWheel);
@@ -442,7 +442,10 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             //                        we do NOT auto-play here.
             // Timeline ruler click → seek + play (see DOM listener below).
             ws.on('interaction', () => {
-                // intentionally empty — seek only on waveform click
+                if (!ws.isPlaying()) {
+                    ws.play();
+                    if (onPlayStateChange) onPlayStateChange(true);
+                }
             });
 
             // Timeline ruler click → seek to that position and start playing
