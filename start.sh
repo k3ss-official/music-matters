@@ -48,29 +48,34 @@ check_command python3  "brew install python3  OR  https://python.org"
 check_command node     "brew install node     OR  https://nodejs.org"
 check_command npm      "comes with node"
 
-# ── Python venv ─────────────────────────────────────────────────────────────
-VENV_DIR="$BACKEND_DIR/.venv"
+# ── Python env (conda: music-matters) ────────────────────────────────────────
+CONDA_ENV="music-matters"
 
-if [ ! -d "$VENV_DIR" ]; then
-    log "Creating Python virtual environment..."
-    python3 -m venv "$VENV_DIR"
-    ok "Virtual environment created at backend/.venv"
+# Make `conda` available even in a non-login shell (e.g. double-clicked .command)
+if ! command -v conda &>/dev/null; then
+    for c in \
+        "$HOME/miniforge3/etc/profile.d/conda.sh" \
+        "/opt/homebrew/Caskroom/miniforge/base/etc/profile.d/conda.sh" \
+        "$HOME/miniconda3/etc/profile.d/conda.sh" \
+        "$HOME/anaconda3/etc/profile.d/conda.sh"; do
+        [ -f "$c" ] && source "$c" && break
+    done
 fi
 
-PYTHON="$VENV_DIR/bin/python"
-PIP="$VENV_DIR/bin/pip"
-
-# Only reinstall if requirements.txt is newer than the venv marker
-MARKER="$VENV_DIR/.deps_installed"
-if [ ! -f "$MARKER" ] || [ "$BACKEND_DIR/requirements.txt" -nt "$MARKER" ]; then
-    log "Installing / updating backend dependencies..."
-    "$PIP" install --quiet --upgrade pip
-    "$PIP" install --quiet -r "$BACKEND_DIR/requirements.txt"
-    touch "$MARKER"
-    ok "Backend dependencies ready"
-else
-    ok "Backend dependencies up to date (skipping install)"
+if ! command -v conda &>/dev/null; then
+    err "conda not found — install miniforge or add it to PATH"
+    exit 1
 fi
+
+# shellcheck disable=SC1091
+source "$(conda info --base)/etc/profile.d/conda.sh"
+if ! conda activate "$CONDA_ENV" 2>/dev/null; then
+    err "conda env '$CONDA_ENV' not found."
+    echo "    Create it once:  conda create -n $CONDA_ENV python=3.11 && conda activate $CONDA_ENV && pip install -e ."
+    exit 1
+fi
+PYTHON="python"
+ok "Conda env active: $CONDA_ENV ($("$PYTHON" --version 2>&1))"
 
 # ── Node modules ─────────────────────────────────────────────────────────────
 if [ ! -d "$FRONTEND_DIR/node_modules" ]; then
