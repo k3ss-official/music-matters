@@ -720,15 +720,14 @@ export function CentreWorkspace({
                         </button>
                     </div>
 
-                    {/* Zoomed waveform — auto-fitted to the loop region */}
-                    <div className="relative" style={{ minHeight: 160 }}>
+                    {/* Zoomed waveform — taller + inset (focused fine-tune panel) */}
+                    <div className="relative w-4/5 mx-auto" style={{ minHeight: 200 }}>
                         <WaveformCanvas
                             key={`loop-editor-${trackId}`}
                             ref={loopEditorRef}
-                            audioUrl={cachedMediaElementRef.current ? null : audioUrl}
-                            mediaElement={cachedMediaElementRef.current}
+                            audioUrl={audioUrl}
                             hideOverview={true}
-                            waveHeight={240}
+                            waveHeight={280}
                             downbeats={downbeats}
                             bpm={bpm}
                             beatAnchor={beatAnchor}

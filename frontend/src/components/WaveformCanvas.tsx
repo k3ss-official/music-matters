@@ -116,8 +116,8 @@ export interface WaveformCanvasProps {
 // How close (seconds) to a beat before we snap
 const SNAP_THRESHOLD_S = 0.08;
 
-// Region visual style
-const REGION_COLOR = 'rgba(0, 212, 255, 0.18)';
+// Region visual style — clearly visible loop window
+const REGION_COLOR = 'rgba(0, 212, 255, 0.30)';
 const REGION_BORDER = 'rgba(0, 212, 255, 0.9)';
 
 function buildBeatGrid(bpm: number, duration: number, anchor = 0): number[] {
