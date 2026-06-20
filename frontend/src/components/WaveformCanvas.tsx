@@ -59,6 +59,8 @@ export interface WaveformHandle {
     isPlaying: () => boolean;
     /** Force the WaveSurfer region to match new times (for toolbar nudges) */
     syncRegion: (start: number, end: number) => void;
+    /** Remove the active region entirely (clears the loop window) */
+    clearRegion: () => void;
     /** Zoom and scroll to show only the region between start and end */
     zoomToRegion: (start: number, end: number) => void;
     /** Zoom to fit region in center of screen */
@@ -93,6 +95,8 @@ export interface WaveformCanvasProps {
     chords?: Array<{ start: number; end: number; chord: string }>;
     /** BPM for quantize grid overlay and bar-snap */
     bpm?: number | null;
+    /** Real beat-grid phase anchor (seconds) — aligns grid + snap to the actual first beat */
+    beatAnchor?: number;
     /** Whether beat-snap is enabled */
     snapEnabled?: boolean;
     /** Current region start (controlled — updates region handle if changed externally) */
@@ -105,6 +109,8 @@ export interface WaveformCanvasProps {
     isLooping?: boolean;
     /** If true, hide the overview minimap strip (e.g. in the loop-editor pane) */
     hideOverview?: boolean;
+    /** Waveform height in px (main browse view is taller than the editor pane) */
+    waveHeight?: number;
 }
 
 // How close (seconds) to a beat before we snap
@@ -114,10 +120,13 @@ const SNAP_THRESHOLD_S = 0.08;
 const REGION_COLOR = 'rgba(0, 212, 255, 0.18)';
 const REGION_BORDER = 'rgba(0, 212, 255, 0.9)';
 
-function buildBeatGrid(bpm: number, duration: number): number[] {
+function buildBeatGrid(bpm: number, duration: number, anchor = 0): number[] {
     const beatDuration = 60 / bpm;
     const beats: number[] = [];
-    for (let t = 0; t < duration; t += beatDuration) {
+    // Align the grid to the track's real beat phase (anchor), not time 0.
+    let phase = anchor % beatDuration;
+    if (phase < 0) phase += beatDuration;
+    for (let t = phase; t < duration; t += beatDuration) {
         beats.push(t);
     }
     return beats;
@@ -152,12 +161,14 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             downbeats = [],
             chords = [],
             bpm = null,
+            beatAnchor = 0,
             snapEnabled = true,
             regionStart,
             regionEnd,
             phraseMarkers = [],
             isLooping = false,
             hideOverview = false,
+            waveHeight = 110,
         },
         ref
     ) {
@@ -186,6 +197,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
         const downbeatsRef = useRef(downbeats);
         const chordsRef = useRef(chords);
         const bpmRef = useRef(bpm);
+        const beatAnchorRef = useRef(beatAnchor);
         const phraseMarkersRef = useRef(phraseMarkers);
         const regionLoopRef = useRef(false); // whether we're looping the region
         const rafRef = useRef<number | null>(null);
@@ -198,22 +210,25 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
         downbeatsRef.current = downbeats;
         chordsRef.current = chords;
         bpmRef.current = bpm;
+        beatAnchorRef.current = beatAnchor;
         phraseMarkersRef.current = phraseMarkers;
         zoomRef.current = zoom;
 
         // ── Snap helper ───────────────────────────────────────────────────────
         const snapTime = useCallback((time: number): number => {
             if (!snapEnabledRef.current || altHeldRef.current) return time;
-            // Build grid from downbeats + BPM beats + phrase boundaries
+            // Build grid from downbeats + BPM beats (anchored to real phase) + phrases
             const dur = wsRef.current?.getDuration() || 0;
             let grid: number[] = [...downbeatsRef.current, ...phraseMarkersRef.current];
+            // Magnetic snap to the nearest beat: threshold = half a beat so any
+            // position grabs the closest beat (DJ-style), unless there's no BPM.
+            let threshold = 0.08;
             if (bpmRef.current && dur > 0) {
-                grid = [...grid, ...buildBeatGrid(bpmRef.current, dur)];
-                // dedupe
-                grid = [...new Set(grid.map(t => parseFloat(t.toFixed(4))))].sort((a, b) => a - b);
+                const beatDur = 60 / bpmRef.current;
+                grid = [...grid, ...buildBeatGrid(bpmRef.current, dur, beatAnchorRef.current)];
+                threshold = beatDur / 2;
             }
-            // Adaptive threshold: 4 pixels in seconds (tighter snap at high zoom)
-            const threshold = Math.max(0.01, 4 / Math.max(zoomRef.current, 1));
+            grid = [...new Set(grid.map(t => parseFloat(t.toFixed(4))))].sort((a, b) => a - b);
             return snapToNearest(time, grid, threshold);
         }, []);
 
@@ -260,10 +275,12 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             const dur = ws.getDuration();
             if (!dur) return;
 
-            // 1. BPM-estimated beats (faint, as a background grid)
+            // 1. BPM-estimated beats (faint, as a background grid) — anchored to real phase
             if (bpmRef.current) {
                 const beatDur = 60 / bpmRef.current;
-                let beat = 0;
+                let phase = (beatAnchorRef.current || 0) % beatDur;
+                if (phase < 0) phase += beatDur;
+                let beat = phase;
                 let beatIdx = 0;
                 while (beat < dur) {
                     const x = Math.round((beat / dur) * W);
@@ -325,7 +342,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 barWidth: 2,
                 barGap: 1,
                 barRadius: 2,
-                height: 110,
+                height: waveHeight,
                 normalize: true,
                 interact: true,
                 autoScroll: true,
@@ -409,18 +426,42 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                     },
                 });
                 activeRegionRef.current = region;
-                const s = snapEnabledRef.current ? snapTime(region.start) : region.start;
-                const e = snapEnabledRef.current ? snapTime(region.end) : region.end;
+                // If this region was created programmatically (syncRegion / parent push),
+                // adopt + style it but DON'T re-snap or emit — that feedback was collapsing
+                // the loop when the editor pane opened.
+                if (isSyncingRef.current) return;
+                let s = snapEnabledRef.current ? snapTime(region.start) : region.start;
+                let e = snapEnabledRef.current ? snapTime(region.end) : region.end;
+                // Quantize a freshly-drawn loop to the nearest clean musical length
+                // (1/2/4/8/16/32 beats) anchored at the snapped start — so a rough
+                // drag becomes a proper loop instead of an odd "3b 2bt" length.
+                if (snapEnabledRef.current && bpmRef.current) {
+                    const beatDur = 60 / bpmRef.current;
+                    const rawBeats = (e - s) / beatDur;
+                    const LENGTHS = [1, 2, 4, 8, 16, 32];
+                    let best = LENGTHS[0];
+                    for (const L of LENGTHS) {
+                        if (Math.abs(rawBeats - L) < Math.abs(rawBeats - best)) best = L;
+                    }
+                    e = s + best * beatDur;
+                }
+                // Move the freshly-drawn region onto the snapped/quantized bounds
+                if (Math.abs(s - region.start) > 0.001 || Math.abs(e - region.end) > 0.001) {
+                    region.setOptions({ start: s, end: e });
+                }
                 if (onRegionUpdate) onRegionUpdate(s, e);
             });
 
             // ── Playback events ───────────────────────────────────────────────
             ws.on('audioprocess', (currentTime: number) => {
                 if (onTimeUpdate) onTimeUpdate(currentTime);
-                // Loop region playback
-                if (regionLoopRef.current && activeRegionRef.current) {
-                    if (currentTime >= activeRegionRef.current.end - 0.05) {
-                        ws.setTime(activeRegionRef.current.start);
+                // Loop region playback.
+                // Guard against a degenerate region (end <= start) which would
+                // make the wrap-condition true every tick → setTime() storm → hang.
+                const r = activeRegionRef.current;
+                if (regionLoopRef.current && r && r.end - r.start > 0.05) {
+                    if (currentTime >= r.end - 0.05) {
+                        ws.setTime(r.start);
                     }
                 }
             });
@@ -594,6 +635,19 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 isSyncingRef.current = false;
                 // Do NOT call onRegionUpdate here — syncRegion is parent→child push, not user drag
             },
+            clearRegion: () => {
+                regionLoopRef.current = false;
+                if (activeRegionRef.current) {
+                    try { activeRegionRef.current.remove(); } catch {}
+                    activeRegionRef.current = null;
+                }
+                // Re-enable normal scrolling/centering after a loop is cleared
+                const ws = wsRef.current as WaveSurferInternal;
+                if (ws) {
+                    ws.options.autoScroll = true;
+                    ws.options.autoCenter = true;
+                }
+            },
             zoomToRegion: (start: number, end: number) => {
                 const ws = wsRef.current;
                 if (!ws || end <= start) return;
@@ -693,7 +747,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
 
         return (
             <div ref={outerRef} className="relative w-full rounded-lg bg-[#08080f] overflow-hidden select-none">
-                {audioUrl === null ? (
+                {(audioUrl === null && !mediaElement) ? (
                     <div className="h-[150px] flex items-center justify-center text-gray-600 text-sm">
                         No track loaded
                     </div>
