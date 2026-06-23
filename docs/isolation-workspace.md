@@ -1,5 +1,7 @@
 # Isolation Workspace — Feature Documentation
 
+**Working names:** *Isolation Workspace* (official feature name), *Sound Hunter* / *Stem Microscope* (user-facing aliases under consideration)
+
 ## Purpose
 
 The Isolation Workspace is a DJ/producer tool for extracting clean, usable loops
@@ -17,12 +19,37 @@ solo/mute/gain-adjust/EQ independently, then export as a clean mixed loop.
 2. In the workspace, set a loop region on the timeline
 3. Click **Isolation** in the left nav (or the header button)
 4. A new Isolation Session is created automatically
-5. Click **Split Substems** to break the parent stem into 5 sub-components
-6. In the **Substem Mixer**, solo/mute/adjust gain per row to audition combinations
-7. In the **Active Substem EQ / Shaper**, select a target (Sub 1–5 or Combined)
+5. Click **Extract Region** → slices the parent stem at your loop boundaries (produces `extracted_region.wav`)
+6. Click **Split Substems** → runs sub-splitting on the *extracted region only* (not the full parent stem), producing 5 sub-components
+7. In the **Substem Mixer**, solo/mute/adjust gain per row to audition combinations
+8. In the **Active Substem EQ / Shaper**, select a target (Sub 1–5 or Combined)
    and sculpt the frequency content with the 5-band EQ faders
-8. In the **Right Sidebar**, pick your Audition Mode and Export Settings
-9. Click **Export Loop** → downloads a WAV file of the selected + EQ'd substems
+9. In the **Right Sidebar**, pick your Audition Mode and Export Settings
+10. Click **Export Loop** → downloads a WAV file of the selected + EQ'd substems
+
+## Correct Extraction Architecture
+
+The critical ordering constraint for DSP implementation:
+
+```
+select region
+    ↓
+extract_region  →  parent_stem[region_start:region_end]  →  session/extracted_region.wav
+    ↓
+split_substems  →  sub-splitter(extracted_region.wav)  →  session/sub_1.wav … sub_5.wav
+```
+
+**NOT** this (incorrect — wasteful and architecturally wrong):
+```
+split_substems  →  sub-splitter(full_parent_stem.wav)  →  then slice each sub to region
+```
+
+Why it matters: running Demucs (or any sub-splitter) on the full parent stem
+for every session would cost minutes of GPU time per operation. Slicing first
+reduces the input to the region duration (typically 4–32 bars) and makes the
+operation proportional to what the user actually selected. The session directory
+stores `extracted_region.wav` as the canonical input; all downstream sub-files
+derive from it.
 
 ## Why Sounds Span Multiple Substems
 
@@ -74,18 +101,80 @@ be written to the same session directory as a new file, not in-place.
 - Region extraction doesn't slice audio — it returns the region boundaries as JSON
 - The "Combined EQ" target applies to a single substem in this MVP (future: true mix)
 
+## Traktor / External DJ Analysis Metadata — Feasibility
+
+### What the repo already has
+
+| Capability | Status | Location |
+|---|---|---|
+| Traktor NML collection parser | **Fully working** | `backend/app/services/import_traktor.py` |
+| Traktor NML import API endpoint | **Fully working** | `POST /api/ingest/traktor-nml` |
+| Rekordbox XML **export** | **Fully working** | `backend/app/services/export/daw_exporter.py` |
+| Serato crate **export** | Working (route) | `POST /api/export/serato` |
+| librosa BPM / beat tracking | **Present** | `backend/app/services/fingerprint/audio_fingerprint.py` |
+| allin1 (MLX) beats/key/chords/structure | **Present** | `backend/app/services/analysis/mlx_analyzer.py` |
+| Rekordbox XML **import** | Not implemented | — |
+| Serato crate **import** | Not implemented | — |
+| Hot cue / memory cue import (any platform) | Not implemented | — |
+
+### What Traktor provides that is directly useful for Isolation
+
+The `import_traktor.py` parser extracts two fields per track:
+
+- **BPM** — human-confirmed value (Traktor sets `BPM_QUALITY="100"` after the
+  DJ analyzes and/or manually corrects it). More reliable than our allin1/librosa
+  estimates on tracks with tempo fluctuations, live recordings, or unusual meters.
+- **INIZIO** — beatgrid anchor in seconds (position of bar 1, beat 1). With BPM
+  and INIZIO known, every bar boundary in the track is computable:
+  `bar_N_start = anchor + N * bars_per_beat * (60 / bpm)`.
+
+For the Isolation Workspace this means: if a track has been analyzed in Traktor,
+we can pre-populate `region_start` and `region_end` to snap exactly to bar
+boundaries the DJ has already verified — no estimation needed, no manual nudging.
+
+### Feasibility verdict
+
+| Use case | Feasibility | Effort |
+|---|---|---|
+| Auto-populate BPM from Traktor collection | **High — works today** | Wire `import_traktor::TraktorEntry.bpm` into `CreateSessionRequest.bpm` |
+| Auto-snap region to Traktor beatgrid | **High** | Expose `beatgrid_anchor` from track metadata (already stored after NML import) |
+| Import Rekordbox cue/loop points | **Medium** | Need to write an XML import parser (Rekordbox XML schema is public) |
+| Import Serato hot cues | **Low** | Serato stores metadata in ID3 GEOB tags — parseable but undocumented |
+| Import Engine DJ (Denon) cues | **Low** | Proprietary SQLite DB per library — feasible but significant reverse-engineering |
+
+### Recommended next step
+
+When DSP is wired, the `IsolationSession` create endpoint should accept an
+optional `track_id`. If provided, the backend should look up `beatgrid_anchor`
+from the track's metadata (written there by the Traktor NML import flow) and
+use it to pre-compute musically aligned region boundaries. This requires zero
+new infrastructure — the pipeline already stores `beatgrid_anchor` in
+`track.metadata` after a successful `POST /api/ingest/traktor-nml` call.
+
 ## Next DSP Steps
 
-1. **Real sub-splitting**: run Demucs again on the parent stem with a different model
-   (e.g. `mdx_extra` on isolated frequency bands) to produce real audio files per substem
-2. **Real waveform peaks**: read actual audio samples and downsample to N peaks
-3. **Playback**: use WaveSurfer v7 on each substem file, wire solo/mute via Web Audio
-4. **EQ rendering**: apply biquad filter chain (Web Audio BiquadFilterNode × 5) in
-   real-time during audition
-5. **Export**: mix down selected substems with gain/EQ applied via a server-side
-   scipy/numpy render pipeline, write WAV to session directory, return download URL
-6. **Artifact score**: implement bleed detection metric (cross-correlation between
-   substems) to surface which substems contain unwanted bleed from other sources
+Steps follow the correct extraction-first sequence:
+
+1. **Region extraction**: in `extract_region()`, load `parent_stem_path` with
+   soundfile, slice samples `[region_start*sr : region_end*sr]`, write to
+   `session_dir/extracted_region.wav`. Return the output path in the response.
+2. **Real sub-splitting**: in `split_substems()`, run Demucs (or a frequency-band
+   model like `mdx_extra`) on `extracted_region.wav` — never on the full parent
+   stem. Store outputs as `session_dir/sub_1.wav … sub_5.wav`, set
+   `Substem.file_path` and `is_placeholder=False`.
+3. **Real waveform peaks**: read each `sub_N.wav`, downsample amplitude envelope
+   to 200 samples, write to `Substem.waveform_peaks`.
+4. **Traktor beatgrid integration**: if `source_track_id` is provided, read
+   `track.metadata["beatgrid_anchor"]` (written by the Traktor NML import) and
+   use it with the track BPM to pre-snap `region_start`/`region_end` to bar boundaries.
+5. **Playback**: serve each sub file via `/audio/` endpoint, load into WaveSurfer v7,
+   wire solo/mute via Web Audio GainNode per substem.
+6. **EQ rendering**: apply BiquadFilterNode chain (5 bands) in Web Audio during
+   audition; mirror the same coefficients server-side for export consistency.
+7. **Export**: mix down selected substems with gain/EQ applied via scipy/numpy,
+   write to `session_dir/export_<timestamp>.wav`, return download URL.
+8. **Artifact score**: cross-correlate substems to surface bleed (e.g. kick energy
+   appearing in the "harmonic" substem) — flag via `Substem.implementation_status`.
 
 ## Manual Test Checklist (no test framework yet for frontend)
 

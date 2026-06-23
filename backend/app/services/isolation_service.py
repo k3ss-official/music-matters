@@ -169,7 +169,21 @@ class IsolationService:
     # ------------------------------------------------------------------ Ops
 
     def split_substems(self, session_id: str) -> Optional[IsolationSession]:
-        """Populate session with 5 placeholder substems (real DSP: future)."""
+        """Populate session with 5 placeholder substems.
+
+        Correct DSP sequence (not yet implemented):
+          1. extract_region must have already sliced the parent stem at
+             [region_start, region_end] → writes session_dir/extracted_region.wav
+          2. split_substems runs sub-splitting (e.g. Demucs mdx_extra or a
+             frequency-band model) on extracted_region.wav — NOT on the full
+             parent stem file.  This keeps processing time proportional to the
+             region length, not the whole track.
+          3. Each resulting sub-file is stored as session_dir/sub_{i}.wav and
+             referenced via Substem.file_path.
+
+        The current implementation returns 5 deterministic placeholder substems
+        with fake waveform peaks and file_path=None until DSP is wired.
+        """
         session = self.get_session(session_id)
         if session is None:
             return None
@@ -234,7 +248,15 @@ class IsolationService:
         }
 
     def extract_region(self, session_id: str) -> dict:
-        """Placeholder region extraction — real slice is future DSP step."""
+        """Slice the parent stem at [region_start, region_end].
+
+        Correct DSP sequence (not yet implemented):
+          Read session.parent_stem_path, trim to [region_start, region_end]
+          with soundfile/librosa, write to session_dir/extracted_region.wav.
+          This file becomes the input to split_substems — never the full parent.
+
+        Returns the region boundaries so the caller can verify the intent.
+        """
         session = self.get_session(session_id)
         if session is None:
             return {"error": "session not found"}
