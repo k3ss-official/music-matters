@@ -48,6 +48,7 @@ import { ExportDialog } from './components/ExportDialog';
 import { ProcessingView } from './components/ProcessingView';
 import { ShortcutLegend } from './components/ShortcutLegend';
 import { RecognizeButton } from './components/RecognizeButton';
+import { IsolationWorkspace } from './components/isolation/IsolationWorkspace';
 import { ResourceChecker } from './components/ResourceChecker';
 import { ShazamImport } from './components/ShazamImport';
 import { StartupCheck } from './components/StartupCheck';
@@ -83,7 +84,29 @@ const AlertIcon = () => (
 );
 
 // ── App state machine ──────────────────────────────────────────────────────
-type AppView = 'upload' | 'processing' | 'workspace';
+type AppView = 'upload' | 'processing' | 'workspace' | 'isolation';
+
+// ── Left nav sidebar items (shown on workspace / isolation views) ──────────
+const NAV_ITEMS: { key: string; label: string; icon: React.ReactNode }[] = [
+  {
+    key: 'workspace',
+    label: 'Tracks',
+    icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+      </svg>
+    ),
+  },
+  {
+    key: 'isolation',
+    label: 'Isolation',
+    icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+      </svg>
+    ),
+  },
+];
 
 function App() {
   // ── Core state ───────────────────────────────────────────────────────────
@@ -415,6 +438,18 @@ function App() {
             </button>
           )}
 
+          {/* Isolation shortcut (visible from workspace) */}
+          {view === 'workspace' && (
+            <button
+              onClick={() => setView('isolation')}
+              className="px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest font-mono
+                         bg-[#8b5cf6]/15 text-[#8b5cf6] border border-[#8b5cf6]/30
+                         hover:bg-[#8b5cf6]/25 transition-colors"
+            >
+              Isolation
+            </button>
+          )}
+
           {/* Connection status */}
           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] uppercase font-bold tracking-widest border transition-colors ${isConnected
             ? 'bg-[#00ff88]/10 text-[#00ff88] border-[#00ff88]/30'
@@ -572,6 +607,30 @@ function App() {
         )}
 
         {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* VIEW: WORKSPACE / ISOLATION — shared left nav sidebar        */}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {(view === 'workspace' || view === 'isolation') && (
+          <>
+            {/* LEFT NAV SIDEBAR */}
+            <nav className="w-[52px] bg-[#0c0c14] border-r border-white/5 flex flex-col items-center py-3 gap-1 flex-shrink-0">
+              {NAV_ITEMS.map(item => (
+                <button
+                  key={item.key}
+                  onClick={() => setView(item.key as AppView)}
+                  title={item.label}
+                  className={`w-9 h-9 flex flex-col items-center justify-center rounded-lg transition-all gap-0.5
+                    ${view === item.key
+                      ? 'bg-[#8b5cf6]/20 text-[#8b5cf6] border border-[#8b5cf6]/40'
+                      : 'text-white/25 hover:text-white/60 hover:bg-white/[0.05]'}`}
+                >
+                  {item.icon}
+                </button>
+              ))}
+            </nav>
+          </>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════ */}
         {/* VIEW: WORKSPACE ──────────────────────────────────────────── */}
         {/* ═══════════════════════════════════════════════════════════════ */}
         {view === 'workspace' && selectedTrackId && (
@@ -666,6 +725,20 @@ function App() {
               </button>
             </aside>
           </>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* VIEW: ISOLATION WORKSPACE ────────────────────────────────── */}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {view === 'isolation' && (
+          <ErrorBoundary>
+            <IsolationWorkspace
+              sourceTrackId={selectedTrackId}
+              sourceBpm={trackDetail?.bpm ?? undefined}
+              sourceKey={trackDetail?.musical_key ?? undefined}
+              sourceTitle={trackDetail?.title ?? undefined}
+            />
+          </ErrorBoundary>
         )}
 
       </main>

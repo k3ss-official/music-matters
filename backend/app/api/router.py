@@ -20,6 +20,7 @@ from app.api.routes import midi
 from app.api.routes import generate
 from app.api.routes import stream
 from app.api.routes import system
+from app.api.routes import isolation
 
 api_router = APIRouter()
 
@@ -38,3 +39,4 @@ api_router.include_router(midi.router)
 api_router.include_router(generate.router)
 api_router.include_router(stream.router)
 api_router.include_router(system.router)
+api_router.include_router(isolation.router)
