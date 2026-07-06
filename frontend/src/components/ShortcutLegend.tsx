@@ -16,10 +16,10 @@ interface ShortcutLegendProps {
 const CATEGORY_ORDER: ShortcutCategory[] = ['A', 'B', 'C', 'D'];
 
 const CATEGORY_ACCENT: Record<ShortcutCategory, string> = {
-    A: 'text-[#00d4ff]',
-    B: 'text-[#8b5cf6]',
-    C: 'text-[#f59e0b]',
-    D: 'text-[#00ff88]',
+    A: 'text-[#7F77DD]',
+    B: 'text-[#7F77DD]',
+    C: 'text-[#EF9F27]',
+    D: 'text-[#1D9E75]',
 };
 
 function KeyBadge({ label }: { label: string }) {
@@ -52,13 +52,13 @@ export function ShortcutLegend({ isOpen, onClose }: ShortcutLegendProps) {
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
             onClick={e => { if (e.target === e.currentTarget) onClose(); }}
         >
-            <div className="w-[520px] max-h-[85vh] overflow-y-auto bg-[#13131f] border border-white/10
+            <div className="w-[520px] max-h-[85vh] overflow-y-auto bg-[#1a1830] border border-white/10
                             rounded-xl shadow-2xl shadow-black/60 flex flex-col">
 
                 {/* Header */}
-                <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 sticky top-0 bg-[#13131f] z-10">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 sticky top-0 bg-[#1a1830] z-10">
                     <div className="flex items-center gap-2">
-                        <Keyboard size={14} className="text-[#00d4ff]" />
+                        <Keyboard size={14} className="text-[#7F77DD]" />
                         <span className="text-[13px] font-bold uppercase tracking-widest text-white/80">
                             Keyboard Shortcuts
                         </span>

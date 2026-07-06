@@ -26,11 +26,11 @@ function FakeWaveform({ regionStart, regionEnd }: { regionStart: number; regionE
   const regionWidth = `${((regionEnd - regionStart) * 100).toFixed(1)}%`;
 
   return (
-    <div className="relative w-full h-[72px] bg-[#0d0d14] rounded overflow-hidden">
+    <div className="relative w-full h-[72px] bg-[#0d0f1c] rounded overflow-hidden">
       {/* Region overlay */}
       {regionEnd > regionStart && (
         <div
-          className="absolute top-0 h-full bg-[#8b5cf6]/25 border-l border-r border-[#8b5cf6]/70 z-10"
+          className="absolute top-0 h-full bg-[#7F77DD]/25 border-l border-r border-[#7F77DD]/70 z-10"
           style={{ left: regionLeft, width: regionWidth }}
         />
       )}
@@ -45,7 +45,7 @@ function FakeWaveform({ regionStart, regionEnd }: { regionStart: number; regionE
               y={(72 - barH) / 2}
               width={0.6}
               height={barH}
-              fill="#8b5cf6"
+              fill="#7F77DD"
               opacity={0.6}
             />
           );
@@ -86,11 +86,11 @@ export function ParentStemPanel({ session, onSessionUpdate }: Props) {
   const regionEndNorm = session.region_end > 0 ? 1.0 : 0;
 
   return (
-    <div className="bg-[#12121a] border border-white/5 rounded-xl p-4 flex flex-col gap-3">
+    <div className="bg-[#1a1830] border border-white/5 rounded-xl p-4 flex flex-col gap-3">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-[#8b5cf6]" />
+          <div className="w-2 h-2 rounded-full bg-[#7F77DD]" />
           <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-white/40">
             Parent Stem
           </span>
@@ -98,7 +98,7 @@ export function ParentStemPanel({ session, onSessionUpdate }: Props) {
             {session.parent_stem_name}
           </span>
         </div>
-        <span className="text-[10px] font-mono text-white/20 bg-[#8b5cf6]/10 border border-[#8b5cf6]/20 px-2 py-0.5 rounded">
+        <span className="text-[10px] font-mono text-white/20 bg-[#7F77DD]/10 border border-[#7F77DD]/20 px-2 py-0.5 rounded">
           PLACEHOLDER
         </span>
       </div>
@@ -114,8 +114,8 @@ export function ParentStemPanel({ session, onSessionUpdate }: Props) {
         <button
           onClick={() => setIsPlaying(v => !v)}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg
-                     bg-[#8b5cf6]/20 border border-[#8b5cf6]/40
-                     hover:bg-[#8b5cf6]/30 text-[#8b5cf6]
+                     bg-[#7F77DD]/20 border border-[#7F77DD]/40
+                     hover:bg-[#7F77DD]/30 text-[#7F77DD]
                      text-[11px] font-mono font-bold transition-colors"
         >
           {isPlaying ? <Square size={11} /> : <Play size={11} />}
@@ -139,8 +139,8 @@ export function ParentStemPanel({ session, onSessionUpdate }: Props) {
           onClick={handleSplit}
           disabled={splitting || hasSplitAlready}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg
-                     bg-[#00d4ff]/10 border border-[#00d4ff]/30
-                     hover:bg-[#00d4ff]/20 text-[#00d4ff]
+                     bg-[#7F77DD]/10 border border-[#7F77DD]/30
+                     hover:bg-[#7F77DD]/20 text-[#7F77DD]
                      text-[11px] font-mono font-bold transition-colors
                      disabled:opacity-40 disabled:cursor-not-allowed"
         >

@@ -25,11 +25,11 @@ export function StoragePrompt({ libraryPath }: StoragePromptProps) {
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="bg-[#12121a] border border-white/10 rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6 space-y-5">
+            <div className="bg-[#1a1830] border border-white/10 rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6 space-y-5">
                 {/* Icon */}
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-[#00d4ff]/10 border border-[#00d4ff]/20 flex items-center justify-center">
-                        <FolderOpen size={20} className="text-[#00d4ff]" />
+                    <div className="w-10 h-10 rounded-xl bg-[#7F77DD]/10 border border-[#7F77DD]/20 flex items-center justify-center">
+                        <FolderOpen size={20} className="text-[#7F77DD]" />
                     </div>
                     <h2 className="text-lg font-bold text-white">Storage Location</h2>
                 </div>
@@ -40,7 +40,7 @@ export function StoragePrompt({ libraryPath }: StoragePromptProps) {
                 </p>
 
                 {/* Path display */}
-                <div className="bg-black/30 border border-white/5 rounded-lg px-4 py-3 font-mono text-[12px] text-[#00d4ff] break-all select-all">
+                <div className="bg-black/30 border border-white/5 rounded-lg px-4 py-3 font-mono text-[12px] text-[#7F77DD] break-all select-all">
                     {libraryPath}
                 </div>
 
@@ -60,8 +60,8 @@ export function StoragePrompt({ libraryPath }: StoragePromptProps) {
                     <button
                         onClick={dismiss}
                         className="px-5 py-2.5 rounded-lg font-bold text-black text-[12px]
-                                   bg-[#00d4ff] hover:bg-[#00b8e6]
-                                   shadow-[0_0_12px_rgba(0,212,255,0.25)] transition-colors"
+                                   bg-[#7F77DD] hover:bg-[#7F77DD]
+                                   shadow-[0_0_12px_rgba(127,119,221,0.25)] transition-colors"
                     >
                         Sounds good
                     </button>

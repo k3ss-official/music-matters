@@ -74,7 +74,7 @@ function phraseColor(t: string): string {
     return PHRASE_COLORS[t] ?? 'bg-gray-500/20 text-gray-400 border-gray-500/30';
 }
 function confidenceDot(c: number) {
-    if (c >= 0.85) return 'bg-[#00ff88]';
+    if (c >= 0.85) return 'bg-[#1D9E75]';
     if (c >= 0.6) return 'bg-yellow-400';
     return 'bg-red-400';
 }
@@ -457,7 +457,7 @@ export function CentreWorkspace({
     // ── No track loaded ───────────────────────────────────────────────────
     if (!trackId) {
         return (
-            <div className="flex-1 flex items-center justify-center bg-[#0a0a0f] text-white/20 text-sm font-mono tracking-wider uppercase">
+            <div className="flex-1 flex items-center justify-center bg-[#0d0f1c] text-white/20 text-sm font-mono tracking-wider uppercase">
                 Select a track to begin
             </div>
         );
@@ -466,9 +466,9 @@ export function CentreWorkspace({
     // ── Loading track detail ──────────────────────────────────────────────
     if (detailLoading || !trackDetail) {
         return (
-            <div className="flex-1 flex flex-col items-center justify-center bg-[#0a0a0f] gap-4">
-                <Loader2 size={28} className="animate-spin text-[#00d4ff]" />
-                <span className="text-[#00d4ff]/60 font-mono text-xs uppercase tracking-widest">
+            <div className="flex-1 flex flex-col items-center justify-center bg-[#0d0f1c] gap-4">
+                <Loader2 size={28} className="animate-spin text-[#7F77DD]" />
+                <span className="text-[#7F77DD]/60 font-mono text-xs uppercase tracking-widest">
                     Loading track…
                 </span>
             </div>
@@ -480,24 +480,24 @@ export function CentreWorkspace({
         loop: 'Slicing loops', project: 'Finalising',
     };
     const STAGE_COLOR: Record<string, string> = {
-        ingest: '#00d4ff', analysis: '#8b5cf6', separation: '#00ff88',
-        loop: '#f59e0b', project: '#00d4ff',
+        ingest: '#7F77DD', analysis: '#7F77DD', separation: '#1D9E75',
+        loop: '#EF9F27', project: '#7F77DD',
     };
 
     return (
         <div
-            className="flex flex-col flex-1 min-h-0 bg-[#0a0a0f] overflow-hidden outline-none focus-within:ring-1 focus-within:ring-[#00d4ff]/20"
+            className="flex flex-col flex-1 min-h-0 bg-[#0d0f1c] overflow-hidden outline-none focus-within:ring-1 focus-within:ring-[#7F77DD]/20"
             tabIndex={-1}
             onDoubleClick={handleDoubleClickCenter}
         >
 
             {/* ── Pipeline job progress ───────────────────────────────────── */}
             {activeJob && activeJob.status !== 'completed' && (
-                <div className="border-b border-white/5 bg-[#0d0d18] px-4 py-2 flex flex-col gap-1.5 shrink-0">
+                <div className="border-b border-white/5 bg-[#0d0f1c] px-4 py-2 flex flex-col gap-1.5 shrink-0">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             {activeJob.status === 'running' && (
-                                <Loader2 size={11} className="animate-spin text-[#00d4ff]" />
+                                <Loader2 size={11} className="animate-spin text-[#7F77DD]" />
                             )}
                             {activeJob.status === 'failed' && (
                                 <AlertCircle size={11} className="text-[#ff3b5c]" />
@@ -523,9 +523,9 @@ export function CentreWorkspace({
                                 title={stage.detail ?? stage.label}
                                 className={`flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-mono uppercase tracking-wide border transition-all ${
                                     stage.status === 'done'
-                                        ? 'bg-[#00ff88]/10 text-[#00ff88] border-[#00ff88]/20'
+                                        ? 'bg-[#1D9E75]/10 text-[#1D9E75] border-[#1D9E75]/20'
                                         : stage.status === 'running'
-                                        ? 'bg-[#00d4ff]/10 text-[#00d4ff] border-[#00d4ff]/30 animate-pulse'
+                                        ? 'bg-[#7F77DD]/10 text-[#7F77DD] border-[#7F77DD]/30 animate-pulse'
                                         : stage.status === 'error'
                                         ? 'bg-[#ff3b5c]/10 text-[#ff3b5c] border-[#ff3b5c]/20'
                                         : 'bg-white/5 text-white/25 border-white/5'
@@ -550,7 +550,7 @@ export function CentreWorkspace({
                             className="h-full rounded-full transition-all duration-500"
                             style={{
                                 width: `${Math.round((activeJob.progress ?? 0) * 100)}%`,
-                                background: activeJob.status === 'failed' ? '#ff3b5c' : `linear-gradient(90deg, #00d4ff, #8b5cf6)`,
+                                background: activeJob.status === 'failed' ? '#ff3b5c' : `linear-gradient(90deg, #7F77DD, #7F77DD)`,
                             }}
                         />
                     </div>
@@ -607,7 +607,7 @@ export function CentreWorkspace({
                 {/* Save success toast */}
                 {saveSuccess && (
                     <div className="absolute top-2 right-4 z-30 flex items-center gap-2
-                                    bg-[#00ff88]/15 border border-[#00ff88]/30 text-[#00ff88]
+                                    bg-[#1D9E75]/15 border border-[#1D9E75]/30 text-[#1D9E75]
                                     px-3 py-2 rounded-lg text-xs font-mono tracking-wider shadow-xl">
                         <CheckCircle2 size={12} />
                         Loop saved
@@ -617,7 +617,7 @@ export function CentreWorkspace({
                 {/* Saving indicator */}
                 {saving && (
                     <div className="absolute top-2 right-4 z-30 flex items-center gap-2
-                                    bg-[#8b5cf6]/15 border border-[#8b5cf6]/30 text-[#8b5cf6]
+                                    bg-[#7F77DD]/15 border border-[#7F77DD]/30 text-[#7F77DD]
                                     px-3 py-2 rounded-lg text-xs font-mono tracking-wider shadow-xl">
                         <Loader2 size={12} className="animate-spin" />
                         Saving...
@@ -695,12 +695,12 @@ export function CentreWorkspace({
 
             {/* ── Loop editor pane (3rd pane — fine-tune the loop) ──────────── */}
             {editLoopOpen && waveformReady && (
-                <div className="border-t-2 border-[#00d4ff]/30 bg-[#08080f] flex flex-col shrink-0">
+                <div className="border-t-2 border-[#7F77DD]/30 bg-[#0d0f1c] flex flex-col shrink-0">
                     {/* Header row */}
-                    <div className="flex items-center justify-between px-4 py-2 border-b border-white/5 bg-[#0d0d18] shrink-0">
+                    <div className="flex items-center justify-between px-4 py-2 border-b border-white/5 bg-[#0d0f1c] shrink-0">
                         <div className="flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-[#00d4ff] animate-pulse" />
-                            <span className="text-[10px] font-mono uppercase tracking-widest text-[#00d4ff]/70">
+                            <div className="w-1.5 h-1.5 rounded-full bg-[#7F77DD] animate-pulse" />
+                            <span className="text-[10px] font-mono uppercase tracking-widest text-[#7F77DD]/70">
                                 Loop Editor
                             </span>
                             {regionEnd > regionStart && bpm && (
@@ -714,7 +714,7 @@ export function CentreWorkspace({
                         <button
                             onClick={() => onOpenExportDialog?.()}
                             disabled={!trackId || regionEnd <= regionStart}
-                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-[#00d4ff] hover:bg-[#00d4ff]/20 hover:border-[#00d4ff]/60 disabled:opacity-30 disabled:cursor-not-allowed transition-all font-semibold text-xs"
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#7F77DD]/10 border border-[#7F77DD]/30 text-[#7F77DD] hover:bg-[#7F77DD]/20 hover:border-[#7F77DD]/60 disabled:opacity-30 disabled:cursor-not-allowed transition-all font-semibold text-xs"
                         >
                             Save / Export…
                         </button>
@@ -815,9 +815,9 @@ export function CentreWorkspace({
 
             {/* ── Smart phrases ──────────────────────────────────────────── */}
             {(loadingPhrases || smartPhrases.length > 0 || phrasesError) && (
-                <div className="px-4 py-2 bg-[#0d0d18] border-t border-white/5 flex items-center gap-2 flex-wrap">
+                <div className="px-4 py-2 bg-[#0d0f1c] border-t border-white/5 flex items-center gap-2 flex-wrap">
                     <div className="flex items-center gap-1 mr-1">
-                        <Zap size={11} className="text-[#8b5cf6]" />
+                        <Zap size={11} className="text-[#7F77DD]" />
                         <span className="text-[10px] font-mono text-white/30 uppercase tracking-widest">
                             Phrases
                         </span>

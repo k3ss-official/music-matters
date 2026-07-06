@@ -3,8 +3,8 @@ import { DownloadCloud } from 'lucide-react';
 import * as api from '../services/api';
 
 const STEM_COLORS: Record<string, string> = {
-    drums: '#ff3b5c', bass: '#00d4ff', vocals: '#8b5cf6',
-    other: '#00ff88', piano: '#f59e0b', guitar: '#fbbf24',
+    drums: '#ff3b5c', bass: '#7F77DD', vocals: '#7F77DD',
+    other: '#1D9E75', piano: '#EF9F27', guitar: '#FAC775',
     mixdown: '#9ca3af', harmonic: '#22d3ee', percussive: '#f97316',
 };
 
@@ -91,7 +91,7 @@ export function ExportPanel({
     const nothingSelected = !mixdownSelected && localStems.length === 0;
 
     return (
-        <div className="bg-[#12121a] rounded-lg p-4 border border-white/5 space-y-3">
+        <div className="bg-[#1a1830] rounded-lg p-4 border border-white/5 space-y-3">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <h3 className="text-[11px] font-bold uppercase tracking-widest text-white/40 font-mono">Export</h3>
@@ -104,8 +104,8 @@ export function ExportPanel({
                             onClick={onOpenDialog}
                             disabled={disabled}
                             className="px-2.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest font-mono
-                                       bg-[#00d4ff]/10 text-[#00d4ff] border border-[#00d4ff]/25
-                                       hover:bg-[#00d4ff]/20 disabled:opacity-30 disabled:cursor-not-allowed
+                                       bg-[#7F77DD]/10 text-[#7F77DD] border border-[#7F77DD]/25
+                                       hover:bg-[#7F77DD]/20 disabled:opacity-30 disabled:cursor-not-allowed
                                        transition-colors"
                         >
                             Full…
@@ -122,7 +122,7 @@ export function ExportPanel({
                         <button
                             onClick={() => setLocalStems([...availableStems])}
                             className="px-1.5 py-0.5 text-[8px] font-mono uppercase tracking-wider rounded
-                                       bg-white/5 hover:bg-[#00ff88]/10 text-white/25 hover:text-[#00ff88]
+                                       bg-white/5 hover:bg-[#1D9E75]/10 text-white/25 hover:text-[#1D9E75]
                                        border border-white/5 transition-colors"
                         >all</button>
                         <button
@@ -193,9 +193,9 @@ export function ExportPanel({
                 disabled={exportDisabled || nothingSelected}
                 onClick={handleExportLoop}
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-bold text-black
-                           bg-[#00d4ff] hover:bg-[#00b8e6]
+                           bg-[#7F77DD] hover:bg-[#7F77DD]
                            disabled:opacity-40 disabled:cursor-not-allowed transition-colors
-                           shadow-[0_0_12px_rgba(0,212,255,0.25)] text-[12px]"
+                           shadow-[0_0_12px_rgba(127,119,221,0.25)] text-[12px]"
             >
                 {exporting
                     ? <span className="animate-pulse text-black/80">Extracting…</span>

@@ -164,7 +164,7 @@ export function ProcessingView({ activeJob, stageMeta, onNewTrack, onRetry }: Pr
 
         {/* Whimsical remark */}
         {activeJob.status !== 'failed' && (
-          <p className="text-[#8b5cf6]/60 text-xs italic text-center transition-opacity duration-500 min-h-[1.5em]">
+          <p className="text-[#7F77DD]/60 text-xs italic text-center transition-opacity duration-500 min-h-[1.5em]">
             {remark}
           </p>
         )}
@@ -187,7 +187,7 @@ export function ProcessingView({ activeJob, stageMeta, onNewTrack, onRetry }: Pr
                 width: `${Math.round((activeJob.progress ?? 0) * 100)}%`,
                 background: activeJob.status === 'failed'
                   ? '#ff3b5c'
-                  : 'linear-gradient(90deg, #00d4ff, #8b5cf6)',
+                  : 'linear-gradient(90deg, #7F77DD, #7F77DD)',
               }}
             />
           </div>
@@ -202,7 +202,7 @@ export function ProcessingView({ activeJob, stageMeta, onNewTrack, onRetry }: Pr
                 key={stage.id}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-300 ${
                   stage.status === 'done'
-                    ? 'bg-[#00ff88]/5 border-[#00ff88]/20'
+                    ? 'bg-[#1D9E75]/5 border-[#1D9E75]/20'
                     : stage.status === 'running'
                     ? 'bg-white/[0.03] border-white/10 shadow-lg'
                     : stage.status === 'error'
@@ -221,7 +221,7 @@ export function ProcessingView({ activeJob, stageMeta, onNewTrack, onRetry }: Pr
                 </div>
                 <div className="flex-shrink-0">
                   {stage.status === 'done' && (
-                    <div className="text-[#00ff88]"><CheckIcon /></div>
+                    <div className="text-[#1D9E75]"><CheckIcon /></div>
                   )}
                   {stage.status === 'running' && (
                     <div className="flex items-center gap-1.5">
@@ -254,8 +254,8 @@ export function ProcessingView({ activeJob, stageMeta, onNewTrack, onRetry }: Pr
             <button
               onClick={onRetry}
               className="px-4 py-2 rounded-lg text-xs font-bold
-                         bg-[#00d4ff]/15 text-[#00d4ff] border border-[#00d4ff]/30
-                         hover:bg-[#00d4ff]/25 transition-colors"
+                         bg-[#7F77DD]/15 text-[#7F77DD] border border-[#7F77DD]/30
+                         hover:bg-[#7F77DD]/25 transition-colors"
             >
               Retry
             </button>

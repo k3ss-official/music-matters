@@ -62,7 +62,7 @@ function EQFader({ band, value, bypassed, onChange }: EQFaderProps) {
     <div className="flex flex-col items-center gap-2 flex-1">
       {/* dB readout */}
       <div className={`text-[10px] font-mono font-bold w-full text-center
-        ${bypassed ? 'text-white/20' : isZero ? 'text-white/40' : isBoost ? 'text-[#00ff88]' : 'text-[#ff3b5c]'}`}>
+        ${bypassed ? 'text-white/20' : isZero ? 'text-white/40' : isBoost ? 'text-[#1D9E75]' : 'text-[#ff3b5c]'}`}>
         {value > 0 ? '+' : ''}{value.toFixed(1)}
       </div>
 
@@ -81,7 +81,7 @@ function EQFader({ band, value, bypassed, onChange }: EQFaderProps) {
         {!isZero && (
           <div
             className={`absolute left-1 right-1 rounded-sm
-              ${isBoost ? 'bg-[#00ff88]/60' : 'bg-[#ff3b5c]/60'}`}
+              ${isBoost ? 'bg-[#1D9E75]/60' : 'bg-[#ff3b5c]/60'}`}
             style={
               isBoost
                 ? { bottom: '50%', height: `${Math.abs(value / GAIN_MAX) * 50}%` }
@@ -154,11 +154,11 @@ export function SubstemEQShaper({ session, onSessionUpdate }: Props) {
   }, [activeSubstem, saving, session.id, onSessionUpdate]);
 
   return (
-    <div className="bg-[#12121a] border border-white/5 rounded-xl p-4 flex flex-col gap-4">
+    <div className="bg-[#1a1830] border border-white/5 rounded-xl p-4 flex flex-col gap-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-[#00d4ff]" />
+          <div className="w-2 h-2 rounded-full bg-[#7F77DD]" />
           <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-white/40">
             Active Substem EQ / Shaper
           </span>
@@ -205,7 +205,7 @@ export function SubstemEQShaper({ session, onSessionUpdate }: Props) {
             }}
             className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold transition-all
               ${isCombined
-                ? 'bg-[#00d4ff]/20 border border-[#00d4ff]/50 text-[#00d4ff]'
+                ? 'bg-[#7F77DD]/20 border border-[#7F77DD]/50 text-[#7F77DD]'
                 : 'text-white/40 border border-white/10 hover:border-white/30 hover:text-white/70'}`}
           >
             Combined
@@ -235,7 +235,7 @@ export function SubstemEQShaper({ session, onSessionUpdate }: Props) {
           <div className="text-[9px] font-mono text-white/20 text-center">OUT</div>
           <div className="w-3 h-[120px] bg-white/5 rounded-full overflow-hidden">
             <div
-              className="w-full rounded-full bg-gradient-to-t from-[#00ff88] via-[#fbbf24] to-[#ff3b5c]"
+              className="w-full rounded-full bg-gradient-to-t from-[#1D9E75] via-[#FAC775] to-[#ff3b5c]"
               style={{ height: '35%', marginTop: '65%' }}
             />
           </div>
@@ -258,7 +258,7 @@ export function SubstemEQShaper({ session, onSessionUpdate }: Props) {
           onClick={() => setBypassed(v => !v)}
           className={`px-3 py-1.5 rounded text-[10px] font-mono font-bold transition-all
             ${bypassed
-              ? 'bg-[#fbbf24]/20 border border-[#fbbf24]/50 text-[#fbbf24]'
+              ? 'bg-[#FAC775]/20 border border-[#FAC775]/50 text-[#FAC775]'
               : 'bg-white/5 border border-white/10 text-white/40 hover:text-white/70'}`}
         >
           {bypassed ? 'BYPASSED' : 'BYPASS'}

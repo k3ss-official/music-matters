@@ -39,11 +39,11 @@ interface StemLanesProps {
 // ── Colours & ordering ──────────────────────────────────────────────────────
 const STEM_COLORS: Record<string, string> = {
     drums:      '#ff3b5c',
-    bass:       '#00d4ff',
-    vocals:     '#8b5cf6',
-    guitar:     '#fbbf24',
-    piano:      '#f59e0b',
-    other:      '#00ff88',
+    bass:       '#7F77DD',
+    vocals:     '#7F77DD',
+    guitar:     '#FAC775',
+    piano:      '#EF9F27',
+    other:      '#1D9E75',
     mixdown:    '#9ca3af',
     harmonic:   '#22d3ee',
     percussive: '#f97316',
@@ -92,15 +92,15 @@ function EmptyState({ loading, onRequestSeparation }: {
     loading?: boolean; onRequestSeparation?: () => void;
 }) {
     return (
-        <div className="bg-[#12121a] p-4 space-y-3">
+        <div className="bg-[#1a1830] p-4 space-y-3">
             <div className="flex items-center justify-between">
                 <h3 className="text-[11px] font-bold uppercase tracking-wider text-white/40">Stems</h3>
                 {!loading && (
                     <button
                         onClick={onRequestSeparation}
-                        className="px-3 py-1 bg-[#8b5cf6]/20 text-[#8b5cf6] hover:bg-[#8b5cf6]/30
+                        className="px-3 py-1 bg-[#7F77DD]/20 text-[#7F77DD] hover:bg-[#7F77DD]/30
                                    rounded text-[10px] font-bold tracking-wider transition-colors
-                                   border border-[#8b5cf6]/30"
+                                   border border-[#7F77DD]/30"
                     >
                         RUN SEPARATION
                     </button>
@@ -139,14 +139,14 @@ export function StemLanes({
     const hasSolo = stemMixerStates.some(s => s.soloed);
 
     return (
-        <div className="bg-[#12121a] overflow-hidden">
+        <div className="bg-[#1a1830] overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/5">
                 <div className="flex items-center gap-2">
-                    <Music2 size={11} className="text-[#8b5cf6]" />
+                    <Music2 size={11} className="text-[#7F77DD]" />
                     <span className="text-[10px] font-bold uppercase tracking-wider text-white/40">Stems</span>
                     {!mixerLoaded && availableStems.length > 0 && (
-                        <span className="text-[9px] font-mono text-[#f59e0b]/60 animate-pulse">loading…</span>
+                        <span className="text-[9px] font-mono text-[#EF9F27]/60 animate-pulse">loading…</span>
                     )}
                 </div>
                 <div className="flex items-center gap-2">
@@ -155,7 +155,7 @@ export function StemLanes({
                         onClick={() => sortedStems.forEach(s => { if (!selectedStems.includes(s)) onToggleStemSelection(s); })}
                         disabled={allExportSelected}
                         className="px-1.5 py-0.5 text-[8px] font-mono uppercase tracking-wider rounded
-                                   bg-white/5 hover:bg-[#00ff88]/15 text-white/30 hover:text-[#00ff88]
+                                   bg-white/5 hover:bg-[#1D9E75]/15 text-white/30 hover:text-[#1D9E75]
                                    border border-white/5 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
                     >ALL</button>
                     <button
@@ -229,7 +229,7 @@ export function StemLanes({
                                     flex-shrink-0 w-6 h-6 flex items-center justify-center
                                     rounded text-[9px] transition-all focus:outline-none
                                     ${isStemPlaying
-                                        ? 'bg-[#00ff88]/20 text-[#00ff88] border border-[#00ff88]/50 shadow-[0_0_6px_rgba(0,255,136,0.25)]'
+                                        ? 'bg-[#1D9E75]/20 text-[#1D9E75] border border-[#1D9E75]/50 shadow-[0_0_6px_rgba(29,158,117,0.25)]'
                                         : 'bg-white/5 text-white/30 border border-white/10 hover:text-white/70 hover:bg-white/10'}
                                 `}
                             >
@@ -261,8 +261,8 @@ export function StemLanes({
                                     rounded text-[9px] font-mono font-bold tracking-widest
                                     transition-all focus:outline-none
                                     ${isSoloed
-                                        ? 'bg-[#f59e0b]/30 text-[#f59e0b] border border-[#f59e0b]/60 shadow-[0_0_6px_rgba(245,158,11,0.35)]'
-                                        : 'bg-white/5 text-white/30 border border-white/10 hover:text-[#f59e0b]/70 hover:bg-[#f59e0b]/10'}
+                                        ? 'bg-[#EF9F27]/30 text-[#EF9F27] border border-[#EF9F27]/60 shadow-[0_0_6px_rgba(239,159,39,0.35)]'
+                                        : 'bg-white/5 text-white/30 border border-white/10 hover:text-[#EF9F27]/70 hover:bg-[#EF9F27]/10'}
                                 `}
                             >
                                 S

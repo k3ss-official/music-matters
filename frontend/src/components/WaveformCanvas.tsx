@@ -117,8 +117,8 @@ export interface WaveformCanvasProps {
 const SNAP_THRESHOLD_S = 0.08;
 
 // Region visual style — clearly visible loop window
-const REGION_COLOR = 'rgba(0, 212, 255, 0.30)';
-const REGION_BORDER = 'rgba(0, 212, 255, 0.9)';
+const REGION_COLOR = 'rgba(127, 119, 221, 0.30)';
+const REGION_BORDER = 'rgba(127, 119, 221, 0.9)';
 
 function buildBeatGrid(bpm: number, duration: number, anchor = 0): number[] {
     const beatDuration = 60 / bpm;
@@ -289,7 +289,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                     ctx.moveTo(x, 0);
                     ctx.lineTo(x, H);
                     ctx.strokeStyle = isBar
-                        ? 'rgba(0,212,255,0.12)'
+                        ? 'rgba(127,119,221,0.12)'
                         : 'rgba(255,255,255,0.04)';
                     ctx.lineWidth = isBar ? 1 : 0.5;
                     ctx.stroke();
@@ -306,7 +306,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                     ctx.beginPath();
                     ctx.moveTo(x, 0);
                     ctx.lineTo(x, H);
-                    ctx.strokeStyle = 'rgba(0,212,255,0.45)';
+                    ctx.strokeStyle = 'rgba(127,119,221,0.45)';
                     ctx.lineWidth = 1.5;
                     ctx.stroke();
                 }
@@ -335,9 +335,9 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 // If a shared media element is provided, reuse it (no re-fetch / re-decode).
                 // Otherwise load from URL as normal.
                 ...(mediaElement ? { media: mediaElement } : { url: audioUrl! }),
-                waveColor: 'rgba(139, 92, 246, 0.45)',
-                progressColor: '#8b5cf6',
-                cursorColor: '#00d4ff',
+                waveColor: 'rgba(127, 119, 221, 0.45)',
+                progressColor: '#7F77DD',
+                cursorColor: '#7F77DD',
                 cursorWidth: 2,
                 barWidth: 2,
                 barGap: 1,
@@ -359,11 +359,11 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                     MinimapPlugin.create({
                         container: minimapRef.current!,
                         height: MINIMAP_H,
-                        waveColor: 'rgba(139, 92, 246, 0.28)',
-                        progressColor: 'rgba(139, 92, 246, 0.55)',
-                        cursorColor: '#00d4ff',
+                        waveColor: 'rgba(127, 119, 221, 0.28)',
+                        progressColor: 'rgba(127, 119, 221, 0.55)',
+                        cursorColor: '#7F77DD',
                         cursorWidth: 1,
-                        overlayColor: 'rgba(0, 212, 255, 0.08)',
+                        overlayColor: 'rgba(127, 119, 221, 0.08)',
                         barWidth: 1,
                         barGap: 0,
                         barRadius: 0,
@@ -421,8 +421,8 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                     resize: true,
                     minLength: 0.1,
                     handleStyle: {
-                        left:  { backgroundColor: '#00d4ff', width: '4px', borderRadius: '2px 0 0 2px' },
-                        right: { backgroundColor: '#00ff88', width: '4px', borderRadius: '0 2px 2px 0' },
+                        left:  { backgroundColor: '#7F77DD', width: '4px', borderRadius: '2px 0 0 2px' },
+                        right: { backgroundColor: '#1D9E75', width: '4px', borderRadius: '0 2px 2px 0' },
                     },
                 });
                 activeRegionRef.current = region;
@@ -746,7 +746,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
         }, []);
 
         return (
-            <div ref={outerRef} className="relative w-full rounded-lg bg-[#08080f] overflow-hidden select-none">
+            <div ref={outerRef} className="relative w-full rounded-lg bg-[#0d0f1c] overflow-hidden select-none">
                 {(audioUrl === null && !mediaElement) ? (
                     <div className="h-[150px] flex items-center justify-center text-gray-600 text-sm">
                         No track loaded
@@ -762,10 +762,10 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
 
                         {/* Loading overlay */}
                         {loading && (
-                            <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#08080f]/80 backdrop-blur-sm">
+                            <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0d0f1c]/80 backdrop-blur-sm">
                                 <div className="flex flex-col items-center gap-3">
-                                    <div className="w-6 h-6 border-2 border-[#00d4ff] border-t-transparent rounded-full animate-spin" />
-                                    <span className="text-[#00d4ff] font-mono text-xs tracking-widest uppercase">
+                                    <div className="w-6 h-6 border-2 border-[#7F77DD] border-t-transparent rounded-full animate-spin" />
+                                    <span className="text-[#7F77DD] font-mono text-xs tracking-widest uppercase">
                                         Decoding audio...
                                     </span>
                                 </div>
@@ -776,7 +776,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                         <div className="relative w-full" style={{ height: hideOverview ? 0 : MINIMAP_H, overflow: 'hidden' }}>
                             <div
                                 ref={minimapRef}
-                                className="w-full h-full bg-[#06060e] border-b border-white/[0.04] overflow-hidden"
+                                className="w-full h-full bg-[#0d0f1c] border-b border-white/[0.04] overflow-hidden"
                                 title="Overview — click to navigate"
                             />
                             {/* Loop region indicator overlaid on the minimap (% of full track) */}
@@ -786,9 +786,9 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                                     style={{
                                         left: `${(regionStart / duration) * 100}%`,
                                         width: `${Math.max(0.3, ((regionEnd - regionStart) / duration) * 100)}%`,
-                                        background: 'rgba(0, 212, 255, 0.18)',
-                                        borderLeft: '2px solid rgba(0, 212, 255, 0.8)',
-                                        borderRight: '2px solid rgba(0, 255, 136, 0.8)',
+                                        background: 'rgba(127, 119, 221, 0.18)',
+                                        borderLeft: '2px solid rgba(127, 119, 221, 0.8)',
+                                        borderRight: '2px solid rgba(29, 158, 117, 0.8)',
                                         zIndex: 10,
                                     }}
                                 />
@@ -806,7 +806,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                         <div className="relative w-full">
                             <div
                                 ref={timelineRef}
-                                className="w-full bg-[#0d0d18] border-b border-white/5"
+                                className="w-full bg-[#0d0f1c] border-b border-white/5"
                             />
                             {/* Draggable IN/OUT markers on the timeline strip */}
                             {duration > 0 && regionStart !== undefined && regionEnd !== undefined && (
@@ -836,7 +836,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                                                 >
                                                     {/* Label */}
                                                     <span className="text-[9px] font-bold font-mono leading-none px-1 rounded-sm"
-                                                        style={{ color: '#00d4ff', background: 'rgba(0,212,255,0.15)' }}>
+                                                        style={{ color: '#7F77DD', background: 'rgba(127,119,221,0.15)' }}>
                                                         IN
                                                     </span>
                                                     {/* Triangle */}
@@ -844,12 +844,12 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                                                         width: 0, height: 0,
                                                         borderLeft: '5px solid transparent',
                                                         borderRight: '5px solid transparent',
-                                                        borderTop: '6px solid #00d4ff',
+                                                        borderTop: '6px solid #7F77DD',
                                                     }} />
                                                 </div>
                                                 {/* Vertical line */}
                                                 <div className="absolute top-0 bottom-0 w-px left-1/2 -translate-x-px"
-                                                    style={{ background: '#00d4ff', opacity: 0.7 }} />
+                                                    style={{ background: '#7F77DD', opacity: 0.7 }} />
                                             </div>
                                         );
                                     })()}
@@ -874,18 +874,18 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                                                     style={{ pointerEvents: 'none' }}
                                                 >
                                                     <span className="text-[9px] font-bold font-mono leading-none px-1 rounded-sm"
-                                                        style={{ color: '#00ff88', background: 'rgba(0,255,136,0.15)' }}>
+                                                        style={{ color: '#1D9E75', background: 'rgba(29,158,117,0.15)' }}>
                                                         OUT
                                                     </span>
                                                     <div style={{
                                                         width: 0, height: 0,
                                                         borderLeft: '5px solid transparent',
                                                         borderRight: '5px solid transparent',
-                                                        borderTop: '6px solid #00ff88',
+                                                        borderTop: '6px solid #1D9E75',
                                                     }} />
                                                 </div>
                                                 <div className="absolute top-0 bottom-0 w-px left-1/2 -translate-x-px"
-                                                    style={{ background: '#00ff88', opacity: 0.7 }} />
+                                                    style={{ background: '#1D9E75', opacity: 0.7 }} />
                                             </div>
                                         );
                                     })()}
@@ -897,7 +897,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                         {isLooping && duration > 0 && regionStart !== undefined && regionEnd !== undefined && regionEnd > regionStart && (() => {
                             const leftW  = Math.max(0, (regionStart - visibleStart) * zoom);
                             const rightL = Math.max(0, (regionEnd   - visibleStart) * zoom);
-                            const shade  = 'rgba(8,8,15,0.58)';
+                            const shade  = 'rgba(13,15,28,0.58)';
                             const style: React.CSSProperties = {
                                 top: (hideOverview ? 0 : MINIMAP_H) + TIMELINE_H,
                                 bottom: chords.length > 0 ? 18 : 0,
@@ -921,7 +921,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
 
                         {/* Chord timeline — proportional colour bar */}
                         {chords.length > 0 && duration > 0 && (
-                            <div className="relative w-full h-[18px] bg-[#08080f] flex overflow-hidden">
+                            <div className="relative w-full h-[18px] bg-[#0d0f1c] flex overflow-hidden">
                                 {chords.map((c, i) => {
                                     const left = (c.start / duration) * 100;
                                     const width = ((c.end - c.start) / duration) * 100;
@@ -933,8 +933,8 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                                             style={{
                                                 left: `${left}%`,
                                                 width: `${width}%`,
-                                                background: 'rgba(139,92,246,0.15)',
-                                                borderRight: '1px solid rgba(139,92,246,0.2)',
+                                                background: 'rgba(127,119,221,0.15)',
+                                                borderRight: '1px solid rgba(127,119,221,0.2)',
                                             }}
                                         >
                                             <span className="text-[9px] font-mono text-purple-300/70 truncate px-0.5 select-none">

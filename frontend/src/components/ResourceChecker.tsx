@@ -53,15 +53,15 @@ export function ResourceChecker({ onClose }: ResourceCheckerProps) {
     }, [fetchResources]);
 
     const usedPct = data ? data.percent_used : 0;
-    const barColor = usedPct > 85 ? '#ff3b5c' : usedPct > 65 ? '#f59e0b' : '#00ff88';
+    const barColor = usedPct > 85 ? '#ff3b5c' : usedPct > 65 ? '#EF9F27' : '#1D9E75';
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-            <div className="bg-[#12121a] border border-white/10 rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col max-h-[80vh]">
+            <div className="bg-[#1a1830] border border-white/10 rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col max-h-[80vh]">
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
                     <div className="flex items-center gap-2">
-                        <Cpu size={16} className="text-[#00d4ff]" />
+                        <Cpu size={16} className="text-[#7F77DD]" />
                         <span className="text-sm font-semibold text-white">System Resources</span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -92,7 +92,7 @@ export function ResourceChecker({ onClose }: ResourceCheckerProps) {
                             </p>
                             <button
                                 onClick={fetchResources}
-                                className="px-4 py-2 bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-[#00d4ff] rounded-lg text-sm font-semibold hover:bg-[#00d4ff]/20 transition-all"
+                                className="px-4 py-2 bg-[#7F77DD]/10 border border-[#7F77DD]/30 text-[#7F77DD] rounded-lg text-sm font-semibold hover:bg-[#7F77DD]/20 transition-all"
                             >
                                 Check Resources
                             </button>
@@ -131,7 +131,7 @@ export function ResourceChecker({ onClose }: ResourceCheckerProps) {
 
                             {/* Advice */}
                             {data.percent_used > 70 && (
-                                <div className="flex items-start gap-2 p-3 bg-[#f59e0b]/10 border border-[#f59e0b]/20 rounded-lg text-[#f59e0b] text-xs">
+                                <div className="flex items-start gap-2 p-3 bg-[#EF9F27]/10 border border-[#EF9F27]/20 rounded-lg text-[#EF9F27] text-xs">
                                     <Zap size={12} className="mt-0.5 shrink-0" />
                                     <span>
                                         RAM is {data.percent_used > 85 ? 'critically' : 'somewhat'} full.
@@ -150,13 +150,13 @@ export function ResourceChecker({ onClose }: ResourceCheckerProps) {
                                         key={proc.pid}
                                         className={`flex items-center justify-between px-3 py-2 rounded-lg border transition-all ${
                                             proc.is_heavy
-                                                ? 'bg-[#f59e0b]/5 border-[#f59e0b]/15'
+                                                ? 'bg-[#EF9F27]/5 border-[#EF9F27]/15'
                                                 : 'bg-white/[0.02] border-white/5'
                                         }`}
                                     >
                                         <div className="flex items-center gap-2 min-w-0">
                                             {proc.is_heavy && (
-                                                <span className="text-[#f59e0b] shrink-0" title="Known heavy app">
+                                                <span className="text-[#EF9F27] shrink-0" title="Known heavy app">
                                                     <AlertTriangle size={11} />
                                                 </span>
                                             )}
@@ -170,7 +170,7 @@ export function ResourceChecker({ onClose }: ResourceCheckerProps) {
                                         <div className="flex items-center gap-2 shrink-0 ml-2">
                                             <span className={`text-xs font-mono font-semibold ${
                                                 proc.rss_mb > 500 ? 'text-[#ff3b5c]' :
-                                                proc.rss_mb > 200 ? 'text-[#f59e0b]' : 'text-white/50'
+                                                proc.rss_mb > 200 ? 'text-[#EF9F27]' : 'text-white/50'
                                             }`}>
                                                 {proc.rss_mb.toFixed(0)} MB
                                             </span>

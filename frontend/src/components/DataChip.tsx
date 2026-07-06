@@ -11,9 +11,9 @@ interface DataChipProps {
 }
 
 const variantStyles: Record<ChipVariant, string> = {
-    primary: 'border-[#00d4ff]/30 text-[#00d4ff] bg-[#00d4ff]/10',
-    secondary: 'border-[#8b5cf6]/30 text-[#8b5cf6] bg-[#8b5cf6]/10',
-    success: 'border-[#00ff88]/30 text-[#00ff88] bg-[#00ff88]/10',
+    primary: 'border-[#7F77DD]/30 text-[#7F77DD] bg-[#7F77DD]/10',
+    secondary: 'border-[#7F77DD]/30 text-[#7F77DD] bg-[#7F77DD]/10',
+    success: 'border-[#1D9E75]/30 text-[#1D9E75] bg-[#1D9E75]/10',
     danger: 'border-[#ff3b5c]/30 text-[#ff3b5c] bg-[#ff3b5c]/10',
     default: 'border-white/10 text-gray-300 bg-white/5',
 };

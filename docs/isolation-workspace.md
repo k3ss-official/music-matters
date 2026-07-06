@@ -15,10 +15,11 @@ solo/mute/gain-adjust/EQ independently, then export as a clean mixed loop.
 
 ## DJ Workflow
 
-1. Import a track → let Music Matters split stems (Demucs)
-2. In the workspace, set a loop region on the timeline
-3. Click **Isolation** in the left nav (or the header button)
-4. A new Isolation Session is created automatically
+1. Import a track (Library → **Import**) → let Music Matters split stems (Demucs)
+2. From the **Library dashboard**, click the track's **microscope action button**
+   (enabled once the track is *Stemmed*) — or open the track workspace, set a
+   loop region on the timeline, and click **Isolation** in the left icon sidebar
+3. A new Isolation Session is created automatically
 5. Click **Extract Region** → slices the parent stem at your loop boundaries (produces `extracted_region.wav`)
 6. Click **Split Substems** → runs sub-splitting on the *extracted region only* (not the full parent stem), producing 5 sub-components
 7. In the **Substem Mixer**, solo/mute/adjust gain per row to audition combinations

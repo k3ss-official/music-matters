@@ -121,12 +121,12 @@ export const EditLoopSection: React.FC<EditLoopSectionProps> = ({
     const canChange = !!onRegionChange;
 
     return (
-        <div className="border-t border-white/10 bg-[#0d0d18] flex flex-col shrink-0" style={{ height: 196 }}>
+        <div className="border-t border-white/10 bg-[#0d0f1c] flex flex-col shrink-0" style={{ height: 196 }}>
 
             {/* ── Header ─────────────────────────────────────────────────── */}
             <div className="flex items-center justify-between px-4 py-2 border-b border-white/5 shrink-0">
                 <div className="flex items-center gap-3">
-                    <span className="text-[11px] font-mono text-[#8b5cf6] uppercase tracking-widest font-bold">
+                    <span className="text-[11px] font-mono text-[#7F77DD] uppercase tracking-widest font-bold">
                         Edit Loop
                     </span>
                     {barCount != null && barCount > 0 && (
@@ -146,8 +146,8 @@ export const EditLoopSection: React.FC<EditLoopSectionProps> = ({
                         title={nudgeMode === 'beat' ? 'Switch to millisecond nudge mode' : 'Switch to beat nudge mode'}
                         className={`px-2 py-1 rounded font-mono text-[10px] tracking-wider transition-all border
                             ${nudgeMode === 'beat'
-                                ? 'bg-[#00d4ff]/10 text-[#00d4ff] border-[#00d4ff]/30'
-                                : 'bg-[#f59e0b]/10 text-[#f59e0b] border-[#f59e0b]/30'}`}
+                                ? 'bg-[#7F77DD]/10 text-[#7F77DD] border-[#7F77DD]/30'
+                                : 'bg-[#EF9F27]/10 text-[#EF9F27] border-[#EF9F27]/30'}`}
                     >
                         {nudgeMode === 'beat' ? 'BEAT' : 'MS'}
                     </button>
@@ -157,7 +157,7 @@ export const EditLoopSection: React.FC<EditLoopSectionProps> = ({
                         title={quantizeEnabled ? 'Snap ON — click to disable' : 'Snap OFF — click to enable'}
                         className={`flex items-center gap-1.5 px-2 py-1 rounded font-mono text-[10px] tracking-wider transition-all
                             ${quantizeEnabled
-                                ? 'bg-[#8b5cf6]/20 text-[#8b5cf6] border border-[#8b5cf6]/40'
+                                ? 'bg-[#7F77DD]/20 text-[#7F77DD] border border-[#7F77DD]/40'
                                 : 'bg-white/5 text-white/30 border border-white/10'}`}
                     >
                         <Grid3x3 size={10} />
@@ -179,14 +179,14 @@ export const EditLoopSection: React.FC<EditLoopSectionProps> = ({
 
                 {/* ── IN row ─────────────────────────────────── */}
                 <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono text-[#00d4ff] w-8 shrink-0 tracking-widest">IN</span>
+                    <span className="text-[10px] font-mono text-[#7F77DD] w-8 shrink-0 tracking-widest">IN</span>
                     <div className="flex items-center gap-1">
                         <JogBtn label={`◄${steps.coarseLabel}`} title={`Nudge IN back — ${steps.coarseLabel}`} onClick={() => nudgeIn(-steps.coarse)} dim />
                         <JogBtn label={`◄${steps.midLabel}`}    title={`Nudge IN back — ${steps.midLabel}`}    onClick={() => nudgeIn(-steps.mid)} />
                         <JogBtn label={`◄${steps.fineLabel}`}   title={`Nudge IN back — ${steps.fineLabel}`}   onClick={() => nudgeIn(-steps.fine)} />
                     </div>
                     <span className={`font-mono text-[12px] tabular-nums px-2 py-0.5 rounded border min-w-[88px] text-center
-                        ${canChange ? 'text-[#00d4ff] border-[#00d4ff]/25 bg-[#00d4ff]/5' : 'text-white/25 border-white/10 bg-white/3'}`}>
+                        ${canChange ? 'text-[#7F77DD] border-[#7F77DD]/25 bg-[#7F77DD]/5' : 'text-white/25 border-white/10 bg-white/3'}`}>
                         {fmtTime(regionStart)}
                     </span>
                     <div className="flex items-center gap-1">
@@ -210,7 +210,7 @@ export const EditLoopSection: React.FC<EditLoopSectionProps> = ({
                         <span className="font-mono text-[12px] text-white/60 tabular-nums">
                             {loopLen.toFixed(2)}s
                         </span>
-                        <span className="font-mono text-[9px] text-[#8b5cf6]/60 tracking-wide">
+                        <span className="font-mono text-[9px] text-[#7F77DD]/60 tracking-wide">
                             {fmtLength(loopLen, bpm)}
                         </span>
                     </div>
@@ -222,14 +222,14 @@ export const EditLoopSection: React.FC<EditLoopSectionProps> = ({
 
                 {/* ── OUT row ────────────────────────────────── */}
                 <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono text-[#00ff88] w-8 shrink-0 tracking-widest">OUT</span>
+                    <span className="text-[10px] font-mono text-[#1D9E75] w-8 shrink-0 tracking-widest">OUT</span>
                     <div className="flex items-center gap-1">
                         <JogBtn label={`◄${steps.coarseLabel}`} title={`Nudge OUT back — ${steps.coarseLabel}`} onClick={() => nudgeOut(-steps.coarse)} dim />
                         <JogBtn label={`◄${steps.midLabel}`}    title={`Nudge OUT back — ${steps.midLabel}`}    onClick={() => nudgeOut(-steps.mid)} />
                         <JogBtn label={`◄${steps.fineLabel}`}   title={`Nudge OUT back — ${steps.fineLabel}`}   onClick={() => nudgeOut(-steps.fine)} />
                     </div>
                     <span className={`font-mono text-[12px] tabular-nums px-2 py-0.5 rounded border min-w-[88px] text-center
-                        ${canChange ? 'text-[#00ff88] border-[#00ff88]/25 bg-[#00ff88]/5' : 'text-white/25 border-white/10 bg-white/3'}`}>
+                        ${canChange ? 'text-[#1D9E75] border-[#1D9E75]/25 bg-[#1D9E75]/5' : 'text-white/25 border-white/10 bg-white/3'}`}>
                         {fmtTime(regionEnd)}
                     </span>
                     <div className="flex items-center gap-1">

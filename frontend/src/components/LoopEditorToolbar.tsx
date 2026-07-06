@@ -96,8 +96,8 @@ export const LoopEditorToolbar: React.FC<LoopEditorToolbarProps> = ({
                 w-full px-4 py-2 flex items-center gap-4 flex-wrap select-none
                 border-t transition-colors
                 ${editLoopOpen
-                    ? 'bg-[#0d0d1a] border-[#00d4ff]/20'
-                    : 'bg-[#10101e] border-white/5'}
+                    ? 'bg-[#0d0f1c] border-[#7F77DD]/20'
+                    : 'bg-[#0d0f1c] border-white/5'}
             `}
         >
             {/* ── IN ─────────────────────────────────────────────────────── */}
@@ -117,15 +117,15 @@ export const LoopEditorToolbar: React.FC<LoopEditorToolbarProps> = ({
                         onChange={e => setStartInput(e.target.value)}
                         onBlur={commitStartEdit}
                         onKeyDown={e => { if (e.key === 'Enter') commitStartEdit(); if (e.key === 'Escape') setEditingStart(false); }}
-                        className="w-[88px] bg-[#1a1a2e] border border-[#00d4ff]/40 rounded px-2 py-0.5
-                                   font-mono text-[12px] text-[#00d4ff] focus:outline-none text-center"
+                        className="w-[88px] bg-[#1a1830] border border-[#7F77DD]/40 rounded px-2 py-0.5
+                                   font-mono text-[12px] text-[#7F77DD] focus:outline-none text-center"
                         placeholder="00:00.000"
                     />
                 ) : (
                     <button
                         onClick={() => { setStartInput(fmtTime(regionStart)); setEditingStart(true); }}
-                        className="font-mono text-[12px] text-[#00d4ff] tabular-nums bg-[#0d0d1a]
-                                   px-2 py-0.5 rounded border border-white/10 hover:border-[#00d4ff]/40
+                        className="font-mono text-[12px] text-[#7F77DD] tabular-nums bg-[#0d0f1c]
+                                   px-2 py-0.5 rounded border border-white/10 hover:border-[#7F77DD]/40
                                    transition-colors w-[88px] text-center"
                     >
                         {fmtTime(regionStart)}
@@ -156,7 +156,7 @@ export const LoopEditorToolbar: React.FC<LoopEditorToolbarProps> = ({
                     <span className="font-mono text-[13px] text-white/70 tabular-nums">
                         {loopLength.toFixed(2)}s
                     </span>
-                    <span className="font-mono text-[10px] text-[#8b5cf6]/70 tracking-wide">
+                    <span className="font-mono text-[10px] text-[#7F77DD]/70 tracking-wide">
                         {fmtBarBeats(loopLength, bpm)}
                     </span>
                 </div>
@@ -188,15 +188,15 @@ export const LoopEditorToolbar: React.FC<LoopEditorToolbarProps> = ({
                         onChange={e => setEndInput(e.target.value)}
                         onBlur={commitEndEdit}
                         onKeyDown={e => { if (e.key === 'Enter') commitEndEdit(); if (e.key === 'Escape') setEditingEnd(false); }}
-                        className="w-[88px] bg-[#1a1a2e] border border-[#00ff88]/40 rounded px-2 py-0.5
-                                   font-mono text-[12px] text-[#00ff88] focus:outline-none text-center"
+                        className="w-[88px] bg-[#1a1830] border border-[#1D9E75]/40 rounded px-2 py-0.5
+                                   font-mono text-[12px] text-[#1D9E75] focus:outline-none text-center"
                         placeholder="00:00.000"
                     />
                 ) : (
                     <button
                         onClick={() => { setEndInput(fmtTime(regionEnd)); setEditingEnd(true); }}
-                        className="font-mono text-[12px] text-[#00ff88] tabular-nums bg-[#0d0d1a]
-                                   px-2 py-0.5 rounded border border-white/10 hover:border-[#00ff88]/40
+                        className="font-mono text-[12px] text-[#1D9E75] tabular-nums bg-[#0d0f1c]
+                                   px-2 py-0.5 rounded border border-white/10 hover:border-[#1D9E75]/40
                                    transition-colors w-[88px] text-center"
                     >
                         {fmtTime(regionEnd)}
@@ -219,8 +219,8 @@ export const LoopEditorToolbar: React.FC<LoopEditorToolbarProps> = ({
                 onClick={() => onSaveLoop?.(regionStart, regionEnd)}
                 title="Save this loop"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded
-                           bg-[#00ff88]/10 hover:bg-[#00ff88]/20
-                           text-[#00ff88] border border-[#00ff88]/25
+                           bg-[#1D9E75]/10 hover:bg-[#1D9E75]/20
+                           text-[#1D9E75] border border-[#1D9E75]/25
                            font-mono text-[11px] tracking-wider
                            transition-colors focus:outline-none"
             >

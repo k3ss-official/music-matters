@@ -71,8 +71,8 @@ const SECTION_COLORS: Record<string, string> = {
   intro: '#6B7280',
   verse: '#3B82F6',
   chorus: '#EF4444',
-  breakdown: '#8B5CF6',
-  drop: '#F59E0B',
+  breakdown: '#7F77DD',
+  drop: '#EF9F27',
   bridge: '#10B981',
   outro: '#6B7280',
   main: '#3B82F6',
@@ -155,7 +155,7 @@ export function SOTAPanel({ analysis, onSelectSamplePoint }: Props) {
                 </div>
                 <div className="text-right">
                   <div className="text-xs font-medium" style={{
-                    color: compat.score >= 90 ? '#4ADE80' : compat.score >= 70 ? '#FBBF24' : '#F87171'
+                    color: compat.score >= 90 ? '#4ADE80' : compat.score >= 70 ? '#FAC775' : '#F87171'
                   }}>
                     {compat.score}%
                   </div>
@@ -262,7 +262,7 @@ export function SOTAPanel({ analysis, onSelectSamplePoint }: Props) {
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-bold" style={{
-                      color: point.score >= 80 ? '#4ADE80' : point.score >= 60 ? '#FBBF24' : '#F87171'
+                      color: point.score >= 80 ? '#4ADE80' : point.score >= 60 ? '#FAC775' : '#F87171'
                     }}>
                       {point.score.toFixed(0)}
                     </div>

@@ -66,11 +66,11 @@ export function ShazamImport({ onClose, onIngest }: ShazamImportProps) {
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-            <div className="bg-[#12121a] border border-white/10 rounded-2xl shadow-2xl w-full max-w-xl mx-4 flex flex-col max-h-[80vh]">
+            <div className="bg-[#1a1830] border border-white/10 rounded-2xl shadow-2xl w-full max-w-xl mx-4 flex flex-col max-h-[80vh]">
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
                     <div className="flex items-center gap-2">
-                        <Music size={16} className="text-[#00d4ff]" />
+                        <Music size={16} className="text-[#7F77DD]" />
                         <span className="text-sm font-semibold text-white">My Shazams</span>
                     </div>
                     <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/5 text-white/40 hover:text-white/80 transition-all">
@@ -97,9 +97,9 @@ export function ShazamImport({ onClose, onIngest }: ShazamImportProps) {
                                 onDrop={handleDrop}
                                 onDragOver={e => e.preventDefault()}
                                 onClick={() => fileRef.current?.click()}
-                                className="border-2 border-dashed border-white/10 hover:border-[#00d4ff]/40 rounded-xl p-8 text-center cursor-pointer transition-all group"
+                                className="border-2 border-dashed border-white/10 hover:border-[#7F77DD]/40 rounded-xl p-8 text-center cursor-pointer transition-all group"
                             >
-                                <Upload size={24} className="mx-auto mb-3 text-white/20 group-hover:text-[#00d4ff]/60 transition-colors" />
+                                <Upload size={24} className="mx-auto mb-3 text-white/20 group-hover:text-[#7F77DD]/60 transition-colors" />
                                 <p className="text-sm text-white/40 group-hover:text-white/60 transition-colors">
                                     {loading ? 'Parsing…' : 'Drop CSV here or click to browse'}
                                 </p>
@@ -128,7 +128,7 @@ export function ShazamImport({ onClose, onIngest }: ShazamImportProps) {
                                 <p className="text-xs text-white/40 font-mono">{tracks.length} tracks found</p>
                                 <button
                                     onClick={handleIngestAll}
-                                    className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-[#00d4ff] hover:bg-[#00d4ff]/20 transition-all"
+                                    className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#7F77DD]/10 border border-[#7F77DD]/30 text-[#7F77DD] hover:bg-[#7F77DD]/20 transition-all"
                                 >
                                     Import All
                                 </button>
@@ -152,8 +152,8 @@ export function ShazamImport({ onClose, onIngest }: ShazamImportProps) {
                                                 disabled={done}
                                                 className={`shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all ${
                                                     done
-                                                        ? 'bg-[#00ff88]/10 border-[#00ff88]/20 text-[#00ff88] cursor-default'
-                                                        : 'bg-[#00d4ff]/10 border-[#00d4ff]/30 text-[#00d4ff] hover:bg-[#00d4ff]/20'
+                                                        ? 'bg-[#1D9E75]/10 border-[#1D9E75]/20 text-[#1D9E75] cursor-default'
+                                                        : 'bg-[#7F77DD]/10 border-[#7F77DD]/30 text-[#7F77DD] hover:bg-[#7F77DD]/20'
                                                 }`}
                                             >
                                                 {done ? <CheckCircle2 size={11} /> : <Play size={11} />}

@@ -72,7 +72,7 @@ export function IsolationRightSidebar({ session, onSessionUpdate }: Props) {
   };
 
   return (
-    <div className="w-[260px] bg-[#0a0a0f] border-l border-white/5 flex flex-col gap-4 p-4 overflow-y-auto flex-shrink-0">
+    <div className="w-[260px] bg-[#0d0f1c] border-l border-white/5 flex flex-col gap-4 p-4 overflow-y-auto flex-shrink-0">
 
       {/* Multi-Select / Combined Output */}
       <div className="flex flex-col gap-2">
@@ -115,7 +115,7 @@ export function IsolationRightSidebar({ session, onSessionUpdate }: Props) {
               onClick={() => handleAuditionMode(key)}
               className={`text-left px-3 py-2 rounded-lg text-[11px] font-mono transition-all
                 ${session.audition_mode === key
-                  ? 'bg-[#00d4ff]/15 border border-[#00d4ff]/40 text-[#00d4ff]'
+                  ? 'bg-[#7F77DD]/15 border border-[#7F77DD]/40 text-[#7F77DD]'
                   : 'bg-white/[0.03] border border-white/[0.06] text-white/40 hover:text-white/70 hover:border-white/20'}`}
               title={description}
             >
@@ -184,7 +184,7 @@ export function IsolationRightSidebar({ session, onSessionUpdate }: Props) {
                      font-bold text-sm transition-all
                      ${selectedSubstems.length === 0
                        ? 'bg-white/5 border border-white/10 text-white/20 cursor-not-allowed'
-                       : 'bg-[#00ff88]/10 border border-[#00ff88]/40 text-[#00ff88] hover:bg-[#00ff88]/20 hover:border-[#00ff88]/60'}`}
+                       : 'bg-[#1D9E75]/10 border border-[#1D9E75]/40 text-[#1D9E75] hover:bg-[#1D9E75]/20 hover:border-[#1D9E75]/60'}`}
         >
           {exportState === 'loading' ? (
             <Loader2 size={15} className="animate-spin" />
@@ -253,9 +253,9 @@ function ExportField({
         id={id}
         value={value}
         onChange={e => onChange(e.target.value)}
-        className="bg-[#12121a] border border-white/10 rounded px-2 py-1
+        className="bg-[#1a1830] border border-white/10 rounded px-2 py-1
                    text-[10px] font-mono text-white/70
-                   focus:outline-none focus:border-[#00d4ff]/40
+                   focus:outline-none focus:border-[#7F77DD]/40
                    hover:border-white/20 transition-colors"
       >
         {options.map(opt => (

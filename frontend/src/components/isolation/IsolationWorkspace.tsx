@@ -61,7 +61,7 @@ export function IsolationWorkspace({
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <Loader2 size={32} className="animate-spin text-[#8b5cf6]" />
+          <Loader2 size={32} className="animate-spin text-[#7F77DD]" />
           <span className="text-[11px] font-mono text-white/40">Creating isolation session…</span>
         </div>
       </div>
