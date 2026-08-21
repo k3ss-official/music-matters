@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from app.config import settings
+from app.security import AUDIO_SUFFIXES, confined_file, safe_name
 from app.services.isolation_models import (
     EQ5Band,
     ExportSettings,
@@ -73,7 +74,7 @@ def _make_placeholder_substems(session_id: str) -> List[Substem]:
 # ---------------------------------------------------------------------------
 
 def _session_dir(session_id: str) -> Path:
-    return settings.MUSIC_LIBRARY / "Library" / "Isolation" / session_id
+    return settings.MUSIC_LIBRARY / "Library" / "Isolation" / safe_name(session_id)
 
 
 def _session_file(session_id: str) -> Path:
@@ -250,23 +251,59 @@ class IsolationService:
     def extract_region(self, session_id: str) -> dict:
         """Slice the parent stem at [region_start, region_end].
 
-        Correct DSP sequence (not yet implemented):
-          Read session.parent_stem_path, trim to [region_start, region_end]
-          with soundfile/librosa, write to session_dir/extracted_region.wav.
-          This file becomes the input to split_substems — never the full parent.
-
-        Returns the region boundaries so the caller can verify the intent.
+        When parent_stem_path is set and readable, write
+        session_dir/extracted_region.wav. Otherwise keep the placeholder
+        response so sessions created without a parent still work.
         """
         session = self.get_session(session_id)
         if session is None:
             return {"error": "session not found"}
+
+        parent = session.parent_stem_path
+        if not parent:
+            return {
+                "session_id": session_id,
+                "status": "placeholder",
+                "implementation_status": "placeholder",
+                "region_start": session.region_start,
+                "region_end": session.region_end,
+                "message": "Region extraction will slice parent stem in future DSP step",
+            }
+
+        try:
+            src = confined_file(settings.MUSIC_LIBRARY, parent, suffixes=AUDIO_SUFFIXES)
+        except Exception:
+            return {
+                "session_id": session_id,
+                "status": "placeholder",
+                "implementation_status": "placeholder",
+                "region_start": session.region_start,
+                "region_end": session.region_end,
+                "message": "Parent stem is not a readable library file",
+            }
+
+        import numpy as np
+        import soundfile as sf
+
+        info = sf.info(str(src))
+        sr = int(info.samplerate)
+        start = max(0, int(float(session.region_start) * sr))
+        end = max(start + 1, int(float(session.region_end) * sr))
+        data, _ = sf.read(str(src), start=start, stop=end, always_2d=False)
+        if getattr(data, "size", 0) == 0:
+            data = np.zeros(sr, dtype="float32")
+
+        out = _session_dir(session_id) / "extracted_region.wav"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        sf.write(str(out), data, sr)
         return {
             "session_id": session_id,
-            "status": "placeholder",
-            "implementation_status": "placeholder",
+            "status": "extracted",
+            "implementation_status": "extracted",
             "region_start": session.region_start,
             "region_end": session.region_end,
-            "message": "Region extraction will slice parent stem in future DSP step",
+            "output_path": str(out),
+            "message": "Region sliced from parent stem",
         }
 
 

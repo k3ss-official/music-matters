@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse
 
 from app.api.schemas import (
     JobResponse,
+    LibraryStats,
     LoopPreview,
     LoopResliceRequest,
     ProcessJobRequest,
@@ -47,6 +48,11 @@ async def search_tracks(payload: SearchRequest) -> list[SearchResult]:
     return pipeline.search_tracks(payload)
 
 
+@router.get("/stats", response_model=LibraryStats)
+async def library_stats() -> LibraryStats:
+    return pipeline.get_stats()
+
+
 @router.get("/tracks", response_model=TrackListResponse)
 async def list_tracks(
     limit: int = Query(default=50, ge=1, le=200),
@@ -63,6 +69,38 @@ async def track_detail(track_id: str) -> TrackDetailResponse:
         return pipeline.get_track(track_uuid)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.get("/tracks/{track_id}/peaks")
+async def track_peaks(
+    track_id: str, buckets: int = Query(default=200, ge=16, le=2000)
+) -> dict:
+    """Downsampled peak envelope for waveform thumbnails."""
+    import numpy as np
+    import soundfile as sf
+
+    from app.config import settings
+    from app.security import AUDIO_SUFFIXES, confined_file
+
+    track_uuid = _parse_uuid(track_id)
+    record = pipeline._tracks.get(track_uuid)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Track not found")
+    source = record.original_path or record.metadata.get("source_path")
+    if not source:
+        raise HTTPException(status_code=404, detail="No audio path")
+    path = confined_file(settings.MUSIC_LIBRARY, source, suffixes=AUDIO_SUFFIXES)
+    data, sr = sf.read(str(path), always_2d=False)
+    if getattr(data, "ndim", 1) > 1:
+        data = data.mean(axis=1)
+    n = min(buckets, int(data.shape[0]) or 1)
+    chunk = data.shape[0] / n
+    peaks = []
+    for i in range(n):
+        sl = data[int(i * chunk) : int((i + 1) * chunk)]
+        peaks.append(float(np.max(np.abs(sl))) if sl.size else 0.0)
+    duration = float(data.shape[0] / sr) if sr else 0.0
+    return {"peaks": peaks, "duration": duration}
 
 
 @router.delete("/tracks/{track_id}")
@@ -142,31 +180,19 @@ async def create_custom_loop(track_id: str, payload: CustomLoopRequest) -> LoopP
 @router.get("/tracks/{track_id}/phrases")
 async def get_smart_phrases(track_id: str):
     """Get smart phrase suggestions (chorus, drop, intro, outro) for a track."""
-    from pathlib import Path
+    from app.config import settings
+    from app.security import AUDIO_SUFFIXES, confined_file
 
     track_uuid = _parse_uuid(track_id)
+    track_record = pipeline._tracks.get(track_uuid)
+    if track_record is None:
+        raise HTTPException(status_code=404, detail="Track not found")
 
-    try:
-        track = pipeline.get_track(track_uuid)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-
-    audio_path = track.metadata.get("source_path") or track.original_path
-    if audio_path is None:
+    source = track_record.metadata.get("source_path") or track_record.original_path
+    if source is None:
         raise HTTPException(status_code=404, detail="No audio path")
 
-    # Convert to string if Path object
-    if hasattr(audio_path, "__fspath__"):
-        audio_path = audio_path.__fspath__()
-
-    audio_path = Path(audio_path)
-
-    if not audio_path.exists():
-        raise HTTPException(
-            status_code=404, detail=f"Audio file not found: {audio_path}"
-        )
-
-    track_record = pipeline._tracks.get(track_uuid)
+    audio_path = confined_file(settings.MUSIC_LIBRARY, source, suffixes=AUDIO_SUFFIXES)
 
     def _make_response(segments: list, record=track_record) -> dict:
         return {
@@ -186,12 +212,7 @@ async def get_smart_phrases(track_id: str):
         result = analyze_track(audio_path)
         return _make_response(result.get("segments", []))
     except Exception as e:
-        import traceback
-
-        raise HTTPException(
-            status_code=500,
-            detail=f"Analysis error: {str(e)}: {traceback.format_exc()}",
-        )
+        raise HTTPException(status_code=500, detail=f"Analysis error: {e}")
 
 
 @router.post("/tracks/{track_id}/stems/{stem_name}/midi")
@@ -217,10 +238,9 @@ async def stem_to_midi(track_id: str, stem_name: str) -> FileResponse:
         midi_data.write(str(midi_path))
         return FileResponse(midi_path, media_type="audio/midi", filename=midi_path.name)
     except Exception as exc:
-        import traceback
         raise HTTPException(
             status_code=500,
-            detail=f"MIDI conversion failed: {str(exc)}: {traceback.format_exc()}",
+            detail=f"MIDI conversion failed: {exc}",
         )
 
 
@@ -271,8 +291,7 @@ async def surgical_extract(track_id: str, payload: SurgicalExtractRequest) -> Fi
 
         return FileResponse(out_path, media_type="audio/wav", filename=out_path.name)
     except Exception as exc:
-        import traceback
         raise HTTPException(
             status_code=500,
-            detail=f"SAM Audio extraction failed: {str(exc)}: {traceback.format_exc()}",
+            detail=f"SAM Audio extraction failed: {exc}",
         )

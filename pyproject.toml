@@ -25,7 +25,8 @@ dependencies = [
   "SQLAlchemy>=2.0",
   "demucs>=4.0.0",
   "python-multipart>=0.0.6",
-  "pyyaml>=6.0"
+  "pyyaml>=6.0",
+  "psutil>=5.9"
 ]
 
 [project.optional-dependencies]
@@ -38,4 +39,8 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
+pythonpath = ["backend"]
+testpaths = ["backend/tests"]
+markers = [
+  "e2e: requires a live Music Matters server",
+]

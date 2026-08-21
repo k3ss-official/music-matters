@@ -5,6 +5,8 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
+from app.config import settings
+from app.security import AUDIO_SUFFIXES, confined_file
 from app.services.pipeline import pipeline
 
 router = APIRouter(prefix="/audio", tags=["audio"])
@@ -16,11 +18,10 @@ async def get_track_audio(track_id: str) -> FileResponse:
         track_uuid = UUID(track_id)
         track = pipeline.get_track(track_uuid)
 
-        # Try multiple sources for the audio path
         source_path_str = (
             track.metadata.get("source_path")
             or track.metadata.get("source")
-            or (str(track.original_path) if track.original_path else None)
+            or (str(track.original_path) if getattr(track, "original_path", None) else None)
         )
 
         if not source_path_str:
@@ -28,10 +29,9 @@ async def get_track_audio(track_id: str) -> FileResponse:
                 status_code=404, detail="Source path not found in metadata"
             )
 
-        source_path = Path(source_path_str)
-        if not source_path.exists():
-            raise HTTPException(status_code=404, detail="Audio file not found on disk")
-
+        source_path = confined_file(
+            settings.MUSIC_LIBRARY, source_path_str, suffixes=AUDIO_SUFFIXES
+        )
         return FileResponse(
             source_path,
             media_type="audio/wav"
@@ -39,6 +39,8 @@ async def get_track_audio(track_id: str) -> FileResponse:
             else "audio/mpeg",
             headers={"Accept-Ranges": "bytes"},
         )
+    except HTTPException:
+        raise
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid track ID")
     except KeyError:
@@ -49,11 +51,15 @@ async def get_track_audio(track_id: str) -> FileResponse:
 async def get_stem_audio(track_id: str, stem_name: str) -> FileResponse:
     try:
         track_uuid = UUID(track_id)
-        # get_stem_path searches stems_dir with .wav fallback — handles "drums" and "drums.wav"
         stem_path = pipeline.get_stem_path(track_uuid, stem_name)
+        stem_path = confined_file(
+            settings.MUSIC_LIBRARY, stem_path, suffixes=AUDIO_SUFFIXES
+        )
         return FileResponse(
             stem_path, media_type="audio/wav", headers={"Accept-Ranges": "bytes"}
         )
+    except HTTPException:
+        raise
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid track ID")
     except KeyError:

@@ -48,10 +48,10 @@ check_command python3  "brew install python3  OR  https://python.org"
 check_command node     "brew install node     OR  https://nodejs.org"
 check_command npm      "comes with node"
 
-# ── Python env (conda: music-matters) ────────────────────────────────────────
+# ── Python env (conda: music-matters, else venv) ─────────────────────────────
 CONDA_ENV="music-matters"
+PYTHON="python3"
 
-# Make `conda` available even in a non-login shell (e.g. double-clicked .command)
 if ! command -v conda &>/dev/null; then
     for c in \
         "$HOME/miniforge3/etc/profile.d/conda.sh" \
@@ -62,20 +62,38 @@ if ! command -v conda &>/dev/null; then
     done
 fi
 
-if ! command -v conda &>/dev/null; then
-    err "conda not found — install miniforge or add it to PATH"
-    exit 1
+if command -v conda &>/dev/null; then
+    # shellcheck disable=SC1091
+    source "$(conda info --base)/etc/profile.d/conda.sh"
+    if conda activate "$CONDA_ENV" 2>/dev/null; then
+        PYTHON="python"
+        ok "Conda env active: $CONDA_ENV ($("$PYTHON" --version 2>&1))"
+    else
+        warn "conda env '$CONDA_ENV' not found — falling back to venv"
+    fi
 fi
 
-# shellcheck disable=SC1091
-source "$(conda info --base)/etc/profile.d/conda.sh"
-if ! conda activate "$CONDA_ENV" 2>/dev/null; then
-    err "conda env '$CONDA_ENV' not found."
-    echo "    Create it once:  conda create -n $CONDA_ENV python=3.11 && conda activate $CONDA_ENV && pip install -e ."
-    exit 1
+if [ "$PYTHON" = "python3" ]; then
+    if [ -d "$BACKEND_DIR/.venv" ]; then
+        # shellcheck disable=SC1091
+        source "$BACKEND_DIR/.venv/bin/activate"
+        PYTHON="python"
+        ok "Using backend/.venv ($("$PYTHON" --version 2>&1))"
+    elif [ -d "$SCRIPT_DIR/.venv" ]; then
+        # shellcheck disable=SC1091
+        source "$SCRIPT_DIR/.venv/bin/activate"
+        PYTHON="python"
+        ok "Using .venv ($("$PYTHON" --version 2>&1))"
+    else
+        warn "No conda env or venv — creating $SCRIPT_DIR/.venv"
+        python3 -m venv "$SCRIPT_DIR/.venv"
+        # shellcheck disable=SC1091
+        source "$SCRIPT_DIR/.venv/bin/activate"
+        PYTHON="python"
+        pip install -e "$SCRIPT_DIR"
+        ok "venv ready ($("$PYTHON" --version 2>&1))"
+    fi
 fi
-PYTHON="python"
-ok "Conda env active: $CONDA_ENV ($("$PYTHON" --version 2>&1))"
 
 # ── Node modules ─────────────────────────────────────────────────────────────
 if [ ! -d "$FRONTEND_DIR/node_modules" ]; then
@@ -116,7 +134,7 @@ sleep 1
 log "Starting FastAPI backend on http://localhost:8010 ..."
 cd "$BACKEND_DIR"
 "$PYTHON" -m uvicorn app.main:app \
-    --host 0.0.0.0 \
+    --host 127.0.0.1 \
     --port 8010 \
     --reload \
     --log-level warning 2>&1 | sed "s/^/${CYAN}[backend]${RESET} /" &
@@ -127,13 +145,13 @@ if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
     err "Backend failed to start — check for port conflicts or import errors"
     exit 1
 fi
-ok "Backend running  →  http://localhost:8010"
-ok "API docs         →  http://localhost:8010/docs"
+ok "Backend running  →  http://127.0.0.1:8010"
+ok "API docs         →  http://127.0.0.1:8010/api/docs"
 
 # ── Start frontend ────────────────────────────────────────────────────────────
-log "Starting Vite frontend on http://localhost:5173 ..."
+log "Starting Vite frontend on http://127.0.0.1:5173 ..."
 cd "$FRONTEND_DIR"
-npm run dev -- --host 2>&1 | sed "s/^/${GREEN}[frontend]${RESET} /" &
+npm run dev -- --host 127.0.0.1 2>&1 | sed "s/^/${GREEN}[frontend]${RESET} /" &
 FRONTEND_PID=$!
 
 sleep 2
@@ -147,8 +165,8 @@ ok "Frontend running →  http://localhost:5173"
 echo ""
 echo -e "${GREEN}═══════════════════════════════════════════════${RESET}"
 echo -e "${GREEN}  Music Matters is running!${RESET}"
-echo -e "${GREEN}  Open:  http://localhost:5173${RESET}"
-echo -e "${GREEN}  API:   http://localhost:8010/docs${RESET}"
+echo -e "${GREEN}  Open:  http://127.0.0.1:5173${RESET}"
+echo -e "${GREEN}  API:   http://127.0.0.1:8010/api/docs${RESET}"
 echo -e "${GREEN}  Stop:  Ctrl+C${RESET}"
 echo -e "${GREEN}═══════════════════════════════════════════════${RESET}"
 echo ""
@@ -158,13 +176,13 @@ while true; do
     if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
         warn "Backend died — restarting..."
         cd "$BACKEND_DIR"
-        "$PYTHON" -m uvicorn app.main:app --host 0.0.0.0 --port 8010 --reload --log-level warning 2>&1 | sed "s/^/${CYAN}[backend]${RESET} /" &
+        "$PYTHON" -m uvicorn app.main:app --host 127.0.0.1 --port 8010 --reload --log-level warning 2>&1 | sed "s/^/${CYAN}[backend]${RESET} /" &
         BACKEND_PID=$!
     fi
     if ! kill -0 "$FRONTEND_PID" 2>/dev/null; then
         warn "Frontend died — restarting..."
         cd "$FRONTEND_DIR"
-        npm run dev -- --host 2>&1 | sed "s/^/${GREEN}[frontend]${RESET} /" &
+        npm run dev -- --host 127.0.0.1 2>&1 | sed "s/^/${GREEN}[frontend]${RESET} /" &
         FRONTEND_PID=$!
     fi
     sleep 5

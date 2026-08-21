@@ -12,9 +12,7 @@ build/
 
 # Node
 node_modules/
-dist/
 .npm
-package-lock.json
 
 # IDEs
 .vscode/

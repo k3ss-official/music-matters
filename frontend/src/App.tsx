@@ -507,7 +507,7 @@ function App() {
         {/* VIEW: LIBRARY (default dashboard) ──────────────────────────── */}
         {/* ═══════════════════════════════════════════════════════════════ */}
         {view === 'library' && (
-          <ErrorBoundary>
+          <ErrorBoundary key="library">
             <LibraryView
               selectedTrackId={selectedTrackId}
               autoFocusSearch={focusLibrarySearch}
@@ -656,7 +656,7 @@ function App() {
           <>
             {/* CENTRE — Waveform + transport + loop editor */}
             <section className="flex-1 flex flex-col overflow-hidden relative z-0 min-w-[500px]">
-              <ErrorBoundary>
+              <ErrorBoundary key={`ws-${selectedTrackId ?? 'none'}`}>
                 <CentreWorkspace
                   trackId={selectedTrackId}
                   trackDetail={trackDetail}
@@ -750,7 +750,7 @@ function App() {
         {/* VIEW: ISOLATION WORKSPACE ────────────────────────────────── */}
         {/* ═══════════════════════════════════════════════════════════════ */}
         {view === 'isolation' && (
-          <ErrorBoundary>
+          <ErrorBoundary key={`iso-${selectedTrackId ?? 'none'}`}>
             <IsolationWorkspace
               sourceTrackId={selectedTrackId}
               sourceBpm={trackDetail?.bpm ?? undefined}

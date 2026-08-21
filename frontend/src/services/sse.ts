@@ -4,6 +4,7 @@
  */
 
 import type { JobProgress } from '../types';
+import { mapJob } from './api';
 
 const API_BASE = '/api';
 
@@ -23,26 +24,7 @@ export function subscribeToJob(jobId: string, callbacks: SSECallbacks): () => vo
 
   source.addEventListener('job_update', (event: MessageEvent) => {
     try {
-      const data = JSON.parse(event.data);
-      // Map snake_case from backend to camelCase for frontend
-      const job: JobProgress = {
-        jobId: data.job_id,
-        trackId: data.track_id,
-        status: data.status,
-        currentStage: data.current_stage,
-        progress: data.progress,
-        detail: data.detail,
-        stages: (data.stages || []).map((s: any) => ({
-          id: s.id,
-          label: s.label,
-          progress: s.progress,
-          status: s.status,
-          detail: s.detail,
-          etaSeconds: s.eta_seconds,
-        })),
-        startedAt: data.started_at,
-        completedAt: data.completed_at,
-      };
+      const job: JobProgress = mapJob(JSON.parse(event.data));
       callbacks.onUpdate(job);
     } catch (e) {
       console.error('Failed to parse SSE job_update', e);
@@ -51,25 +33,7 @@ export function subscribeToJob(jobId: string, callbacks: SSECallbacks): () => vo
 
   source.addEventListener('job_done', (event: MessageEvent) => {
     try {
-      const data = JSON.parse(event.data);
-      const job: JobProgress = {
-        jobId: data.job_id,
-        trackId: data.track_id,
-        status: data.status,
-        currentStage: data.current_stage,
-        progress: data.progress,
-        detail: data.detail,
-        stages: (data.stages || []).map((s: any) => ({
-          id: s.id,
-          label: s.label,
-          progress: s.progress,
-          status: s.status,
-          detail: s.detail,
-          etaSeconds: s.eta_seconds,
-        })),
-        startedAt: data.started_at,
-        completedAt: data.completed_at,
-      };
+      const job: JobProgress = mapJob(JSON.parse(event.data));
       callbacks.onDone(job);
       source.close();
     } catch (e) {

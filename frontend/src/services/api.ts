@@ -43,6 +43,28 @@ function handleAxiosError(err: unknown): never {
     throw new ApiError(status, detail, err);
 }
 
+export function mapJob(data: any): JobProgress {
+  return {
+    jobId: data.job_id ?? data.jobId,
+    trackId: data.track_id ?? data.trackId,
+    status: data.status,
+    currentStage: data.current_stage ?? data.currentStage,
+    progress: data.progress,
+    detail: data.detail,
+    stages: (data.stages || []).map((s: any) => ({
+      id: s.id,
+      label: s.label,
+      progress: s.progress,
+      status: s.status,
+      detail: s.detail,
+      etaSeconds: s.eta_seconds ?? s.etaSeconds,
+    })),
+    startedAt: data.started_at ?? data.startedAt,
+    completedAt: data.completed_at ?? data.completedAt,
+    eta: data.eta,
+  };
+}
+
 const API_BASE = '/api';
 
 const api = axios.create({
@@ -74,9 +96,12 @@ export const refreshTrack = async (trackId: string): Promise<{ job_id: string; t
 
 // Ingest
 export const ingestSource = async (payload: IngestPayload & { options?: ProcessingOptions }): Promise<{ job_id: string; track_id: string }> => {
-  const response = await api.post('/ingest/ingest', payload);
+  const response = await api.post('/ingest', payload);
   return response.data;
 };
+
+/** Alias used by Shazam import and older call sites. */
+export const enqueueIngest = ingestSource;
 
 export const uploadTrack = async (file: File, options: ProcessingOptions): Promise<{ job_id: string; track_id: string }> => {
   const formData = new FormData();
@@ -100,6 +125,22 @@ export const uploadTrack = async (file: File, options: ProcessingOptions): Promi
 // Jobs
 export const listActiveJobs = async (): Promise<JobProgress[]> => {
   const response = await api.get('/jobs/active');
+  const raw = Array.isArray(response.data) ? response.data : [];
+  return raw.map(mapJob);
+};
+
+export const getLibraryStats = async (): Promise<{
+  total_tracks: number;
+  stems_ready: number;
+  loops_exported: number;
+  processing: number;
+}> => {
+  const response = await api.get('/library/stats');
+  return response.data;
+};
+
+export const getPeaks = async (trackId: string, buckets = 200): Promise<{ peaks: number[]; duration: number }> => {
+  const response = await api.get(`/library/tracks/${trackId}/peaks`, { params: { buckets } });
   return response.data;
 };
 

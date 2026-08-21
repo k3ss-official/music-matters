@@ -191,6 +191,14 @@ export function LibraryView({
 
   const stemsReady = tracks.filter(t => uiStatus(t.status) === 'stemmed').length;
   const processing = tracks.filter(t => uiStatus(t.status) === 'stemming').length;
+  const loopsExported = tracks.reduce((n, t) => n + (t.loop_count ?? 0), 0);
+
+  const formatDuration = (seconds?: number | null) => {
+    if (!seconds || seconds <= 0) return '—';
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
 
   const FILTER_LABELS: Record<FilterMode, string> = {
     all: 'Filter', stemmed: 'Stemmed', raw: 'Raw', stemming: 'Processing',
@@ -251,8 +259,7 @@ export function LibraryView({
       <div className="flex gap-3 px-5 pb-3 flex-shrink-0">
         <StatCard label="Total Tracks" value={total} />
         <StatCard label="Stems Ready" value={stemsReady} accent="text-mm-teal" />
-        {/* PLACEHOLDER: no backend route for loop-export counts yet */}
-        <StatCard label="Loops Exported" value="—" />
+        <StatCard label="Loops Exported" value={loopsExported} />
         <StatCard label="Processing" value={processing} accent={processing > 0 ? 'text-mm-amber' : undefined} />
       </div>
 
@@ -305,8 +312,9 @@ export function LibraryView({
                   {t.bpm ? Math.round(t.bpm) : '—'}
                 </span>
                 <KeyBadge musicalKey={t.musical_key} />
-                {/* PLACEHOLDER: duration not in /library/tracks list response */}
-                <span className="text-[11px] font-mono text-mm-muted">–:––</span>
+                <span className="text-[11px] font-mono text-mm-muted">
+                  {formatDuration(t.duration)}
+                </span>
                 <span className={`flex items-center gap-1.5 text-[11px] font-semibold ${meta.text}`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${meta.dot} ${meta.pulse ? 'animate-status-pulse' : ''}`} />
                   {meta.label}

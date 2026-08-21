@@ -1,47 +1,31 @@
 # Quickstart — 90 seconds
 
-## 1. Clone & install
+## 1. Launch
 
 ```bash
 git clone https://github.com/k3ss-official/music-matters.git && cd music-matters
-cd backend && python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt && pip install demucs
-cd ../frontend && npm install
+chmod +x start.sh && ./start.sh
 ```
 
-## 2. Start
+Open **http://127.0.0.1:5173**. API: **http://127.0.0.1:8010/api/docs**.
 
-```bash
-# Terminal 1
-cd backend && source .venv/bin/activate && uvicorn app.main:app --port 8010 --reload
+`start.sh` uses conda env `music-matters` if present, otherwise a venv.
 
-# Terminal 2
-cd frontend && npm run dev
-```
+## 2. Ingest a track
 
-Open **http://localhost:5173**
+Drop a WAV/MP3 on the Import page, or type an artist + title (e.g. `Bicep - Glue`) and ingest. Wait for stages to complete (Demucs is the slow one).
 
-## 3. Ingest a track
+## 3. Explore
 
-Type an artist + title in the search bar (e.g. `Bicep - Glue`) and press **Search**.  
-The job appears in the Queue panel. Wait for all stages to turn green (~60–120s with Demucs).
+- Library shows duration, BPM, key, loop counts
+- Open a track → waveform in the centre workspace
+- Use **Smart Phrases** to snap the region to a chorus or drop
+- Isolation workspace slices a region from a parent stem
 
-## 4. Explore
+## 4. Export
 
-- Click the track in the Library → waveform loads in the Centre Workspace
-- Use **Smart Phrases** buttons to snap the region to a chorus or drop
-- Press **Preview** to listen to the region loop
-- Click **Save Loop** to store it to the library
+With a region selected, export to Ableton (`.als`). The file downloads via `/api/download-file` and must live inside your music library.
 
-## 5. Export to Ableton
+## Requirements
 
-With a region selected, click **Export to Ableton (.als)** in the Export panel.  
-The `.als` file downloads automatically. Open it in Ableton Live 11+.
-
-## Batch ingest
-
-Click the **Batch** tab in the search panel, paste one query per line, click **Queue**.
-
-## API docs
-
-[http://localhost:8010/api/docs](http://localhost:8010/api/docs)
+Python 3.11+, Node 18+, FFmpeg.

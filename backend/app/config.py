@@ -18,18 +18,18 @@ class Settings(BaseSettings):
     APP_VERSION: str = "2.0.0"
     DEBUG: bool = False
 
-    # Server
-    HOST: str = "0.0.0.0"
+    # Server — bind loopback only; this is a local-first tool, not a network service.
+    HOST: str = "127.0.0.1"
     PORT: int = 8010
-    RELOAD: bool = True
+    RELOAD: bool = False
 
     # Paths
     MUSIC_LIBRARY: Path = Path.home() / "music-matters"
     CACHE_DIR: Path = Path.home() / ".cache" / "music-matters"
     TEMP_DIR: Path = Path.home() / ".cache" / "music-matters" / "temp"
-    # HuggingFace model cache — redirect to SSD to keep boot drive free.
-    # Set HF_HOME env var to override (or change this default).
-    HF_HOME: Path = Path("/Volumes/MLX/cache")
+    # HuggingFace model cache. Override with HF_HOME. Default is the user cache —
+    # a machine-specific SSD path must be set via env, not hardcoded.
+    HF_HOME: Path = Path.home() / ".cache" / "huggingface"
 
     @property
     def resolved_downloads_dir(self) -> Path:
