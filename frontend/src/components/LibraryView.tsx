@@ -58,11 +58,30 @@ function KeyBadge({ musicalKey }: { musicalKey?: string | null }) {
 }
 
 // ── Waveform thumbnail ──────────────────────────────────────────────────────
-// Deterministic pseudo-waveform seeded from the track id; purple/teal alternating.
-function WaveThumb({ seed, color }: { seed: string; color: string }) {
+function WaveThumb({ trackId, color }: { trackId: string; color: string }) {
+  const [peaks, setPeaks] = useState<number[] | null>(null);
+  useEffect(() => {
+    let cancel = false;
+    api.getPeaks(trackId, 64)
+      .then((r) => { if (!cancel && r.peaks?.length) setPeaks(r.peaks); })
+      .catch(() => { /* keep seeded fallback */ });
+    return () => { cancel = true; };
+  }, [trackId]);
+
   const points = useMemo(() => {
+    if (peaks && peaks.length > 1) {
+      const pts: string[] = [];
+      const n = peaks.length;
+      for (let i = 0; i < n; i++) {
+        const x = (i / (n - 1)) * 60;
+        const amp = Math.min(1, Math.max(0, peaks[i]));
+        const y = 10 - amp * 8;
+        pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+      }
+      return pts.join(' ');
+    }
     let h = 0;
-    for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+    for (let i = 0; i < trackId.length; i++) h = (h * 31 + trackId.charCodeAt(i)) >>> 0;
     const pts: string[] = [];
     for (let x = 0; x <= 60; x += 2) {
       h = (h * 1103515245 + 12345) >>> 0;
@@ -70,10 +89,9 @@ function WaveThumb({ seed, color }: { seed: string; color: string }) {
       const env = Math.sin((Math.PI * x) / 60);
       const y = 10 - amp * env * 8;
       pts.push(`${x},${y.toFixed(1)}`);
-      pts.push(`${x + 1},${(20 - y).toFixed(1)}`);
     }
     return pts.join(' ');
-  }, [seed]);
+  }, [trackId, peaks]);
 
   return (
     <svg width="64" height="20" viewBox="0 0 62 20" className="flex-shrink-0">
@@ -303,7 +321,7 @@ export function LibraryView({
                               : 'border-l-transparent hover:bg-mm-panel/60'}`}
               >
                 <span className="text-[11px] font-mono text-mm-muted">{i + 1}</span>
-                <WaveThumb seed={t.track_id} color={accent} />
+                <WaveThumb trackId={t.track_id} color={accent} />
                 <div className="min-w-0">
                   <div className="text-[12px] font-semibold text-mm-text truncate capitalize">{t.title}</div>
                   <div className="text-[10px] text-mm-muted truncate">{t.artist || 'Unknown artist'}</div>

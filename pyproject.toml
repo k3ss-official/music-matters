@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "music-matters"
-version = "0.1.0"
+version = "2.0.0"
 description = "Local-first DJ/producer automation stack."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -22,7 +22,6 @@ dependencies = [
   "yt-dlp>=2024.10.7",
   "httpx>=0.27",
   "aiofiles>=23.2",
-  "SQLAlchemy>=2.0",
   "demucs>=4.0.0",
   "python-multipart>=0.0.6",
   "pyyaml>=6.0",

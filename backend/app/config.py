@@ -3,15 +3,22 @@ Music Matters - Unified Configuration
 Merges configuration from all three repos into one powerful system.
 """
 
-import os
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
-from pydantic_settings import BaseSettings
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """Application settings with environment variable support."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra="ignore",
+    )
 
     # Application
     APP_NAME: str = "Music Matters"
@@ -56,17 +63,17 @@ class Settings(BaseSettings):
     DEMUCS_MODEL: str = "htdemucs_6s"  # 6-stem model
     DEMUCS_DEVICE: str = "mps"  # mps=Apple Silicon, cuda=NVIDIA, cpu=fallback
     DEMUCS_SHIFTS: int = 1  # Quality vs speed (1=fast, 2+=better)
-    DEMUCS_STEMS: List[str] = field(
+    DEMUCS_STEMS: List[str] = Field(
         default_factory=lambda: ["drums", "bass", "vocals", "guitar", "piano", "other"]
     )
 
     # Sampling
-    SAMPLE_BAR_OPTIONS: List[int] = field(default_factory=lambda: [4, 8, 16, 32, 64])
+    SAMPLE_BAR_OPTIONS: List[int] = Field(default_factory=lambda: [4, 8, 16, 32, 64])
     DEFAULT_SAMPLE_BARS: int = 16
-    LOOP_BAR_LENGTHS: List[int] = field(default_factory=lambda: [4, 8, 16, 32])
+    LOOP_BAR_LENGTHS: List[int] = Field(default_factory=lambda: [4, 8, 16, 32])
 
     # Search & Download
-    AUDIO_SOURCES: List[str] = field(
+    AUDIO_SOURCES: List[str] = Field(
         default_factory=lambda: ["youtube_music", "youtube", "soundcloud", "bandcamp"]
     )
     YTDLP_FORMAT: str = "bestaudio/best"
@@ -94,12 +101,6 @@ class Settings(BaseSettings):
     JOB_TIMEOUT: int = 600  # 10 minutes
     ENABLE_CACHE: bool = True
     CACHE_TTL: int = 86400  # 24 hours
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = True
-        extra = "ignore"
 
 
 # Section names for output organization

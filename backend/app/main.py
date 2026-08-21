@@ -13,14 +13,18 @@ import logging
 import mimetypes
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.api.router import api_router
 from app.security import AUDIO_SUFFIXES, EXPORT_SUFFIXES, confined_file
+
+FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 # Configure logging
 logging.basicConfig(
@@ -28,6 +32,10 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+def _app_mode() -> bool:
+    return os.environ.get("MM_APP_MODE") == "1"
 
 
 @asynccontextmanager
@@ -44,6 +52,8 @@ async def lifespan(app: FastAPI):
     logger.info("Demucs Model: %s on %s", settings.DEMUCS_MODEL, settings.DEMUCS_DEVICE)
     logger.info("SOTA Analysis: %s", settings.ENABLE_SOTA_ANALYSIS)
     logger.info("Fingerprinting: %s", settings.ENABLE_FINGERPRINTING)
+    if (FRONTEND_DIST / "index.html").is_file():
+        logger.info("Serving UI from %s", FRONTEND_DIST)
     logger.info("Music Matters ready")
     yield
 
@@ -71,8 +81,10 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:3000",
+        "http://localhost:8010",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:3000",
+        "http://127.0.0.1:8010",
         "tauri://localhost",
         "https://tauri.localhost",
     ],
@@ -111,6 +123,7 @@ async def health_check():
         "status": "ok",
         "version": settings.APP_VERSION,
         "name": settings.APP_NAME,
+        "app_mode": _app_mode(),
         "features": {
             "search": True,
             "sota_analysis": settings.ENABLE_SOTA_ANALYSIS,
@@ -120,6 +133,22 @@ async def health_check():
             "harmonic_mixing": True,
         }
     }
+
+
+def _mount_frontend() -> None:
+    index = FRONTEND_DIST / "index.html"
+    if not index.is_file():
+        return
+    assets = FRONTEND_DIST / "assets"
+    if assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=str(assets)), name="frontend-assets")
+
+    @app.get("/")
+    async def spa_root():
+        return FileResponse(index)
+
+
+_mount_frontend()
 
 
 if __name__ == "__main__":

@@ -55,7 +55,7 @@ import { StartupCheck } from './components/StartupCheck';
 import { LibraryView } from './components/LibraryView';
 import {
   Library as LibraryIcon, Search as SearchIcon, ListMusic,
-  AudioWaveform, Microscope, Download as DownloadIcon, Bell,
+  AudioWaveform, Microscope, Download as DownloadIcon, Bell, Power,
 } from 'lucide-react';
 import type WaveSurfer from 'wavesurfer.js';
 
@@ -95,6 +95,7 @@ function App() {
   // ── Core state ───────────────────────────────────────────────────────────
   const [view, setView] = useState<AppView>('library');
   const [isConnected, setIsConnected] = useState(false);
+  const [appMode, setAppMode] = useState(false);
   const [focusLibrarySearch, setFocusLibrarySearch] = useState(false);
 
   // Track state
@@ -138,6 +139,7 @@ function App() {
       try {
         const data = await api.checkHealth();
         setIsConnected(data.status === 'ok');
+        setAppMode(!!data.app_mode);
       } catch {
         setIsConnected(false);
       }
@@ -462,6 +464,18 @@ function App() {
           >
             <Bell size={14} />
           </button>
+          {appMode && (
+            <button
+              title="Quit Music Matters"
+              onClick={async () => {
+                try { await api.shutdownApp(); } catch { /* server is going away */ }
+              }}
+              className="w-7 h-7 flex items-center justify-center rounded-md
+                         text-mm-muted hover:text-[#ff3b5c] hover:bg-[#ff3b5c]/10 transition-colors"
+            >
+              <Power size={14} />
+            </button>
+          )}
           <div
             title="k3ss"
             className="w-6 h-6 rounded-full bg-mm-active border border-mm-border

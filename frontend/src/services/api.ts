@@ -285,9 +285,13 @@ export const exportToAbleton = async (
 // --- Legacy / Domain Specific APIs ---
 
 // Health & Info
-export const checkHealth = async (): Promise<{ status: string }> => {
+export const checkHealth = async (): Promise<{ status: string; app_mode?: boolean; version?: string }> => {
   const response = await api.get('/health');
   return response.data;
+};
+
+export const shutdownApp = async (): Promise<void> => {
+  await api.post('/system/shutdown');
 };
 
 // Artist Search

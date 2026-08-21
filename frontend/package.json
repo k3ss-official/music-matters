@@ -18,8 +18,8 @@
     "wavesurfer.js": "^7.12.1"
   },
   "devDependencies": {
-    "@tauri-apps/api": "^1.5.0",
-    "@tauri-apps/cli": "^1.5.0",
+    "@tauri-apps/api": "^2.5.0",
+    "@tauri-apps/cli": "^2.5.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.2.0",
