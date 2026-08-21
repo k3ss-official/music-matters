@@ -35,7 +35,7 @@ interface Props {
 const RECOMMENDATION_COLORS: Record<string, string> = {
   excellent: '#4ADE80',
   good: '#A3E635',
-  possible: '#FBBF24',
+  possible: '#FAC775',
   difficult: '#FB923C',
   avoid: '#F87171',
 };
@@ -287,9 +287,9 @@ export function MashupScorer({ samples, onMashupSelect }: Props) {
           
           {/* Score breakdown */}
           <div className="grid grid-cols-2 gap-3">
-            <ScoreBar label="Harmonic" score={result.harmonic_score} color="#8B5CF6" />
+            <ScoreBar label="Harmonic" score={result.harmonic_score} color="#7F77DD" />
             <ScoreBar label="BPM" score={result.bpm_score} color="#3B82F6" />
-            <ScoreBar label="Energy" score={result.energy_score} color="#F59E0B" />
+            <ScoreBar label="Energy" score={result.energy_score} color="#EF9F27" />
             <ScoreBar label="Structure" score={result.structure_score} color="#10B981" />
           </div>
           
@@ -333,7 +333,7 @@ export function MashupScorer({ samples, onMashupSelect }: Props) {
                 <div 
                   className="text-sm font-bold w-12 text-right"
                   style={{
-                    color: item.score >= 80 ? '#4ADE80' : item.score >= 60 ? '#FBBF24' : '#F87171'
+                    color: item.score >= 80 ? '#4ADE80' : item.score >= 60 ? '#FAC775' : '#F87171'
                   }}
                 >
                   {item.score.toFixed(0)}%

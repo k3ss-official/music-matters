@@ -120,7 +120,7 @@ export const TransportBar: React.FC<TransportBarProps> = ({
         <div
             className={`
                 w-full flex items-center gap-3 px-4 py-2
-                bg-[#0d0d1a] border-b border-white/5
+                bg-[#0d0f1c] border-b border-white/5
                 select-none flex-wrap
             `}
             style={{ minHeight: 52 }}
@@ -157,8 +157,8 @@ export const TransportBar: React.FC<TransportBarProps> = ({
                         w-10 h-10 flex items-center justify-center rounded-full
                         transition-all focus:outline-none
                         ${isPlaying
-                            ? 'bg-[#8b5cf6] hover:bg-[#7c3aed] text-white shadow-lg shadow-purple-900/40'
-                            : 'bg-[#00d4ff]/20 hover:bg-[#00d4ff]/30 text-[#00d4ff] border border-[#00d4ff]/30'}
+                            ? 'bg-[#7F77DD] hover:bg-[#7F77DD] text-white shadow-lg shadow-purple-900/40'
+                            : 'bg-[#7F77DD]/20 hover:bg-[#7F77DD]/30 text-[#7F77DD] border border-[#7F77DD]/30'}
                     `}
                 >
                     {isPlaying ? <Pause size={16} /> : <Play size={16} className="ml-0.5" />}
@@ -184,7 +184,7 @@ export const TransportBar: React.FC<TransportBarProps> = ({
                         font-mono text-[11px] font-bold tracking-widest
                         transition-all focus:outline-none
                         ${isLooping
-                            ? 'bg-[#00ff88]/20 text-[#00ff88] border border-[#00ff88]/50 shadow-[0_0_8px_rgba(0,255,136,0.25)]'
+                            ? 'bg-[#1D9E75]/20 text-[#1D9E75] border border-[#1D9E75]/50 shadow-[0_0_8px_rgba(29,158,117,0.25)]'
                             : 'bg-white/5 hover:bg-white/10 text-white/35 hover:text-white/70 border border-white/10'}
                     `}
                 >
@@ -207,7 +207,7 @@ export const TransportBar: React.FC<TransportBarProps> = ({
 
             {/* ── Time display ─────────────────────────────────────────────── */}
             <div className="flex items-center gap-1.5 font-mono text-xs">
-                <span className="text-[#00d4ff] tracking-widest tabular-nums text-[13px]">
+                <span className="text-[#7F77DD] tracking-widest tabular-nums text-[13px]">
                     {fmtTime(currentTime)}
                 </span>
                 <span className="text-white/20">/</span>
@@ -218,8 +218,8 @@ export const TransportBar: React.FC<TransportBarProps> = ({
 
             {/* ── BPM badge ────────────────────────────────────────────────── */}
             {bpm != null && (
-                <div className="flex items-center gap-1 px-2 py-1 rounded bg-[#8b5cf6]/15 border border-[#8b5cf6]/25">
-                    <span className="font-mono text-[11px] text-[#8b5cf6] tracking-widest">
+                <div className="flex items-center gap-1 px-2 py-1 rounded bg-[#7F77DD]/15 border border-[#7F77DD]/25">
+                    <span className="font-mono text-[11px] text-[#7F77DD] tracking-widest">
                         {bpm.toFixed(1)} BPM
                     </span>
                 </div>
@@ -238,8 +238,8 @@ export const TransportBar: React.FC<TransportBarProps> = ({
                                 px-2 h-7 flex items-center justify-center rounded
                                 font-mono text-[9px] font-bold tracking-widest transition-all focus:outline-none
                                 ${loopMode === 'bar'
-                                    ? 'bg-[#f59e0b]/20 text-[#f59e0b] border border-[#f59e0b]/40'
-                                    : 'bg-[#00d4ff]/10 text-[#00d4ff]/70 border border-[#00d4ff]/20 hover:bg-[#00d4ff]/20'}
+                                    ? 'bg-[#EF9F27]/20 text-[#EF9F27] border border-[#EF9F27]/40'
+                                    : 'bg-[#7F77DD]/10 text-[#7F77DD]/70 border border-[#7F77DD]/20 hover:bg-[#7F77DD]/20'}
                             `}
                         >
                             {loopMode === 'beat' ? 'BT' : 'BAR'}
@@ -266,7 +266,7 @@ export const TransportBar: React.FC<TransportBarProps> = ({
                                 w-7 h-7 flex items-center justify-center rounded
                                 font-mono text-[10px] font-bold transition-all focus:outline-none
                                 ${activeBarPreset === bars
-                                    ? 'bg-[#8b5cf6]/30 text-[#8b5cf6] border border-[#8b5cf6]/60 shadow-[0_0_6px_rgba(139,92,246,0.3)]'
+                                    ? 'bg-[#7F77DD]/30 text-[#7F77DD] border border-[#7F77DD]/60 shadow-[0_0_6px_rgba(127,119,221,0.3)]'
                                     : 'bg-white/5 text-white/35 border border-white/10 hover:bg-white/10 hover:text-white/70'}
                             `}
                         >
@@ -297,7 +297,7 @@ export const TransportBar: React.FC<TransportBarProps> = ({
                         flex items-center justify-center px-2.5 h-8 rounded
                         font-mono text-[11px] font-bold tracking-widest transition-all focus:outline-none
                         ${snapEnabled
-                            ? 'bg-[#00ff88]/15 text-[#00ff88] border border-[#00ff88]/40'
+                            ? 'bg-[#1D9E75]/15 text-[#1D9E75] border border-[#1D9E75]/40'
                             : 'bg-white/5 text-white/35 border border-white/10 hover:bg-white/10 hover:text-white/70'}
                     `}
                 >
@@ -314,7 +314,7 @@ export const TransportBar: React.FC<TransportBarProps> = ({
                         flex items-center justify-center px-2.5 h-8 rounded
                         font-mono text-[11px] font-bold tracking-widest transition-all focus:outline-none
                         ${editLoopOpen
-                            ? 'bg-[#00d4ff]/20 text-[#00d4ff] border border-[#00d4ff]/50'
+                            ? 'bg-[#7F77DD]/20 text-[#7F77DD] border border-[#7F77DD]/50'
                             : 'bg-white/5 text-white/35 border border-white/10 hover:bg-white/10 hover:text-white/70'}
                     `}
                 >
@@ -330,8 +330,8 @@ export const TransportBar: React.FC<TransportBarProps> = ({
                     className={`
                         flex items-center justify-center px-2.5 h-8 rounded
                         font-mono text-[11px] font-bold tracking-widest transition-all focus:outline-none
-                        bg-[#8b5cf6]/15 text-[#8b5cf6] border border-[#8b5cf6]/30
-                        hover:bg-[#8b5cf6]/25
+                        bg-[#7F77DD]/15 text-[#7F77DD] border border-[#7F77DD]/30
+                        hover:bg-[#7F77DD]/25
                     `}
                 >
                     QUANTIZE
@@ -388,7 +388,7 @@ export const TransportBar: React.FC<TransportBarProps> = ({
                     step={0.01}
                     value={volume}
                     onChange={handleVolumeInput}
-                    className="w-20 h-1 accent-[#00d4ff] cursor-pointer"
+                    className="w-20 h-1 accent-[#7F77DD] cursor-pointer"
                     title={`Volume: ${Math.round(volume * 100)}%`}
                 />
                 <span className="text-white/25 font-mono text-[10px] w-7 tabular-nums">

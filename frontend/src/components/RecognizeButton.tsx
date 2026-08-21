@@ -143,16 +143,16 @@ export function RecognizeButton({ onLibraryMatch }: Props) {
                         <select
                             value={selectedDeviceId}
                             onChange={e => setSelectedDeviceId(e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/10 text-white/60 text-xs font-mono focus:outline-none focus:border-[#8b5cf6]/40"
+                            className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/10 text-white/60 text-xs font-mono focus:outline-none focus:border-[#7F77DD]/40"
                         >
                             {audioDevices.map(d => (
-                                <option key={d.deviceId} value={d.deviceId} className="bg-[#12121a]">
+                                <option key={d.deviceId} value={d.deviceId} className="bg-[#1a1830]">
                                     {d.label || `Input ${d.deviceId.slice(0, 8)}`}
                                 </option>
                             ))}
                         </select>
                         {isSystemAudio && (
-                            <p className="text-[10px] text-[#00ff88]/60 font-mono mt-1 text-center">
+                            <p className="text-[10px] text-[#1D9E75]/60 font-mono mt-1 text-center">
                                 System audio capture active — will identify what's playing on your Mac
                             </p>
                         )}
@@ -167,7 +167,7 @@ export function RecognizeButton({ onLibraryMatch }: Props) {
                     onClick={startRecording}
                     className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl
                                bg-white/[0.04] border border-white/[0.08]
-                               hover:bg-[#8b5cf6]/10 hover:border-[#8b5cf6]/40
+                               hover:bg-[#7F77DD]/10 hover:border-[#7F77DD]/40
                                transition-all text-white/60 hover:text-white text-sm font-medium"
                 >
                     <MicIcon />
@@ -201,7 +201,7 @@ export function RecognizeButton({ onLibraryMatch }: Props) {
     if (phase === 'processing') {
         return (
             <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl
-                            bg-[#8b5cf6]/10 border border-[#8b5cf6]/30 text-[#8b5cf6] text-sm">
+                            bg-[#7F77DD]/10 border border-[#7F77DD]/30 text-[#7F77DD] text-sm">
                 <SpinnerIcon />
                 Identifying…
             </div>
@@ -230,8 +230,8 @@ export function RecognizeButton({ onLibraryMatch }: Props) {
     return (
         <div className="flex flex-col gap-3 w-full max-w-md">
             {shazam && (
-                <div className="px-4 py-3 rounded-xl bg-[#00d4ff]/5 border border-[#00d4ff]/20">
-                    <div className="text-[10px] font-mono tracking-[0.15em] text-[#00d4ff]/60 mb-1">SHAZAM MATCH</div>
+                <div className="px-4 py-3 rounded-xl bg-[#7F77DD]/5 border border-[#7F77DD]/20">
+                    <div className="text-[10px] font-mono tracking-[0.15em] text-[#7F77DD]/60 mb-1">SHAZAM MATCH</div>
                     <div className="text-white font-semibold text-sm">{shazam.title ?? '—'}</div>
                     <div className="text-white/50 text-xs mt-0.5">
                         {[shazam.artist, shazam.album, shazam.year].filter(Boolean).join(' · ')}
@@ -239,8 +239,8 @@ export function RecognizeButton({ onLibraryMatch }: Props) {
                 </div>
             )}
             {!shazam && acoustid && (
-                <div className="px-4 py-3 rounded-xl bg-[#00d4ff]/5 border border-[#00d4ff]/20">
-                    <div className="text-[10px] font-mono tracking-[0.15em] text-[#00d4ff]/60 mb-1">ACOUSTID MATCH · {Math.round(acoustid.score * 100)}%</div>
+                <div className="px-4 py-3 rounded-xl bg-[#7F77DD]/5 border border-[#7F77DD]/20">
+                    <div className="text-[10px] font-mono tracking-[0.15em] text-[#7F77DD]/60 mb-1">ACOUSTID MATCH · {Math.round(acoustid.score * 100)}%</div>
                     <div className="text-white font-semibold text-sm">{acoustid.title ?? '—'}</div>
                     <div className="text-white/50 text-xs mt-0.5">
                         {[acoustid.artist, acoustid.album, acoustid.year].filter(Boolean).join(' · ')}
@@ -250,9 +250,9 @@ export function RecognizeButton({ onLibraryMatch }: Props) {
             {library_match && (
                 <button
                     onClick={() => onLibraryMatch?.(library_match.track_id)}
-                    className="text-left px-4 py-3 rounded-xl bg-[#8b5cf6]/5 border border-[#8b5cf6]/20 hover:border-[#8b5cf6]/50 transition-all"
+                    className="text-left px-4 py-3 rounded-xl bg-[#7F77DD]/5 border border-[#7F77DD]/20 hover:border-[#7F77DD]/50 transition-all"
                 >
-                    <div className="text-[10px] font-mono tracking-[0.15em] text-[#8b5cf6]/60 mb-1">
+                    <div className="text-[10px] font-mono tracking-[0.15em] text-[#7F77DD]/60 mb-1">
                         LIBRARY MATCH · {Math.round(library_match.similarity * 100)}% similar
                     </div>
                     <div className="text-white font-semibold text-sm">{library_match.title}</div>

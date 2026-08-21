@@ -66,3 +66,14 @@ backend/~/
 
 # IDE workspace files
 *.code-workspace
+
+# Built app bundle / launcher artifacts
+/build/
+
+# Stray/local data that shouldn't live in the repo
+/data/
+/demix/
+backend/demix/
+music_matters.db
+/shazamlibrary.csv
+.claude/settings.local.json

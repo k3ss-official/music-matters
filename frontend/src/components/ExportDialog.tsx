@@ -30,8 +30,8 @@ function fmtTime(s: number): string {
 }
 
 const STEM_COLORS: Record<string, string> = {
-    drums: '#ff3b5c', bass: '#00d4ff', vocals: '#8b5cf6',
-    other: '#00ff88', piano: '#f59e0b', guitar: '#fbbf24',
+    drums: '#ff3b5c', bass: '#7F77DD', vocals: '#7F77DD',
+    other: '#1D9E75', piano: '#EF9F27', guitar: '#FAC775',
     mixdown: '#9ca3af', harmonic: '#22d3ee', percussive: '#f97316',
 };
 
@@ -149,12 +149,12 @@ export function ExportDialog({
             onClick={e => { if (e.target === e.currentTarget) onClose(); }}
         >
             {/* Panel */}
-            <div className="w-[440px] max-h-[90vh] overflow-y-auto bg-[#13131f] border border-white/10 rounded-xl shadow-2xl shadow-black/60 flex flex-col">
+            <div className="w-[440px] max-h-[90vh] overflow-y-auto bg-[#1a1830] border border-white/10 rounded-xl shadow-2xl shadow-black/60 flex flex-col">
 
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
                     <div className="flex items-center gap-2">
-                        <DownloadCloud size={15} className="text-[#00d4ff]" />
+                        <DownloadCloud size={15} className="text-[#7F77DD]" />
                         <span className="text-[13px] font-bold uppercase tracking-widest text-white/80">
                             Export
                         </span>
@@ -173,7 +173,7 @@ export function ExportDialog({
                     <div className="flex items-center gap-3 px-3 py-2.5 bg-white/[0.03] rounded-lg border border-white/5">
                         <div className="flex flex-col gap-0.5 flex-1">
                             <span className="text-[10px] text-white/30 uppercase font-mono tracking-widest">Region</span>
-                            <span className="text-[12px] font-mono text-[#00d4ff]">
+                            <span className="text-[12px] font-mono text-[#7F77DD]">
                                 {fmtTime(regionStart)} → {fmtTime(regionEnd)}
                             </span>
                         </div>
@@ -196,7 +196,7 @@ export function ExportDialog({
                             onChange={e => setLoopName(e.target.value)}
                             className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2
                                        text-[13px] text-white/80 font-mono placeholder-white/20
-                                       focus:outline-none focus:border-[#00d4ff]/40 focus:bg-white/[0.07]
+                                       focus:outline-none focus:border-[#7F77DD]/40 focus:bg-white/[0.07]
                                        transition-colors"
                             placeholder="Loop name…"
                         />
@@ -215,7 +215,7 @@ export function ExportDialog({
                                     className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold font-mono tracking-widest
                                                 transition-all border
                                                 ${format === f
-                                                    ? 'bg-[#00d4ff]/15 text-[#00d4ff] border-[#00d4ff]/40 shadow-sm shadow-[#00d4ff]/10'
+                                                    ? 'bg-[#7F77DD]/15 text-[#7F77DD] border-[#7F77DD]/40 shadow-sm shadow-[#7F77DD]/10'
                                                     : 'bg-white/5 text-white/30 border-white/10 hover:text-white/60 hover:bg-white/10'}`}
                                 >
                                     {f}
@@ -235,8 +235,8 @@ export function ExportDialog({
                                     <button
                                         onClick={selectAll}
                                         className="px-2 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded
-                                                   bg-white/5 hover:bg-[#00ff88]/15 text-white/30 hover:text-[#00ff88]
-                                                   border border-white/5 hover:border-[#00ff88]/20 transition-colors"
+                                                   bg-white/5 hover:bg-[#1D9E75]/15 text-white/30 hover:text-[#1D9E75]
+                                                   border border-white/5 hover:border-[#1D9E75]/20 transition-colors"
                                     >
                                         ALL
                                     </button>
@@ -282,7 +282,7 @@ export function ExportDialog({
 
                     {/* Messages */}
                     {successMsg && (
-                        <div className="flex items-center gap-2 px-3 py-2 bg-[#00ff88]/10 border border-[#00ff88]/30 rounded-lg text-[#00ff88] text-[11px] font-mono">
+                        <div className="flex items-center gap-2 px-3 py-2 bg-[#1D9E75]/10 border border-[#1D9E75]/30 rounded-lg text-[#1D9E75] text-[11px] font-mono">
                             <CheckCircle2 size={13} />
                             {successMsg}
                         </div>
@@ -301,9 +301,9 @@ export function ExportDialog({
                             onClick={handleExportLoop}
                             className="w-full flex items-center justify-center gap-2 py-3 rounded-lg
                                        font-bold text-[12px] tracking-wider
-                                       bg-[#00d4ff] hover:bg-[#00bde8] text-black
+                                       bg-[#7F77DD] hover:bg-[#7F77DD] text-black
                                        disabled:opacity-40 disabled:cursor-not-allowed
-                                       shadow-[0_0_20px_rgba(0,212,255,0.25)] transition-all"
+                                       shadow-[0_0_20px_rgba(127,119,221,0.25)] transition-all"
                         >
                             {exporting
                                 ? <><Loader2 size={14} className="animate-spin" /> Saving…</>
@@ -319,7 +319,7 @@ export function ExportDialog({
                                         font-bold text-[11px] tracking-wider transition-all
                                         border disabled:opacity-40 disabled:cursor-not-allowed
                                         ${successMsg?.includes('Ableton')
-                                            ? 'bg-[#00ff88]/10 text-[#00ff88] border-[#00ff88]/30'
+                                            ? 'bg-[#1D9E75]/10 text-[#1D9E75] border-[#1D9E75]/30'
                                             : 'bg-[#22c55e]/10 text-[#22c55e] border-[#22c55e]/30 hover:bg-[#22c55e]/20'}`}
                         >
                             {abletonLoading

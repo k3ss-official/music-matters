@@ -89,10 +89,10 @@ export function StartupCheck({ onClear }: StartupCheckProps) {
 
     if (phase === 'checking') {
         return (
-            <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#07070f]">
+            <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#0d0f1c]">
                 <div className="flex flex-col items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-[#00d4ff]/10 border border-[#00d4ff]/20 flex items-center justify-center">
-                        <Loader2 size={22} className="text-[#00d4ff] animate-spin" />
+                    <div className="w-12 h-12 rounded-2xl bg-[#7F77DD]/10 border border-[#7F77DD]/20 flex items-center justify-center">
+                        <Loader2 size={22} className="text-[#7F77DD] animate-spin" />
                     </div>
                     <p className="text-[11px] font-mono uppercase tracking-widest text-white/30">
                         Checking system resources…
@@ -104,12 +104,12 @@ export function StartupCheck({ onClear }: StartupCheckProps) {
 
     if (phase === 'clear') {
         return (
-            <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#07070f]">
+            <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#0d0f1c]">
                 <div className="flex flex-col items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-[#00ff88]/10 border border-[#00ff88]/20 flex items-center justify-center">
-                        <CheckCircle2 size={22} className="text-[#00ff88]" />
+                    <div className="w-12 h-12 rounded-2xl bg-[#1D9E75]/10 border border-[#1D9E75]/20 flex items-center justify-center">
+                        <CheckCircle2 size={22} className="text-[#1D9E75]" />
                     </div>
-                    <p className="text-[11px] font-mono uppercase tracking-widest text-[#00ff88]/60">
+                    <p className="text-[11px] font-mono uppercase tracking-widest text-[#1D9E75]/60">
                         System ready
                     </p>
                     {data && (
@@ -128,12 +128,12 @@ export function StartupCheck({ onClear }: StartupCheckProps) {
     const availMb = data?.available_mb ?? 0;
 
     return (
-        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#07070f] p-6">
-            <div className="w-full max-w-md bg-[#0f0f1a] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#0d0f1c] p-6">
+            <div className="w-full max-w-md bg-[#0d0f1c] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
                 {/* Header */}
-                <div className="flex items-center gap-3 px-5 py-4 border-b border-white/5 bg-[#f59e0b]/5">
-                    <div className="w-8 h-8 rounded-xl bg-[#f59e0b]/15 border border-[#f59e0b]/25 flex items-center justify-center shrink-0">
-                        <AlertTriangle size={15} className="text-[#f59e0b]" />
+                <div className="flex items-center gap-3 px-5 py-4 border-b border-white/5 bg-[#EF9F27]/5">
+                    <div className="w-8 h-8 rounded-xl bg-[#EF9F27]/15 border border-[#EF9F27]/25 flex items-center justify-center shrink-0">
+                        <AlertTriangle size={15} className="text-[#EF9F27]" />
                     </div>
                     <div>
                         <p className="text-sm font-bold text-white">System check — action needed</p>
@@ -148,7 +148,7 @@ export function StartupCheck({ onClear }: StartupCheckProps) {
                     <div className="flex justify-between text-[10px] font-mono text-white/40">
                         <span>RAM</span>
                         <span>
-                            {availMb.toLocaleString()} MB free · <span className="text-[#f59e0b]">{usedPct.toFixed(0)}% used</span>
+                            {availMb.toLocaleString()} MB free · <span className="text-[#EF9F27]">{usedPct.toFixed(0)}% used</span>
                         </span>
                     </div>
                     <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
@@ -156,7 +156,7 @@ export function StartupCheck({ onClear }: StartupCheckProps) {
                             className="h-full rounded-full"
                             style={{
                                 width: `${usedPct}%`,
-                                background: usedPct > 85 ? '#ff3b5c' : '#f59e0b',
+                                background: usedPct > 85 ? '#ff3b5c' : '#EF9F27',
                             }}
                         />
                     </div>
@@ -171,11 +171,11 @@ export function StartupCheck({ onClear }: StartupCheckProps) {
                         {heavy.map(p => (
                             <div key={p.pid} className={`flex items-center justify-between px-3 py-2 rounded-lg border transition-all ${
                                 killedPids.has(p.pid)
-                                    ? 'bg-[#00ff88]/5 border-[#00ff88]/15 opacity-50'
-                                    : 'bg-[#f59e0b]/5 border-[#f59e0b]/15'
+                                    ? 'bg-[#1D9E75]/5 border-[#1D9E75]/15 opacity-50'
+                                    : 'bg-[#EF9F27]/5 border-[#EF9F27]/15'
                             }`}>
                                 <span className="text-sm text-white/80 font-mono">{p.name}</span>
-                                <span className="text-xs font-mono text-[#f59e0b]">{p.rss_mb.toFixed(0)} MB</span>
+                                <span className="text-xs font-mono text-[#EF9F27]">{p.rss_mb.toFixed(0)} MB</span>
                             </div>
                         ))}
                         <p className="text-[10px] text-white/30 leading-relaxed pt-1">
@@ -192,7 +192,7 @@ export function StartupCheck({ onClear }: StartupCheckProps) {
                         <button
                             onClick={killAll}
                             disabled={killing}
-                            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#f59e0b]/10 border border-[#f59e0b]/30 text-[#f59e0b] hover:bg-[#f59e0b]/20 transition-all font-semibold text-sm disabled:opacity-40"
+                            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#EF9F27]/10 border border-[#EF9F27]/30 text-[#EF9F27] hover:bg-[#EF9F27]/20 transition-all font-semibold text-sm disabled:opacity-40"
                         >
                             {killing
                                 ? <><Loader2 size={14} className="animate-spin" /> Quitting…</>
@@ -203,7 +203,7 @@ export function StartupCheck({ onClear }: StartupCheckProps) {
                     <button
                         onClick={check}
                         disabled={checking}
-                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-[#00d4ff] hover:bg-[#00d4ff]/20 transition-all font-semibold text-sm disabled:opacity-40"
+                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#7F77DD]/10 border border-[#7F77DD]/30 text-[#7F77DD] hover:bg-[#7F77DD]/20 transition-all font-semibold text-sm disabled:opacity-40"
                     >
                         {checking
                             ? <><Loader2 size={14} className="animate-spin" /> Checking…</>

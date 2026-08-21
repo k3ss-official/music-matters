@@ -25,13 +25,13 @@ interface WaveformProps {
 
 const sectionColors: Record<string, string> = {
   intro: 'rgba(59, 130, 246, 0.4)',
-  verse: 'rgba(139, 92, 246, 0.4)',
-  chorus: 'rgba(0, 255, 136, 0.4)',
+  verse: 'rgba(127, 119, 221, 0.4)',
+  chorus: 'rgba(29, 158, 117, 0.4)',
   breakdown: 'rgba(249, 115, 22, 0.4)',
   drop: 'rgba(239, 68, 68, 0.4)',
   bridge: 'rgba(234, 179, 8, 0.4)',
   outro: 'rgba(107, 114, 128, 0.4)',
-  main: 'rgba(139, 92, 246, 0.3)',
+  main: 'rgba(127, 119, 221, 0.3)',
 };
 
 export const Waveform: React.FC<WaveformProps> = ({
@@ -42,7 +42,7 @@ export const Waveform: React.FC<WaveformProps> = ({
   height = 80,
   barWidth = 2,
   barGap = 1,
-  accentColor = '#00ff88',
+  accentColor = '#1D9E75',
   dimColor = '#333',
   showSections = false,
   onSeek,
@@ -155,7 +155,7 @@ interface MiniWaveformProps {
 export const MiniWaveform: React.FC<MiniWaveformProps> = ({
   peaks,
   isPlaying = false,
-  color = '#00ff88',
+  color = '#1D9E75',
   height = 40,
   className = '',
 }) => {

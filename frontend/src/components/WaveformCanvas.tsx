@@ -59,6 +59,8 @@ export interface WaveformHandle {
     isPlaying: () => boolean;
     /** Force the WaveSurfer region to match new times (for toolbar nudges) */
     syncRegion: (start: number, end: number) => void;
+    /** Remove the active region entirely (clears the loop window) */
+    clearRegion: () => void;
     /** Zoom and scroll to show only the region between start and end */
     zoomToRegion: (start: number, end: number) => void;
     /** Zoom to fit region in center of screen */
@@ -93,6 +95,8 @@ export interface WaveformCanvasProps {
     chords?: Array<{ start: number; end: number; chord: string }>;
     /** BPM for quantize grid overlay and bar-snap */
     bpm?: number | null;
+    /** Real beat-grid phase anchor (seconds) — aligns grid + snap to the actual first beat */
+    beatAnchor?: number;
     /** Whether beat-snap is enabled */
     snapEnabled?: boolean;
     /** Current region start (controlled — updates region handle if changed externally) */
@@ -105,19 +109,24 @@ export interface WaveformCanvasProps {
     isLooping?: boolean;
     /** If true, hide the overview minimap strip (e.g. in the loop-editor pane) */
     hideOverview?: boolean;
+    /** Waveform height in px (main browse view is taller than the editor pane) */
+    waveHeight?: number;
 }
 
 // How close (seconds) to a beat before we snap
 const SNAP_THRESHOLD_S = 0.08;
 
-// Region visual style
-const REGION_COLOR = 'rgba(0, 212, 255, 0.18)';
-const REGION_BORDER = 'rgba(0, 212, 255, 0.9)';
+// Region visual style — clearly visible loop window
+const REGION_COLOR = 'rgba(127, 119, 221, 0.30)';
+const REGION_BORDER = 'rgba(127, 119, 221, 0.9)';
 
-function buildBeatGrid(bpm: number, duration: number): number[] {
+function buildBeatGrid(bpm: number, duration: number, anchor = 0): number[] {
     const beatDuration = 60 / bpm;
     const beats: number[] = [];
-    for (let t = 0; t < duration; t += beatDuration) {
+    // Align the grid to the track's real beat phase (anchor), not time 0.
+    let phase = anchor % beatDuration;
+    if (phase < 0) phase += beatDuration;
+    for (let t = phase; t < duration; t += beatDuration) {
         beats.push(t);
     }
     return beats;
@@ -152,12 +161,14 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             downbeats = [],
             chords = [],
             bpm = null,
+            beatAnchor = 0,
             snapEnabled = true,
             regionStart,
             regionEnd,
             phraseMarkers = [],
             isLooping = false,
             hideOverview = false,
+            waveHeight = 110,
         },
         ref
     ) {
@@ -186,6 +197,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
         const downbeatsRef = useRef(downbeats);
         const chordsRef = useRef(chords);
         const bpmRef = useRef(bpm);
+        const beatAnchorRef = useRef(beatAnchor);
         const phraseMarkersRef = useRef(phraseMarkers);
         const regionLoopRef = useRef(false); // whether we're looping the region
         const rafRef = useRef<number | null>(null);
@@ -198,22 +210,25 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
         downbeatsRef.current = downbeats;
         chordsRef.current = chords;
         bpmRef.current = bpm;
+        beatAnchorRef.current = beatAnchor;
         phraseMarkersRef.current = phraseMarkers;
         zoomRef.current = zoom;
 
         // ── Snap helper ───────────────────────────────────────────────────────
         const snapTime = useCallback((time: number): number => {
             if (!snapEnabledRef.current || altHeldRef.current) return time;
-            // Build grid from downbeats + BPM beats + phrase boundaries
+            // Build grid from downbeats + BPM beats (anchored to real phase) + phrases
             const dur = wsRef.current?.getDuration() || 0;
             let grid: number[] = [...downbeatsRef.current, ...phraseMarkersRef.current];
+            // Magnetic snap to the nearest beat: threshold = half a beat so any
+            // position grabs the closest beat (DJ-style), unless there's no BPM.
+            let threshold = 0.08;
             if (bpmRef.current && dur > 0) {
-                grid = [...grid, ...buildBeatGrid(bpmRef.current, dur)];
-                // dedupe
-                grid = [...new Set(grid.map(t => parseFloat(t.toFixed(4))))].sort((a, b) => a - b);
+                const beatDur = 60 / bpmRef.current;
+                grid = [...grid, ...buildBeatGrid(bpmRef.current, dur, beatAnchorRef.current)];
+                threshold = beatDur / 2;
             }
-            // Adaptive threshold: 4 pixels in seconds (tighter snap at high zoom)
-            const threshold = Math.max(0.01, 4 / Math.max(zoomRef.current, 1));
+            grid = [...new Set(grid.map(t => parseFloat(t.toFixed(4))))].sort((a, b) => a - b);
             return snapToNearest(time, grid, threshold);
         }, []);
 
@@ -260,10 +275,12 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
             const dur = ws.getDuration();
             if (!dur) return;
 
-            // 1. BPM-estimated beats (faint, as a background grid)
+            // 1. BPM-estimated beats (faint, as a background grid) — anchored to real phase
             if (bpmRef.current) {
                 const beatDur = 60 / bpmRef.current;
-                let beat = 0;
+                let phase = (beatAnchorRef.current || 0) % beatDur;
+                if (phase < 0) phase += beatDur;
+                let beat = phase;
                 let beatIdx = 0;
                 while (beat < dur) {
                     const x = Math.round((beat / dur) * W);
@@ -272,7 +289,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                     ctx.moveTo(x, 0);
                     ctx.lineTo(x, H);
                     ctx.strokeStyle = isBar
-                        ? 'rgba(0,212,255,0.12)'
+                        ? 'rgba(127,119,221,0.12)'
                         : 'rgba(255,255,255,0.04)';
                     ctx.lineWidth = isBar ? 1 : 0.5;
                     ctx.stroke();
@@ -289,7 +306,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                     ctx.beginPath();
                     ctx.moveTo(x, 0);
                     ctx.lineTo(x, H);
-                    ctx.strokeStyle = 'rgba(0,212,255,0.45)';
+                    ctx.strokeStyle = 'rgba(127,119,221,0.45)';
                     ctx.lineWidth = 1.5;
                     ctx.stroke();
                 }
@@ -318,14 +335,14 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 // If a shared media element is provided, reuse it (no re-fetch / re-decode).
                 // Otherwise load from URL as normal.
                 ...(mediaElement ? { media: mediaElement } : { url: audioUrl! }),
-                waveColor: 'rgba(139, 92, 246, 0.45)',
-                progressColor: '#8b5cf6',
-                cursorColor: '#00d4ff',
+                waveColor: 'rgba(127, 119, 221, 0.45)',
+                progressColor: '#7F77DD',
+                cursorColor: '#7F77DD',
                 cursorWidth: 2,
                 barWidth: 2,
                 barGap: 1,
                 barRadius: 2,
-                height: 110,
+                height: waveHeight,
                 normalize: true,
                 interact: true,
                 autoScroll: true,
@@ -342,11 +359,11 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                     MinimapPlugin.create({
                         container: minimapRef.current!,
                         height: MINIMAP_H,
-                        waveColor: 'rgba(139, 92, 246, 0.28)',
-                        progressColor: 'rgba(139, 92, 246, 0.55)',
-                        cursorColor: '#00d4ff',
+                        waveColor: 'rgba(127, 119, 221, 0.28)',
+                        progressColor: 'rgba(127, 119, 221, 0.55)',
+                        cursorColor: '#7F77DD',
                         cursorWidth: 1,
-                        overlayColor: 'rgba(0, 212, 255, 0.08)',
+                        overlayColor: 'rgba(127, 119, 221, 0.08)',
                         barWidth: 1,
                         barGap: 0,
                         barRadius: 0,
@@ -404,23 +421,47 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                     resize: true,
                     minLength: 0.1,
                     handleStyle: {
-                        left:  { backgroundColor: '#00d4ff', width: '4px', borderRadius: '2px 0 0 2px' },
-                        right: { backgroundColor: '#00ff88', width: '4px', borderRadius: '0 2px 2px 0' },
+                        left:  { backgroundColor: '#7F77DD', width: '4px', borderRadius: '2px 0 0 2px' },
+                        right: { backgroundColor: '#1D9E75', width: '4px', borderRadius: '0 2px 2px 0' },
                     },
                 });
                 activeRegionRef.current = region;
-                const s = snapEnabledRef.current ? snapTime(region.start) : region.start;
-                const e = snapEnabledRef.current ? snapTime(region.end) : region.end;
+                // If this region was created programmatically (syncRegion / parent push),
+                // adopt + style it but DON'T re-snap or emit — that feedback was collapsing
+                // the loop when the editor pane opened.
+                if (isSyncingRef.current) return;
+                let s = snapEnabledRef.current ? snapTime(region.start) : region.start;
+                let e = snapEnabledRef.current ? snapTime(region.end) : region.end;
+                // Quantize a freshly-drawn loop to the nearest clean musical length
+                // (1/2/4/8/16/32 beats) anchored at the snapped start — so a rough
+                // drag becomes a proper loop instead of an odd "3b 2bt" length.
+                if (snapEnabledRef.current && bpmRef.current) {
+                    const beatDur = 60 / bpmRef.current;
+                    const rawBeats = (e - s) / beatDur;
+                    const LENGTHS = [1, 2, 4, 8, 16, 32];
+                    let best = LENGTHS[0];
+                    for (const L of LENGTHS) {
+                        if (Math.abs(rawBeats - L) < Math.abs(rawBeats - best)) best = L;
+                    }
+                    e = s + best * beatDur;
+                }
+                // Move the freshly-drawn region onto the snapped/quantized bounds
+                if (Math.abs(s - region.start) > 0.001 || Math.abs(e - region.end) > 0.001) {
+                    region.setOptions({ start: s, end: e });
+                }
                 if (onRegionUpdate) onRegionUpdate(s, e);
             });
 
             // ── Playback events ───────────────────────────────────────────────
             ws.on('audioprocess', (currentTime: number) => {
                 if (onTimeUpdate) onTimeUpdate(currentTime);
-                // Loop region playback
-                if (regionLoopRef.current && activeRegionRef.current) {
-                    if (currentTime >= activeRegionRef.current.end - 0.05) {
-                        ws.setTime(activeRegionRef.current.start);
+                // Loop region playback.
+                // Guard against a degenerate region (end <= start) which would
+                // make the wrap-condition true every tick → setTime() storm → hang.
+                const r = activeRegionRef.current;
+                if (regionLoopRef.current && r && r.end - r.start > 0.05) {
+                    if (currentTime >= r.end - 0.05) {
+                        ws.setTime(r.start);
                     }
                 }
             });
@@ -594,6 +635,19 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 isSyncingRef.current = false;
                 // Do NOT call onRegionUpdate here — syncRegion is parent→child push, not user drag
             },
+            clearRegion: () => {
+                regionLoopRef.current = false;
+                if (activeRegionRef.current) {
+                    try { activeRegionRef.current.remove(); } catch {}
+                    activeRegionRef.current = null;
+                }
+                // Re-enable normal scrolling/centering after a loop is cleared
+                const ws = wsRef.current as WaveSurferInternal;
+                if (ws) {
+                    ws.options.autoScroll = true;
+                    ws.options.autoCenter = true;
+                }
+            },
             zoomToRegion: (start: number, end: number) => {
                 const ws = wsRef.current;
                 if (!ws || end <= start) return;
@@ -692,8 +746,8 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
         }, []);
 
         return (
-            <div ref={outerRef} className="relative w-full rounded-lg bg-[#08080f] overflow-hidden select-none">
-                {audioUrl === null ? (
+            <div ref={outerRef} className="relative w-full rounded-lg bg-[#0d0f1c] overflow-hidden select-none">
+                {(audioUrl === null && !mediaElement) ? (
                     <div className="h-[150px] flex items-center justify-center text-gray-600 text-sm">
                         No track loaded
                     </div>
@@ -708,10 +762,10 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
 
                         {/* Loading overlay */}
                         {loading && (
-                            <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#08080f]/80 backdrop-blur-sm">
+                            <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0d0f1c]/80 backdrop-blur-sm">
                                 <div className="flex flex-col items-center gap-3">
-                                    <div className="w-6 h-6 border-2 border-[#00d4ff] border-t-transparent rounded-full animate-spin" />
-                                    <span className="text-[#00d4ff] font-mono text-xs tracking-widest uppercase">
+                                    <div className="w-6 h-6 border-2 border-[#7F77DD] border-t-transparent rounded-full animate-spin" />
+                                    <span className="text-[#7F77DD] font-mono text-xs tracking-widest uppercase">
                                         Decoding audio...
                                     </span>
                                 </div>
@@ -722,7 +776,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                         <div className="relative w-full" style={{ height: hideOverview ? 0 : MINIMAP_H, overflow: 'hidden' }}>
                             <div
                                 ref={minimapRef}
-                                className="w-full h-full bg-[#06060e] border-b border-white/[0.04] overflow-hidden"
+                                className="w-full h-full bg-[#0d0f1c] border-b border-white/[0.04] overflow-hidden"
                                 title="Overview — click to navigate"
                             />
                             {/* Loop region indicator overlaid on the minimap (% of full track) */}
@@ -732,9 +786,9 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                                     style={{
                                         left: `${(regionStart / duration) * 100}%`,
                                         width: `${Math.max(0.3, ((regionEnd - regionStart) / duration) * 100)}%`,
-                                        background: 'rgba(0, 212, 255, 0.18)',
-                                        borderLeft: '2px solid rgba(0, 212, 255, 0.8)',
-                                        borderRight: '2px solid rgba(0, 255, 136, 0.8)',
+                                        background: 'rgba(127, 119, 221, 0.18)',
+                                        borderLeft: '2px solid rgba(127, 119, 221, 0.8)',
+                                        borderRight: '2px solid rgba(29, 158, 117, 0.8)',
                                         zIndex: 10,
                                     }}
                                 />
@@ -752,7 +806,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                         <div className="relative w-full">
                             <div
                                 ref={timelineRef}
-                                className="w-full bg-[#0d0d18] border-b border-white/5"
+                                className="w-full bg-[#0d0f1c] border-b border-white/5"
                             />
                             {/* Draggable IN/OUT markers on the timeline strip */}
                             {duration > 0 && regionStart !== undefined && regionEnd !== undefined && (
@@ -782,7 +836,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                                                 >
                                                     {/* Label */}
                                                     <span className="text-[9px] font-bold font-mono leading-none px-1 rounded-sm"
-                                                        style={{ color: '#00d4ff', background: 'rgba(0,212,255,0.15)' }}>
+                                                        style={{ color: '#7F77DD', background: 'rgba(127,119,221,0.15)' }}>
                                                         IN
                                                     </span>
                                                     {/* Triangle */}
@@ -790,12 +844,12 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                                                         width: 0, height: 0,
                                                         borderLeft: '5px solid transparent',
                                                         borderRight: '5px solid transparent',
-                                                        borderTop: '6px solid #00d4ff',
+                                                        borderTop: '6px solid #7F77DD',
                                                     }} />
                                                 </div>
                                                 {/* Vertical line */}
                                                 <div className="absolute top-0 bottom-0 w-px left-1/2 -translate-x-px"
-                                                    style={{ background: '#00d4ff', opacity: 0.7 }} />
+                                                    style={{ background: '#7F77DD', opacity: 0.7 }} />
                                             </div>
                                         );
                                     })()}
@@ -820,18 +874,18 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                                                     style={{ pointerEvents: 'none' }}
                                                 >
                                                     <span className="text-[9px] font-bold font-mono leading-none px-1 rounded-sm"
-                                                        style={{ color: '#00ff88', background: 'rgba(0,255,136,0.15)' }}>
+                                                        style={{ color: '#1D9E75', background: 'rgba(29,158,117,0.15)' }}>
                                                         OUT
                                                     </span>
                                                     <div style={{
                                                         width: 0, height: 0,
                                                         borderLeft: '5px solid transparent',
                                                         borderRight: '5px solid transparent',
-                                                        borderTop: '6px solid #00ff88',
+                                                        borderTop: '6px solid #1D9E75',
                                                     }} />
                                                 </div>
                                                 <div className="absolute top-0 bottom-0 w-px left-1/2 -translate-x-px"
-                                                    style={{ background: '#00ff88', opacity: 0.7 }} />
+                                                    style={{ background: '#1D9E75', opacity: 0.7 }} />
                                             </div>
                                         );
                                     })()}
@@ -843,7 +897,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                         {isLooping && duration > 0 && regionStart !== undefined && regionEnd !== undefined && regionEnd > regionStart && (() => {
                             const leftW  = Math.max(0, (regionStart - visibleStart) * zoom);
                             const rightL = Math.max(0, (regionEnd   - visibleStart) * zoom);
-                            const shade  = 'rgba(8,8,15,0.58)';
+                            const shade  = 'rgba(13,15,28,0.58)';
                             const style: React.CSSProperties = {
                                 top: (hideOverview ? 0 : MINIMAP_H) + TIMELINE_H,
                                 bottom: chords.length > 0 ? 18 : 0,
@@ -867,7 +921,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
 
                         {/* Chord timeline — proportional colour bar */}
                         {chords.length > 0 && duration > 0 && (
-                            <div className="relative w-full h-[18px] bg-[#08080f] flex overflow-hidden">
+                            <div className="relative w-full h-[18px] bg-[#0d0f1c] flex overflow-hidden">
                                 {chords.map((c, i) => {
                                     const left = (c.start / duration) * 100;
                                     const width = ((c.end - c.start) / duration) * 100;
@@ -879,8 +933,8 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                                             style={{
                                                 left: `${left}%`,
                                                 width: `${width}%`,
-                                                background: 'rgba(139,92,246,0.15)',
-                                                borderRight: '1px solid rgba(139,92,246,0.2)',
+                                                background: 'rgba(127,119,221,0.15)',
+                                                borderRight: '1px solid rgba(127,119,221,0.2)',
                                             }}
                                         >
                                             <span className="text-[9px] font-mono text-purple-300/70 truncate px-0.5 select-none">

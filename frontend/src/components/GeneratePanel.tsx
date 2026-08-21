@@ -49,9 +49,9 @@ export function GeneratePanel({ bpm, musicalKey, onGenerated }: GeneratePanelPro
     };
 
     return (
-        <div className="bg-[#12121a] rounded-lg p-5 border border-white/5 space-y-4">
+        <div className="bg-[#1a1830] rounded-lg p-5 border border-white/5 space-y-4">
             <div className="flex items-center gap-2">
-                <Wand2 size={16} className="text-[#8b5cf6]" />
+                <Wand2 size={16} className="text-[#7F77DD]" />
                 <h3 className="text-sm font-bold uppercase tracking-wider text-gray-400">Generate</h3>
                 <span className="ml-auto text-[10px] text-gray-600 font-mono">ACE-Step 1.5</span>
             </div>
@@ -61,7 +61,7 @@ export function GeneratePanel({ bpm, musicalKey, onGenerated }: GeneratePanelPro
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder="dark UK drill beat, heavy 808 bass, trap hi-hats…"
                 rows={2}
-                className="w-full bg-black/30 border border-white/10 rounded px-3 py-2 text-sm text-white placeholder-gray-600 resize-none focus:outline-none focus:border-[#8b5cf6]/50"
+                className="w-full bg-black/30 border border-white/10 rounded px-3 py-2 text-sm text-white placeholder-gray-600 resize-none focus:outline-none focus:border-[#7F77DD]/50"
             />
 
             <div className="flex items-center gap-4">
@@ -75,7 +75,7 @@ export function GeneratePanel({ bpm, musicalKey, onGenerated }: GeneratePanelPro
                             step={5}
                             value={duration}
                             onChange={(e) => setDuration(Number(e.target.value))}
-                            className="flex-1 accent-[#8b5cf6]"
+                            className="flex-1 accent-[#7F77DD]"
                         />
                         <span className="text-xs text-gray-400 w-8 text-right">{duration}s</span>
                     </div>
@@ -90,7 +90,7 @@ export function GeneratePanel({ bpm, musicalKey, onGenerated }: GeneratePanelPro
                                 type="checkbox"
                                 checked={lockBpm}
                                 onChange={(e) => setLockBpm(e.target.checked)}
-                                className="accent-[#00d4ff]"
+                                className="accent-[#7F77DD]"
                             />
                             Lock {Math.round(bpm)} BPM
                         </label>
@@ -101,7 +101,7 @@ export function GeneratePanel({ bpm, musicalKey, onGenerated }: GeneratePanelPro
                                 type="checkbox"
                                 checked={lockKey}
                                 onChange={(e) => setLockKey(e.target.checked)}
-                                className="accent-[#00d4ff]"
+                                className="accent-[#7F77DD]"
                             />
                             Lock {musicalKey}
                         </label>
@@ -116,7 +116,7 @@ export function GeneratePanel({ bpm, musicalKey, onGenerated }: GeneratePanelPro
             )}
 
             {lastFilename && !error && (
-                <div className="text-xs text-[#00ff88] bg-[#00ff88]/10 border border-[#00ff88]/20 rounded px-3 py-2">
+                <div className="text-xs text-[#1D9E75] bg-[#1D9E75]/10 border border-[#1D9E75]/20 rounded px-3 py-2">
                     Generated: {lastFilename}
                 </div>
             )}
@@ -124,7 +124,7 @@ export function GeneratePanel({ bpm, musicalKey, onGenerated }: GeneratePanelPro
             <button
                 onClick={handleGenerate}
                 disabled={!prompt.trim() || loading}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#8b5cf6]/20 hover:bg-[#8b5cf6]/30 text-[#8b5cf6] border border-[#8b5cf6]/30 rounded text-sm font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#7F77DD]/20 hover:bg-[#7F77DD]/30 text-[#7F77DD] border border-[#7F77DD]/30 rounded text-sm font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
                 {loading ? (
                     <>

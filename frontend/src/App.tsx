@@ -16,7 +16,7 @@ class ErrorBoundary extends Component<
   render() {
     if (this.state.error) {
       return (
-        <div className="flex-1 flex flex-col items-center justify-center bg-[#0a0a0f] p-8 gap-4">
+        <div className="flex-1 flex flex-col items-center justify-center bg-[#0d0f1c] p-8 gap-4">
           <div className="text-[#ff3b5c] font-mono text-sm font-bold uppercase tracking-widest">
             Render Error
           </div>
@@ -48,9 +48,15 @@ import { ExportDialog } from './components/ExportDialog';
 import { ProcessingView } from './components/ProcessingView';
 import { ShortcutLegend } from './components/ShortcutLegend';
 import { RecognizeButton } from './components/RecognizeButton';
+import { IsolationWorkspace } from './components/isolation/IsolationWorkspace';
 import { ResourceChecker } from './components/ResourceChecker';
 import { ShazamImport } from './components/ShazamImport';
 import { StartupCheck } from './components/StartupCheck';
+import { LibraryView } from './components/LibraryView';
+import {
+  Library as LibraryIcon, Search as SearchIcon, ListMusic,
+  AudioWaveform, Microscope, Download as DownloadIcon, Bell,
+} from 'lucide-react';
 import type WaveSurfer from 'wavesurfer.js';
 
 // Icons (inline SVGs for zero-dep)
@@ -83,12 +89,13 @@ const AlertIcon = () => (
 );
 
 // ── App state machine ──────────────────────────────────────────────────────
-type AppView = 'upload' | 'processing' | 'workspace';
+type AppView = 'library' | 'upload' | 'processing' | 'workspace' | 'isolation';
 
 function App() {
   // ── Core state ───────────────────────────────────────────────────────────
-  const [view, setView] = useState<AppView>('upload');
+  const [view, setView] = useState<AppView>('library');
   const [isConnected, setIsConnected] = useState(false);
+  const [focusLibrarySearch, setFocusLibrarySearch] = useState(false);
 
   // Track state
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
@@ -334,7 +341,7 @@ function App() {
     }
   };
 
-  // ── New track (back to upload) ──────────────────────────────────────────
+  // ── Back to Library dashboard (resets track state) ─────────────────────
   const handleNewTrack = useCallback(() => {
     if (sseCleanupRef.current) sseCleanupRef.current();
     if (pollingRef.current) clearInterval(pollingRef.current);
@@ -345,7 +352,19 @@ function App() {
     setSelectedStems([]);
     setRegionStart(0);
     setRegionEnd(0);
-    setView('upload');
+    setView('library');
+  }, []);
+
+  // ── Library row actions ─────────────────────────────────────────────────
+  const openTrack = useCallback((trackId: string, target: 'workspace' | 'isolation' = 'workspace', openExport = false) => {
+    setSelectedTrackId(trackId);
+    setDetailLoading(true);
+    api.getTrackDetail(trackId).then(detail => {
+      setTrackDetail(detail);
+      setDetailLoading(false);
+      setView(target);
+      if (openExport) setExportDialogOpen(true);
+    }).catch(() => setDetailLoading(false));
   }, []);
 
   // ── Global `?` key → shortcut legend ────────────────────────────────────
@@ -361,18 +380,18 @@ function App() {
 
   // ── Stage progress helper ─────────────────────────────────────────────
   const STAGE_META: Record<string, { label: string; color: string; icon: string }> = {
-    ingest:     { label: 'Ingesting',        color: '#00d4ff', icon: '📥' },
-    analysis:   { label: 'Analysing',        color: '#8b5cf6', icon: '🔬' },
-    separation: { label: 'Separating Stems', color: '#00ff88', icon: '🎛️' },
-    loop:       { label: 'Slicing Loops',    color: '#f59e0b', icon: '🔁' },
-    project:    { label: 'Finalising',       color: '#00d4ff', icon: '📦' },
+    ingest:     { label: 'Ingesting',        color: '#7F77DD', icon: '📥' },
+    analysis:   { label: 'Analysing',        color: '#7F77DD', icon: '🔬' },
+    separation: { label: 'Separating Stems', color: '#1D9E75', icon: '🎛️' },
+    loop:       { label: 'Slicing Loops',    color: '#EF9F27', icon: '🔁' },
+    project:    { label: 'Finalising',       color: '#7F77DD', icon: '📦' },
   };
 
   // ═══════════════════════════════════════════════════════════════════════════
   // RENDER
   // ═══════════════════════════════════════════════════════════════════════════
   return (
-    <div className="h-screen w-full bg-[#0a0a0f] text-gray-300 flex flex-col overflow-hidden font-sans">
+    <div className="h-screen w-full bg-mm-bg text-mm-body flex flex-col overflow-hidden font-sans">
 
       {/* ── Startup resource check — blocks UI until system is ready ─── */}
       {!startupDone && <StartupCheck onClear={() => setStartupDone(true)} />}
@@ -387,59 +406,118 @@ function App() {
         id="mvp-file-upload"
       />
 
-      {/* ─── HEADER ─────────────────────────────────────────────────────── */}
-      <header className="h-[60px] bg-[#12121a] border-b border-white/5 flex items-center justify-between px-6 flex-shrink-0 relative z-20 shadow-md">
-        <div className="flex items-center gap-3 cursor-pointer" onClick={handleNewTrack}>
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#00d4ff] to-[#8b5cf6] p-0.5 shadow-[0_0_15px_rgba(0,212,255,0.4)]">
-            <div className="w-full h-full bg-[#12121a] rounded-md flex items-center justify-center text-white text-lg">
-              🎧
-            </div>
+      {/* ─── HEADER — 44px ──────────────────────────────────────────────── */}
+      <header className="h-[44px] bg-mm-surface border-b border-mm-border flex items-center justify-between px-4 flex-shrink-0 relative z-20">
+        {/* Left: logo dot + app name */}
+        <div className="flex items-center gap-2.5 cursor-pointer" onClick={handleNewTrack}>
+          <div className="w-6 h-6 rounded-md bg-mm-purple flex items-center justify-center text-[11px] font-black text-white">
+            M
           </div>
-          <div>
-            <h1 className="text-lg font-bold text-white tracking-wide">
-              Music <span className="text-[#00d4ff]">Matters</span>
-            </h1>
-          </div>
+          <h1 className="text-[13px] font-bold text-mm-text tracking-wide">
+            Music Matters
+          </h1>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* New Track button (visible when not on upload view) */}
-          {view !== 'upload' && (
-            <button
-              onClick={handleNewTrack}
-              className="px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest font-mono
-                         bg-[#00d4ff]/15 text-[#00d4ff] border border-[#00d4ff]/30
-                         hover:bg-[#00d4ff]/25 transition-colors"
-            >
-              + New Track
-            </button>
+        {/* Center: breadcrumb */}
+        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1.5 text-[11px] text-mm-muted">
+          <span
+            className="hover:text-mm-body cursor-pointer transition-colors"
+            onClick={handleNewTrack}
+          >
+            Library
+          </span>
+          {view !== 'library' && (
+            <>
+              <span className="text-mm-border">/</span>
+              <span className="text-mm-body capitalize">
+                {view === 'workspace'
+                  ? (trackDetail?.title ?? 'Track')
+                  : view === 'isolation'
+                    ? 'Isolation Workspace'
+                    : view === 'upload' ? 'Import' : 'Processing'}
+              </span>
+            </>
           )}
+        </div>
 
-          {/* Connection status */}
-          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] uppercase font-bold tracking-widest border transition-colors ${isConnected
-            ? 'bg-[#00ff88]/10 text-[#00ff88] border-[#00ff88]/30'
-            : 'bg-[#ff3b5c]/10 text-[#ff3b5c] border-[#ff3b5c]/30'
-            }`}>
-            <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-[#00ff88] animate-pulse' : 'bg-[#ff3b5c]'}`} />
-            {isConnected ? 'Online' : 'Offline'}
-          </div>
-
-          {/* Shortcut legend button */}
+        {/* Right: connection dot, shortcuts, bell, avatar */}
+        <div className="flex items-center gap-2">
+          <div
+            title={isConnected ? 'Backend online' : 'Backend offline'}
+            className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-mm-teal' : 'bg-[#ff3b5c] animate-status-pulse'}`}
+          />
           <button
             onClick={() => setShortcutLegendOpen(v => !v)}
             title="Keyboard shortcuts (?)"
-            className="w-7 h-7 flex items-center justify-center rounded-full
-                       bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20
-                       text-white/40 hover:text-white/80 font-bold text-[12px] font-mono
-                       transition-colors"
+            className="w-7 h-7 flex items-center justify-center rounded-md
+                       text-mm-muted hover:text-mm-text hover:bg-mm-active
+                       font-bold text-[11px] font-mono transition-colors"
           >
             ?
           </button>
+          <button
+            title="Notifications"
+            className="w-7 h-7 flex items-center justify-center rounded-md
+                       text-mm-muted hover:text-mm-text hover:bg-mm-active transition-colors"
+          >
+            <Bell size={14} />
+          </button>
+          <div
+            title="k3ss"
+            className="w-6 h-6 rounded-full bg-mm-active border border-mm-border
+                       flex items-center justify-center text-[9px] font-bold text-mm-purple"
+          >
+            K
+          </div>
         </div>
       </header>
 
       {/* ─── MAIN CONTENT ──────────────────────────────────────────────── */}
       <main className="flex-1 overflow-hidden flex text-sm">
+
+        {/* ─── ICON SIDEBAR — persistent, 52px ──────────────────────────── */}
+        <nav className="w-[52px] bg-mm-surface border-r border-mm-border flex flex-col items-center py-2 gap-1 flex-shrink-0">
+          {([
+            { key: 'library', label: 'Library', icon: <LibraryIcon size={15} />, onClick: () => { setFocusLibrarySearch(false); setView('library'); }, active: view === 'library' || view === 'upload' || view === 'processing', disabled: false },
+            { key: 'search', label: 'Search', icon: <SearchIcon size={15} />, onClick: () => { setFocusLibrarySearch(true); setView('library'); }, active: false, disabled: false },
+            { key: 'tracks', label: 'Tracks', icon: <ListMusic size={15} />, onClick: () => setView('workspace'), active: view === 'workspace', disabled: !selectedTrackId },
+            { key: 'stems', label: 'Stems', icon: <AudioWaveform size={15} />, onClick: () => setView('workspace'), active: false, disabled: !selectedTrackId },
+            { key: 'isolation', label: 'Isolation', icon: <Microscope size={15} />, onClick: () => setView('isolation'), active: view === 'isolation', disabled: false },
+            { key: 'export', label: 'Export', icon: <DownloadIcon size={15} />, onClick: () => { setView('workspace'); setExportDialogOpen(true); }, active: false, disabled: !selectedTrackId },
+          ] as const).map(item => (
+            <button
+              key={item.key}
+              onClick={item.onClick}
+              disabled={item.disabled}
+              title={item.disabled ? `${item.label} — select a track first` : item.label}
+              className={`w-11 h-11 flex flex-col items-center justify-center rounded-lg gap-0.5 transition-colors
+                ${item.active
+                  ? 'bg-mm-active text-mm-purple'
+                  : item.disabled
+                    ? 'text-mm-muted/40 cursor-not-allowed'
+                    : 'text-mm-muted hover:text-mm-body hover:bg-mm-active/60'}`}
+            >
+              {item.icon}
+              <span className="text-[7px] font-semibold tracking-wide">{item.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* VIEW: LIBRARY (default dashboard) ──────────────────────────── */}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {view === 'library' && (
+          <ErrorBoundary>
+            <LibraryView
+              selectedTrackId={selectedTrackId}
+              autoFocusSearch={focusLibrarySearch}
+              onOpenTrack={(id) => openTrack(id, 'workspace')}
+              onOpenIsolation={(id) => openTrack(id, 'isolation')}
+              onExportTrack={(id) => openTrack(id, 'workspace', true)}
+              onImport={() => setView('upload')}
+            />
+          </ErrorBoundary>
+        )}
 
         {/* ═══════════════════════════════════════════════════════════════ */}
         {/* VIEW: UPLOAD ─────────────────────────────────────────────── */}
@@ -449,7 +527,7 @@ function App() {
             <div className="flex flex-col items-center gap-8 max-w-md">
               {/* Hero */}
               <div className="text-center space-y-3">
-                <div className="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-[#00d4ff]/20 to-[#8b5cf6]/20 border border-white/10 flex items-center justify-center text-4xl shadow-[0_0_40px_rgba(0,212,255,0.15)]">
+                <div className="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-[#7F77DD]/20 to-[#7F77DD]/20 border border-white/10 flex items-center justify-center text-4xl shadow-[0_0_40px_rgba(127,119,221,0.15)]">
                   🎧
                 </div>
                 <h2 className="text-2xl font-bold text-white">
@@ -478,15 +556,15 @@ function App() {
                 className={`group relative flex flex-col items-center gap-4 w-full py-10 px-8
                            rounded-2xl border-2 border-dashed transition-all duration-300 cursor-pointer
                            ${dragActive
-                             ? 'border-[#00d4ff] bg-[#00d4ff]/10 shadow-[0_0_30px_rgba(0,212,255,0.2)]'
-                             : 'border-white/10 hover:border-[#00d4ff]/50 hover:bg-[#00d4ff]/5'}
+                             ? 'border-[#7F77DD] bg-[#7F77DD]/10 shadow-[0_0_30px_rgba(127,119,221,0.2)]'
+                             : 'border-white/10 hover:border-[#7F77DD]/50 hover:bg-[#7F77DD]/5'}
                            ${(!isConnected || uploading) ? 'opacity-40 cursor-not-allowed' : ''}`}
               >
-                <div className={`transition-colors ${dragActive ? 'text-[#00d4ff]' : 'text-white/30 group-hover:text-[#00d4ff]'}`}>
+                <div className={`transition-colors ${dragActive ? 'text-[#7F77DD]' : 'text-white/30 group-hover:text-[#7F77DD]'}`}>
                   {uploading ? <SpinnerIcon size={48} /> : <UploadIcon />}
                 </div>
                 <div className="text-center">
-                  <div className={`text-sm font-semibold transition-colors ${dragActive ? 'text-[#00d4ff]' : 'text-white/70 group-hover:text-white'}`}>
+                  <div className={`text-sm font-semibold transition-colors ${dragActive ? 'text-[#7F77DD]' : 'text-white/70 group-hover:text-white'}`}>
                     {uploading ? 'Uploading...' : dragActive ? 'Drop it!' : 'Click or drag audio here'}
                   </div>
                   <div className="text-xs text-white/25 mt-1">
@@ -495,7 +573,7 @@ function App() {
                 </div>
 
                 {/* Glow effect on hover */}
-                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[#00d4ff]/0 to-[#8b5cf6]/0 group-hover:from-[#00d4ff]/5 group-hover:to-[#8b5cf6]/5 transition-all duration-500 pointer-events-none" />
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[#7F77DD]/0 to-[#7F77DD]/0 group-hover:from-[#7F77DD]/5 group-hover:to-[#7F77DD]/5 transition-all duration-500 pointer-events-none" />
               </div>
 
               {/* Backend offline warning */}
@@ -541,9 +619,9 @@ function App() {
                             setView('workspace');
                           }).catch(() => setDetailLoading(false));
                         }}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] hover:border-[#00d4ff]/30 transition-all text-left"
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] hover:border-[#7F77DD]/30 transition-all text-left"
                       >
-                        <div className="w-8 h-8 rounded bg-gradient-to-br from-[#8b5cf6]/30 to-[#00d4ff]/30 flex items-center justify-center text-[#00d4ff]">
+                        <div className="w-8 h-8 rounded bg-gradient-to-br from-[#7F77DD]/30 to-[#7F77DD]/30 flex items-center justify-center text-[#7F77DD]">
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
                         </div>
                         <div className="min-w-0">
@@ -600,7 +678,7 @@ function App() {
             </section>
 
             {/* RIGHT SIDEBAR — Analysis + Stems + Export */}
-            <aside className="w-[320px] bg-[#0a0a0f] border-l border-white/5 flex flex-col p-4 gap-4 overflow-y-auto hide-scrollbar z-10 shrink-0">
+            <aside className="w-[320px] bg-[#0d0f1c] border-l border-white/5 flex flex-col p-4 gap-4 overflow-y-auto hide-scrollbar z-10 shrink-0">
               <AnalysisPanel
                 loading={detailLoading}
                 trackDetail={trackDetail}
@@ -613,8 +691,8 @@ function App() {
                   onClick={() => setExportDialogOpen(true)}
                   disabled={!selectedTrackId || !waveformReady || detailLoading || regionEnd <= regionStart}
                   className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl
-                             bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-[#00d4ff]
-                             hover:bg-[#00d4ff]/20 hover:border-[#00d4ff]/60
+                             bg-[#7F77DD]/10 border border-[#7F77DD]/30 text-[#7F77DD]
+                             hover:bg-[#7F77DD]/20 hover:border-[#7F77DD]/60
                              disabled:opacity-30 disabled:cursor-not-allowed
                              transition-all font-semibold text-sm"
                 >
@@ -666,6 +744,20 @@ function App() {
               </button>
             </aside>
           </>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* VIEW: ISOLATION WORKSPACE ────────────────────────────────── */}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {view === 'isolation' && (
+          <ErrorBoundary>
+            <IsolationWorkspace
+              sourceTrackId={selectedTrackId}
+              sourceBpm={trackDetail?.bpm ?? undefined}
+              sourceKey={trackDetail?.musical_key ?? undefined}
+              sourceTitle={trackDetail?.title ?? undefined}
+            />
+          </ErrorBoundary>
         )}
 
       </main>

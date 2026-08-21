@@ -44,10 +44,10 @@ export function LibraryBrowser({ tracks, onTrackSelect, onTrackDelete, selectedT
     };
 
     const getStatusColor = (status: string) => {
-        if (['project_ready', 'completed'].includes(status)) return '#00ff88';
-        if (['processing', 'running', 'queued'].includes(status)) return '#00d4ff';
+        if (['project_ready', 'completed'].includes(status)) return '#1D9E75';
+        if (['processing', 'running', 'queued'].includes(status)) return '#7F77DD';
         if (['failed', 'error'].includes(status)) return '#ff3b5c';
-        return '#8b5cf6';
+        return '#7F77DD';
     };
 
     const getStatusLabel = (status: string) => {
@@ -72,23 +72,23 @@ export function LibraryBrowser({ tracks, onTrackSelect, onTrackDelete, selectedT
     };
 
     return (
-        <div className="bg-[#12121a] border border-white/5 rounded-lg flex flex-col flex-1 overflow-hidden">
-            <div className="flex bg-[#1a1a26]/50 border-b border-white/5 text-xs font-bold uppercase tracking-wider text-gray-500">
+        <div className="bg-[#1a1830] border border-white/5 rounded-lg flex flex-col flex-1 overflow-hidden">
+            <div className="flex bg-[#1a1830]/50 border-b border-white/5 text-xs font-bold uppercase tracking-wider text-gray-500">
                 <button
                     onClick={() => setActiveTab('tracks')}
-                    className={`px-4 py-3 flex items-center gap-2 border-b-2 transition-colors ${activeTab === 'tracks' ? 'border-[#00d4ff] text-[#00d4ff]' : 'border-transparent hover:text-gray-300 hover:bg-white/5'}`}
+                    className={`px-4 py-3 flex items-center gap-2 border-b-2 transition-colors ${activeTab === 'tracks' ? 'border-[#7F77DD] text-[#7F77DD]' : 'border-transparent hover:text-gray-300 hover:bg-white/5'}`}
                 >
                     <Music size={14} /> Tracks
                 </button>
                 <button
                     onClick={() => setActiveTab('stems')}
-                    className={`px-4 py-3 flex items-center gap-2 border-b-2 transition-colors ${activeTab === 'stems' ? 'border-[#8b5cf6] text-[#8b5cf6]' : 'border-transparent hover:text-gray-300 hover:bg-white/5'}`}
+                    className={`px-4 py-3 flex items-center gap-2 border-b-2 transition-colors ${activeTab === 'stems' ? 'border-[#7F77DD] text-[#7F77DD]' : 'border-transparent hover:text-gray-300 hover:bg-white/5'}`}
                 >
                     <Mic2 size={14} /> Stems
                 </button>
                 <button
                     onClick={() => setActiveTab('loops')}
-                    className={`px-4 py-3 flex items-center gap-2 border-b-2 transition-colors ${activeTab === 'loops' ? 'border-[#00ff88] text-[#00ff88]' : 'border-transparent hover:text-gray-300 hover:bg-white/5'}`}
+                    className={`px-4 py-3 flex items-center gap-2 border-b-2 transition-colors ${activeTab === 'loops' ? 'border-[#1D9E75] text-[#1D9E75]' : 'border-transparent hover:text-gray-300 hover:bg-white/5'}`}
                 >
                     <List size={14} /> Loops
                 </button>
@@ -120,7 +120,7 @@ export function LibraryBrowser({ tracks, onTrackSelect, onTrackDelete, selectedT
                             key={track.track_id}
                             onClick={() => stopPreviewOnSelect(track.track_id)}
                             className={`group flex items-center justify-between p-3 rounded-lg border transition-all cursor-pointer ${isSelected
-                                ? 'border-[#00d4ff]/50 bg-[#00d4ff]/5 shadow-[0_4px_15px_rgba(0,212,255,0.05)]'
+                                ? 'border-[#7F77DD]/50 bg-[#7F77DD]/5 shadow-[0_4px_15px_rgba(127,119,221,0.05)]'
                                 : 'border-white/5 bg-black/20 hover:border-white/20 hover:bg-black/40'
                                 }`}
                         >
@@ -134,7 +134,7 @@ export function LibraryBrowser({ tracks, onTrackSelect, onTrackDelete, selectedT
                                             YT
                                         </span>
                                     ) : ((track as any).metadata?.source_path || (track as any).provenance?.source_path) ? (
-                                        <span className="text-[9px] bg-[#00d4ff]/20 text-[#00d4ff] px-1.5 py-0.5 rounded uppercase font-bold tracking-widest flex-shrink-0 border border-[#00d4ff]/30">
+                                        <span className="text-[9px] bg-[#7F77DD]/20 text-[#7F77DD] px-1.5 py-0.5 rounded uppercase font-bold tracking-widest flex-shrink-0 border border-[#7F77DD]/30">
                                             Upload
                                         </span>
                                     ) : null}
@@ -169,7 +169,7 @@ export function LibraryBrowser({ tracks, onTrackSelect, onTrackDelete, selectedT
                                     return (
                                         <div className="flex flex-wrap gap-1 mt-1.5">
                                             {autoTags.map((tag, idx) => (
-                                                <span key={idx} className="text-[9px] bg-[#8b5cf6]/10 text-[#8b5cf6] border border-[#8b5cf6]/20 px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide">
+                                                <span key={idx} className="text-[9px] bg-[#7F77DD]/10 text-[#7F77DD] border border-[#7F77DD]/20 px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide">
                                                     {tag}
                                                 </span>
                                             ))}
@@ -200,8 +200,8 @@ export function LibraryBrowser({ tracks, onTrackSelect, onTrackDelete, selectedT
                                         onClick={(e) => handlePreview(e, track.track_id)}
                                         title={isPreviewing ? 'Stop preview' : 'Preview track'}
                                         className={`transition-colors ${isPreviewing
-                                            ? 'text-[#00d4ff]'
-                                            : 'opacity-0 group-hover:opacity-100 text-gray-500 hover:text-[#00d4ff]'}`}
+                                            ? 'text-[#7F77DD]'
+                                            : 'opacity-0 group-hover:opacity-100 text-gray-500 hover:text-[#7F77DD]'}`}
                                     >
                                         {isPreviewing
                                             ? <Square size={14} fill="currentColor" />
@@ -221,7 +221,7 @@ export function LibraryBrowser({ tracks, onTrackSelect, onTrackDelete, selectedT
                                 </div>
 
                                 {!isSelected && (
-                                    <button className="text-xs font-bold text-[#00d4ff] opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                                    <button className="text-xs font-bold text-[#7F77DD] opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
                                         Open <MoreVertical size={12} className="-rotate-90" />
                                     </button>
                                 )}

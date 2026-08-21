@@ -12,7 +12,7 @@ interface AnalysisPanelProps {
 export function AnalysisPanel({ trackDetail, loading, onRequestSeparation }: AnalysisPanelProps) {
     if (loading || !trackDetail) {
         return (
-            <div className="bg-[#12121a] rounded-lg p-5 border border-white/5 space-y-4">
+            <div className="bg-[#1a1830] rounded-lg p-5 border border-white/5 space-y-4">
                 <div className="h-6 w-1/3 bg-white/5 rounded animate-pulse" />
                 <div className="grid grid-cols-2 gap-3">
                     {[1, 2, 3, 4].map(i => (
@@ -41,7 +41,7 @@ export function AnalysisPanel({ trackDetail, loading, onRequestSeparation }: Ana
     const isYT = metadata?.source?.includes('youtube.com') || metadata?.source?.includes('youtu.be');
 
     return (
-        <div className="bg-[#12121a] rounded-lg p-5 border border-white/5 space-y-4">
+        <div className="bg-[#1a1830] rounded-lg p-5 border border-white/5 space-y-4">
             <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold uppercase tracking-wider text-gray-400">Analysis</h3>
                 {onRequestSeparation && (
@@ -49,8 +49,8 @@ export function AnalysisPanel({ trackDetail, loading, onRequestSeparation }: Ana
                         onClick={onRequestSeparation}
                         title="Run stem separation (drums, bass, vocals, other)"
                         className="flex items-center gap-1.5 px-2.5 py-1 rounded
-                                   bg-[#8b5cf6]/15 hover:bg-[#8b5cf6]/25
-                                   text-[#8b5cf6] border border-[#8b5cf6]/30
+                                   bg-[#7F77DD]/15 hover:bg-[#7F77DD]/25
+                                   text-[#7F77DD] border border-[#7F77DD]/30
                                    text-[10px] font-bold font-mono tracking-wider
                                    transition-colors"
                     >
@@ -102,7 +102,7 @@ export function AnalysisPanel({ trackDetail, loading, onRequestSeparation }: Ana
                         <span className="truncate w-full pr-2 font-mono opacity-80 block">
                             {metadata?.original_filename || 'Local Upload'}
                         </span>
-                        <span className="bg-[#00d4ff]/20 text-[#00d4ff] px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-widest">
+                        <span className="bg-[#7F77DD]/20 text-[#7F77DD] px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-widest">
                             File
                         </span>
                     </div>

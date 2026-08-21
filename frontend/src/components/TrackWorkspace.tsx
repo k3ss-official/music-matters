@@ -64,8 +64,8 @@ export function TrackWorkspace({ trackId, onClose }: TrackWorkspaceProps) {
 
         const ws = WaveSurfer.create({
             container: containerRef.current,
-            waveColor: 'rgba(139, 92, 246, 0.4)', // purple-ish
-            progressColor: '#8b5cf6',
+            waveColor: 'rgba(127, 119, 221, 0.4)', // purple-ish
+            progressColor: '#7F77DD',
             cursorColor: '#fff',
             barWidth: 2,
             barGap: 1,
@@ -85,7 +85,7 @@ export function TrackWorkspace({ trackId, onClose }: TrackWorkspaceProps) {
             wsRegions.addRegion({
                 start: mid,
                 end: mid + 8, // ~8 seconds default region
-                color: 'rgba(0, 255, 136, 0.3)',
+                color: 'rgba(29, 158, 117, 0.3)',
                 drag: true,
                 resize: true,
             });
@@ -167,7 +167,7 @@ export function TrackWorkspace({ trackId, onClose }: TrackWorkspaceProps) {
 
                             <button
                                 onClick={() => wavesurferRef.current?.playPause()}
-                                className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-full font-bold transition shadow-[0_0_15px_rgba(147,51,234,0.5)]"
+                                className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-full font-bold transition shadow-[0_0_15px_rgba(127,119,221,0.5)]"
                             >
                                 Play/Pause
                             </button>

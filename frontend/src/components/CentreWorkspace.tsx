@@ -74,7 +74,7 @@ function phraseColor(t: string): string {
     return PHRASE_COLORS[t] ?? 'bg-gray-500/20 text-gray-400 border-gray-500/30';
 }
 function confidenceDot(c: number) {
-    if (c >= 0.85) return 'bg-[#00ff88]';
+    if (c >= 0.85) return 'bg-[#1D9E75]';
     if (c >= 0.6) return 'bg-yellow-400';
     return 'bg-red-400';
 }
@@ -132,6 +132,9 @@ export function CentreWorkspace({
 
     const bpm: number | null = trackDetail?.bpm ?? null;
     const downbeats: number[] = (trackDetail?.metadata?.downbeats as number[]) ?? [];
+    // Real beat-grid phase: prefer the analyser's anchor, else first downbeat, else 0
+    const beatAnchor: number =
+        (trackDetail?.metadata?.beatgrid_anchor as number) ?? downbeats[0] ?? 0;
     const chords: Array<{ start: number; end: number; chord: string }> =
         (trackDetail?.metadata?.chords as any[]) ?? [];
 
@@ -207,18 +210,11 @@ export function CentreWorkspace({
             const w = waveformRef.current;
             // Keep WaveformCanvas regionLoopRef in sync with React state
             w?.setLooping(next);
-            if (next) {
-                // Center the loop in the middle of the screen
-                if (regionEnd > regionStart) {
-                    w?.zoomToFitRegion(regionStart, regionEnd);
-                }
-                if (isPlaying) {
-                    // Turning ON while playing — switch to region loop immediately
-                    w?.playRegion();
-                }
-            } else {
-                // Turning OFF — zoom back to full track view
-                w?.zoomFit();
+            if (next && regionEnd > regionStart) {
+                // Move the playhead into the loop and loop if playing.
+                // The top stays at the user's global zoom — only the Edit pane zooms in.
+                w?.seek(regionStart);
+                if (w?.isPlaying()) w?.playRegion();
             }
             return next;
         });
@@ -259,17 +255,10 @@ export function CentreWorkspace({
         const beatDur = 60 / bpm;
         const BEAT_PRESETS = [4, 8, 16, 32];
 
-        // Snap start to nearest beat boundary
-        let newStart = regionStart;
-        if (downbeats.length > 0) {
-            let bestDb = downbeats[0];
-            for (const db of downbeats) {
-                if (db <= regionStart + beatDur * 0.25) bestDb = db;
-            }
-            newStart = bestDb;
-        } else {
-            newStart = Math.round(regionStart / beatDur) * beatDur;
-        }
+        // Snap start to the nearest beat on the anchored grid (matches the
+        // grid the user sees and the drag-snap behaviour).
+        const phase = ((beatAnchor % beatDur) + beatDur) % beatDur;
+        const newStart = Math.max(0, Math.round((regionStart - phase) / beatDur) * beatDur + phase);
 
         // Quantize length to nearest standard beat count (4/8/16/32)
         const rawBeats = (regionEnd - newStart) / beatDur;
@@ -284,7 +273,7 @@ export function CentreWorkspace({
         handleRegionChange(newStart, newEnd);
         setActiveBarPreset(bestBars);
         waveformRef.current?.zoomToRegion(newStart, newEnd);
-    }, [bpm, regionStart, regionEnd, downbeats, duration, handleRegionChange]);
+    }, [bpm, regionStart, regionEnd, beatAnchor, duration, handleRegionChange]);
 
     // ── Jog loop forward/back by one step ─────────────────────────────────
     const handleJogLoop = useCallback((direction: 1 | -1) => {
@@ -307,56 +296,72 @@ export function CentreWorkspace({
 
     // ── Bar preset toggle ─────────────────────────────────────────────────
     const handleBarPresetToggle = useCallback((bars: number) => {
-        console.log('Bar preset toggle:', bars, 'bpm:', bpm, 'duration:', duration);
-        
         if (activeBarPreset === bars) {
-            // Deselect — stop loop, return to normal play
+            // Deselect — stop loop, clear the region window, return to normal play
             setActiveBarPreset(null);
             setEditLoopOpen(false);
+            waveformRef.current?.setLooping(false);
             waveformRef.current?.stopRegion();
             setIsLooping(false);
-            waveformRef.current?.setLooping(false);
+            onUpdateRegion(0, 0);          // clear the region so the loop window disappears
+            waveformRef.current?.clearRegion();
             return;
         }
-        
-        setActiveBarPreset(bars);
-        
-        // Use BPM from track or default to 120
-        const effectiveBpm = bpm || 120;
-        
-        if (duration > 0) {
-            const beatDur = 60 / effectiveBpm;
-            const stepDur = loopMode === 'bar' ? beatDur * 4 : beatDur;
 
-            // Snap the anchor to the nearest step boundary from the beatgrid anchor
-            const beatgridAnchor = (trackDetail?.metadata?.beatgrid_anchor as number) ?? 0;
-            const playhead = waveformRef.current?.getCurrentTime() ?? currentTime;
-            const stepsFromAnchor = Math.floor(Math.max(0, playhead - beatgridAnchor) / stepDur);
-            let anchorStart = beatgridAnchor + stepsFromAnchor * stepDur;
-            // Fallback: if no beatgrid_anchor, use nearest downbeat
-            if (!trackDetail?.metadata?.beatgrid_anchor && downbeats.length > 0) {
-                anchorStart = downbeats[0];
-                for (const db of downbeats) {
-                    if (db <= playhead + stepDur * 0.5) anchorStart = db;
-                }
-            }
-
-            const newEnd = Math.min(anchorStart + stepDur * bars, duration);
-            console.log('Creating loop:', anchorStart, 'to', newEnd, loopMode === 'bar' ? 'bars' : 'beats', bars);
-            
-            handleRegionChange(anchorStart, newEnd);
-
-            // Auto-enable looping (Rekordbox/Serato convention)
-            setIsLooping(true);
-            waveformRef.current?.setLooping(true);
-
-            // Center the loop in the middle of screen and zoom to fit
-            console.log('Calling zoomToFitRegion...');
-            waveformRef.current?.zoomToFitRegion(anchorStart, newEnd);
-        } else {
-            console.log('No duration yet, cannot create loop');
+        // Switching presets (or selecting the first one) — tear down any
+        // existing loop cleanly first so stale loop state can't fight the new
+        // region (this was the 4→8 "confused then hung" path).
+        const wasActive = activeBarPreset !== null;
+        if (wasActive) {
+            waveformRef.current?.setLooping(false);
+            waveformRef.current?.clearRegion();
         }
-    }, [bpm, duration, activeBarPreset, loopMode, currentTime, downbeats, trackDetail, handleRegionChange]);
+        setActiveBarPreset(bars);
+
+        const effectiveBpm = bpm || 120;
+
+        if (duration > 0) {
+            try {
+                const beatDur = 60 / effectiveBpm;
+                const stepDur = loopMode === 'bar' ? beatDur * 4 : beatDur;
+
+                // Snap the anchor to the nearest step boundary from the beatgrid anchor
+                const beatgridAnchor = (trackDetail?.metadata?.beatgrid_anchor as number) ?? 0;
+                const playhead = waveformRef.current?.getCurrentTime() ?? currentTime;
+                const stepsFromAnchor = Math.floor(Math.max(0, playhead - beatgridAnchor) / stepDur);
+                let anchorStart = beatgridAnchor + stepsFromAnchor * stepDur;
+                // Fallback: if no beatgrid_anchor, use nearest downbeat
+                if (!trackDetail?.metadata?.beatgrid_anchor && downbeats.length > 0) {
+                    anchorStart = downbeats[0];
+                    for (const db of downbeats) {
+                        if (db <= playhead + stepDur * 0.5) anchorStart = db;
+                    }
+                }
+
+                const newEnd = Math.min(anchorStart + stepDur * bars, duration);
+
+                // Guard: never build a degenerate loop
+                if (newEnd <= anchorStart + 0.05) {
+                    console.warn('[MM-LOOP] degenerate region skipped', { anchorStart, newEnd, duration });
+                    return;
+                }
+
+                handleRegionChange(anchorStart, newEnd);
+
+                // Auto-enable looping (Rekordbox/Serato convention)
+                setIsLooping(true);
+                waveformRef.current?.setLooping(true);
+                // If already playing, jump into the loop immediately
+                if (waveformRef.current?.isPlaying()) {
+                    waveformRef.current?.playRegion();
+                }
+                // Top waveform keeps the user's global zoom — the Edit pane is the
+                // one that zooms into the loop.
+            } catch (err) {
+                console.error('[MM-LOOP] preset switch failed', err);
+            }
+        }
+    }, [bpm, duration, activeBarPreset, loopMode, currentTime, downbeats, trackDetail, handleRegionChange, onUpdateRegion]);
 
     // ── Stem solo + play ──────────────────────────────────────────────────
     const handlePlayStem = useCallback((name: string) => {
@@ -452,7 +457,7 @@ export function CentreWorkspace({
     // ── No track loaded ───────────────────────────────────────────────────
     if (!trackId) {
         return (
-            <div className="flex-1 flex items-center justify-center bg-[#0a0a0f] text-white/20 text-sm font-mono tracking-wider uppercase">
+            <div className="flex-1 flex items-center justify-center bg-[#0d0f1c] text-white/20 text-sm font-mono tracking-wider uppercase">
                 Select a track to begin
             </div>
         );
@@ -461,9 +466,9 @@ export function CentreWorkspace({
     // ── Loading track detail ──────────────────────────────────────────────
     if (detailLoading || !trackDetail) {
         return (
-            <div className="flex-1 flex flex-col items-center justify-center bg-[#0a0a0f] gap-4">
-                <Loader2 size={28} className="animate-spin text-[#00d4ff]" />
-                <span className="text-[#00d4ff]/60 font-mono text-xs uppercase tracking-widest">
+            <div className="flex-1 flex flex-col items-center justify-center bg-[#0d0f1c] gap-4">
+                <Loader2 size={28} className="animate-spin text-[#7F77DD]" />
+                <span className="text-[#7F77DD]/60 font-mono text-xs uppercase tracking-widest">
                     Loading track…
                 </span>
             </div>
@@ -475,24 +480,24 @@ export function CentreWorkspace({
         loop: 'Slicing loops', project: 'Finalising',
     };
     const STAGE_COLOR: Record<string, string> = {
-        ingest: '#00d4ff', analysis: '#8b5cf6', separation: '#00ff88',
-        loop: '#f59e0b', project: '#00d4ff',
+        ingest: '#7F77DD', analysis: '#7F77DD', separation: '#1D9E75',
+        loop: '#EF9F27', project: '#7F77DD',
     };
 
     return (
         <div
-            className="flex flex-col flex-1 min-h-0 bg-[#0a0a0f] overflow-hidden outline-none focus-within:ring-1 focus-within:ring-[#00d4ff]/20"
+            className="flex flex-col flex-1 min-h-0 bg-[#0d0f1c] overflow-hidden outline-none focus-within:ring-1 focus-within:ring-[#7F77DD]/20"
             tabIndex={-1}
             onDoubleClick={handleDoubleClickCenter}
         >
 
             {/* ── Pipeline job progress ───────────────────────────────────── */}
             {activeJob && activeJob.status !== 'completed' && (
-                <div className="border-b border-white/5 bg-[#0d0d18] px-4 py-2 flex flex-col gap-1.5 shrink-0">
+                <div className="border-b border-white/5 bg-[#0d0f1c] px-4 py-2 flex flex-col gap-1.5 shrink-0">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             {activeJob.status === 'running' && (
-                                <Loader2 size={11} className="animate-spin text-[#00d4ff]" />
+                                <Loader2 size={11} className="animate-spin text-[#7F77DD]" />
                             )}
                             {activeJob.status === 'failed' && (
                                 <AlertCircle size={11} className="text-[#ff3b5c]" />
@@ -518,9 +523,9 @@ export function CentreWorkspace({
                                 title={stage.detail ?? stage.label}
                                 className={`flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-mono uppercase tracking-wide border transition-all ${
                                     stage.status === 'done'
-                                        ? 'bg-[#00ff88]/10 text-[#00ff88] border-[#00ff88]/20'
+                                        ? 'bg-[#1D9E75]/10 text-[#1D9E75] border-[#1D9E75]/20'
                                         : stage.status === 'running'
-                                        ? 'bg-[#00d4ff]/10 text-[#00d4ff] border-[#00d4ff]/30 animate-pulse'
+                                        ? 'bg-[#7F77DD]/10 text-[#7F77DD] border-[#7F77DD]/30 animate-pulse'
                                         : stage.status === 'error'
                                         ? 'bg-[#ff3b5c]/10 text-[#ff3b5c] border-[#ff3b5c]/20'
                                         : 'bg-white/5 text-white/25 border-white/5'
@@ -545,7 +550,7 @@ export function CentreWorkspace({
                             className="h-full rounded-full transition-all duration-500"
                             style={{
                                 width: `${Math.round((activeJob.progress ?? 0) * 100)}%`,
-                                background: activeJob.status === 'failed' ? '#ff3b5c' : `linear-gradient(90deg, #00d4ff, #8b5cf6)`,
+                                background: activeJob.status === 'failed' ? '#ff3b5c' : `linear-gradient(90deg, #7F77DD, #7F77DD)`,
                             }}
                         />
                     </div>
@@ -590,7 +595,7 @@ export function CentreWorkspace({
             />
 
             {/* ── Waveform ───────────────────────────────────────────────── */}
-            <div className="flex-1 min-h-0 relative px-0 overflow-x-auto">
+            <div className="flex-1 shrink-0 min-h-[200px] relative px-0 overflow-x-auto">
                 {/* External error banner */}
                 {(externalError || loadError) && (
                     <div className="flex items-center gap-2 px-4 py-2 bg-[#ff3b5c]/10 border-b border-[#ff3b5c]/20 text-[#ff3b5c] text-xs font-mono">
@@ -602,7 +607,7 @@ export function CentreWorkspace({
                 {/* Save success toast */}
                 {saveSuccess && (
                     <div className="absolute top-2 right-4 z-30 flex items-center gap-2
-                                    bg-[#00ff88]/15 border border-[#00ff88]/30 text-[#00ff88]
+                                    bg-[#1D9E75]/15 border border-[#1D9E75]/30 text-[#1D9E75]
                                     px-3 py-2 rounded-lg text-xs font-mono tracking-wider shadow-xl">
                         <CheckCircle2 size={12} />
                         Loop saved
@@ -612,7 +617,7 @@ export function CentreWorkspace({
                 {/* Saving indicator */}
                 {saving && (
                     <div className="absolute top-2 right-4 z-30 flex items-center gap-2
-                                    bg-[#8b5cf6]/15 border border-[#8b5cf6]/30 text-[#8b5cf6]
+                                    bg-[#7F77DD]/15 border border-[#7F77DD]/30 text-[#7F77DD]
                                     px-3 py-2 rounded-lg text-xs font-mono tracking-wider shadow-xl">
                         <Loader2 size={12} className="animate-spin" />
                         Saving...
@@ -622,9 +627,12 @@ export function CentreWorkspace({
                 <WaveformCanvas
                     ref={waveformRef}
                     audioUrl={audioUrl}
+                    hideOverview={true}
+                    waveHeight={165}
                     downbeats={downbeats}
                     chords={chords}
                     bpm={bpm}
+                    beatAnchor={beatAnchor}
                     snapEnabled={snapEnabled}
                     isLooping={isLooping}
                     regionStart={regionStart}
@@ -687,12 +695,12 @@ export function CentreWorkspace({
 
             {/* ── Loop editor pane (3rd pane — fine-tune the loop) ──────────── */}
             {editLoopOpen && waveformReady && (
-                <div className="border-t-2 border-[#00d4ff]/30 bg-[#08080f] flex flex-col shrink-0">
+                <div className="border-t-2 border-[#7F77DD]/30 bg-[#0d0f1c] flex flex-col shrink-0">
                     {/* Header row */}
-                    <div className="flex items-center justify-between px-4 py-2 border-b border-white/5 bg-[#0d0d18] shrink-0">
+                    <div className="flex items-center justify-between px-4 py-2 border-b border-white/5 bg-[#0d0f1c] shrink-0">
                         <div className="flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-[#00d4ff] animate-pulse" />
-                            <span className="text-[10px] font-mono uppercase tracking-widest text-[#00d4ff]/70">
+                            <div className="w-1.5 h-1.5 rounded-full bg-[#7F77DD] animate-pulse" />
+                            <span className="text-[10px] font-mono uppercase tracking-widest text-[#7F77DD]/70">
                                 Loop Editor
                             </span>
                             {regionEnd > regionStart && bpm && (
@@ -706,21 +714,23 @@ export function CentreWorkspace({
                         <button
                             onClick={() => onOpenExportDialog?.()}
                             disabled={!trackId || regionEnd <= regionStart}
-                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-[#00d4ff] hover:bg-[#00d4ff]/20 hover:border-[#00d4ff]/60 disabled:opacity-30 disabled:cursor-not-allowed transition-all font-semibold text-xs"
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#7F77DD]/10 border border-[#7F77DD]/30 text-[#7F77DD] hover:bg-[#7F77DD]/20 hover:border-[#7F77DD]/60 disabled:opacity-30 disabled:cursor-not-allowed transition-all font-semibold text-xs"
                         >
                             Save / Export…
                         </button>
                     </div>
 
-                    {/* Zoomed waveform — auto-fitted to the loop region */}
-                    <div className="relative" style={{ minHeight: 160 }}>
+                    {/* Zoomed waveform — taller + inset (focused fine-tune panel) */}
+                    <div className="relative w-4/5 mx-auto" style={{ minHeight: 200 }}>
                         <WaveformCanvas
                             key={`loop-editor-${trackId}`}
                             ref={loopEditorRef}
                             audioUrl={audioUrl}
                             hideOverview={true}
+                            waveHeight={280}
                             downbeats={downbeats}
                             bpm={bpm}
+                            beatAnchor={beatAnchor}
                             snapEnabled={snapEnabled}
                             isLooping={isLooping}
                             regionStart={regionStart}
@@ -805,9 +815,9 @@ export function CentreWorkspace({
 
             {/* ── Smart phrases ──────────────────────────────────────────── */}
             {(loadingPhrases || smartPhrases.length > 0 || phrasesError) && (
-                <div className="px-4 py-2 bg-[#0d0d18] border-t border-white/5 flex items-center gap-2 flex-wrap">
+                <div className="px-4 py-2 bg-[#0d0f1c] border-t border-white/5 flex items-center gap-2 flex-wrap">
                     <div className="flex items-center gap-1 mr-1">
-                        <Zap size={11} className="text-[#8b5cf6]" />
+                        <Zap size={11} className="text-[#7F77DD]" />
                         <span className="text-[10px] font-mono text-white/30 uppercase tracking-widest">
                             Phrases
                         </span>
