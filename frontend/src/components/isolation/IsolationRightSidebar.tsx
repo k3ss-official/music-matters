@@ -54,6 +54,12 @@ export function IsolationRightSidebar({ session, onSessionUpdate }: Props) {
       const result = await exportLoop(session.id);
       setExportState('success');
       setExportMessage(result.message);
+      if (result.output_path) {
+        const a = document.createElement('a');
+        a.href = `/api/download-file?path=${encodeURIComponent(result.output_path)}`;
+        a.download = result.output_path.split('/').pop() || 'export.wav';
+        a.click();
+      }
     } catch (e: unknown) {
       setExportState('error');
       setExportMessage(e instanceof Error ? e.message : 'Export failed');
@@ -124,7 +130,7 @@ export function IsolationRightSidebar({ session, onSessionUpdate }: Props) {
           ))}
         </div>
         <div className="text-[9px] font-mono text-white/20 italic">
-          Audition playback is placeholder — real mixing is a future DSP step
+          Audition mode is used when you Preview — split substems first
         </div>
       </div>
 

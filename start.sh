@@ -49,51 +49,17 @@ check_command node     "brew install node     OR  https://nodejs.org"
 check_command npm      "comes with node"
 
 # ── Python env (conda: music-matters, else venv) ─────────────────────────────
-CONDA_ENV="music-matters"
-PYTHON="python3"
-
-if ! command -v conda &>/dev/null; then
-    for c in \
-        "$HOME/miniforge3/etc/profile.d/conda.sh" \
-        "/opt/homebrew/Caskroom/miniforge/base/etc/profile.d/conda.sh" \
-        "$HOME/miniconda3/etc/profile.d/conda.sh" \
-        "$HOME/anaconda3/etc/profile.d/conda.sh"; do
-        [ -f "$c" ] && source "$c" && break
-    done
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/scripts/lib-env.sh"
+mm_resolve_python "$SCRIPT_DIR"
+if [ "$MM_PYTHON" = "python3" ] && [ ! -d "$BACKEND_DIR/.venv" ] && [ ! -d "$SCRIPT_DIR/.venv" ]; then
+    warn "No conda env or venv — creating $SCRIPT_DIR/.venv"
+    python3 -m venv "$SCRIPT_DIR/.venv"
+    mm_resolve_python "$SCRIPT_DIR"
+    "$MM_PYTHON" -m pip install -e "$SCRIPT_DIR"
 fi
-
-if command -v conda &>/dev/null; then
-    # shellcheck disable=SC1091
-    source "$(conda info --base)/etc/profile.d/conda.sh"
-    if conda activate "$CONDA_ENV" 2>/dev/null; then
-        PYTHON="python"
-        ok "Conda env active: $CONDA_ENV ($("$PYTHON" --version 2>&1))"
-    else
-        warn "conda env '$CONDA_ENV' not found — falling back to venv"
-    fi
-fi
-
-if [ "$PYTHON" = "python3" ]; then
-    if [ -d "$BACKEND_DIR/.venv" ]; then
-        # shellcheck disable=SC1091
-        source "$BACKEND_DIR/.venv/bin/activate"
-        PYTHON="python"
-        ok "Using backend/.venv ($("$PYTHON" --version 2>&1))"
-    elif [ -d "$SCRIPT_DIR/.venv" ]; then
-        # shellcheck disable=SC1091
-        source "$SCRIPT_DIR/.venv/bin/activate"
-        PYTHON="python"
-        ok "Using .venv ($("$PYTHON" --version 2>&1))"
-    else
-        warn "No conda env or venv — creating $SCRIPT_DIR/.venv"
-        python3 -m venv "$SCRIPT_DIR/.venv"
-        # shellcheck disable=SC1091
-        source "$SCRIPT_DIR/.venv/bin/activate"
-        PYTHON="python"
-        pip install -e "$SCRIPT_DIR"
-        ok "venv ready ($("$PYTHON" --version 2>&1))"
-    fi
-fi
+PYTHON="$MM_PYTHON"
+ok "Python: $PYTHON ($("$PYTHON" --version 2>&1))"
 
 # ── Node modules ─────────────────────────────────────────────────────────────
 if [ ! -d "$FRONTEND_DIR/node_modules" ]; then
@@ -130,7 +96,23 @@ lsof -ti :8010 | xargs kill -9 2>/dev/null || true
 lsof -ti :5173 | xargs kill -9 2>/dev/null || true
 sleep 1
 
-# ── Start backend ─────────────────────────────────────────────────────────────
+# ── App mode: one uvicorn process serving the built UI (no Vite) ─────────────
+APP_MODE=0
+if [ "${1:-}" = "--app" ] || [ "${MM_APP_MODE:-}" = "1" ]; then
+    APP_MODE=1
+    export MM_APP_MODE=1
+fi
+
+if [ "$APP_MODE" = "1" ]; then
+    if [ ! -f "$FRONTEND_DIR/dist/index.html" ]; then
+        log "Building UI for app mode..."
+        (cd "$FRONTEND_DIR" && npm run build)
+    fi
+    log "Starting Music Matters on http://127.0.0.1:8010 (app mode)..."
+    cd "$BACKEND_DIR"
+    exec "$PYTHON" -m uvicorn app.main:app --host 127.0.0.1 --port 8010 --log-level info
+fi
+
 log "Starting FastAPI backend on http://localhost:8010 ..."
 cd "$BACKEND_DIR"
 "$PYTHON" -m uvicorn app.main:app \

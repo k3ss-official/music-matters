@@ -1,37 +1,51 @@
 # Music Matters
 
-Local-first DJ and producer automation. Ingest audio, analyse structure, separate stems (Demucs/MLX), slice beat-aligned loops, isolate substems, and export to Ableton Live.
+Local-first DJ and producer tool. Ingest audio, analyse structure, separate stems, slice loops, isolate substems, export to Ableton.
 
-This is a **localhost app**, not a hosted service. The API binds `127.0.0.1` only.
+This is a **localhost app for you**, not a hosted service. The API binds `127.0.0.1` only.
 
-## Quickstart
+## Install as a Mac app (`~/Applications`)
+
+Do **not** clone into `~/music-matters` — that path is the default **audio library**. Clone next to it:
 
 ```bash
-git clone https://github.com/k3ss-official/music-matters.git
-cd music-matters
-chmod +x start.sh
-./start.sh
+git clone https://github.com/k3ss-official/music-matters.git ~/Developer/music-matters
+cd ~/Developer/music-matters
+./scripts/install-macos.sh
+open ~/Applications/Music\ Matters.app
 ```
 
-Then open **http://127.0.0.1:5173**. API docs: **http://127.0.0.1:8010/api/docs**. Stop with `Ctrl+C`.
+That script:
 
-`start.sh` prefers the conda env `music-matters` (Python 3.11). If conda is missing it creates/uses a venv.
+1. Creates/uses the `music-matters` conda env, or a repo `.venv`
+2. Installs Python + Node deps and builds the UI
+3. Writes **`~/Applications/Music Matters.app`**
+
+Double-click the app any time after that. It starts the server, then opens a Chrome/Edge/Brave app window (Safari fallback). Quit from the power button in the header.
+
+Logs: `~/Library/Logs/Music Matters.log`. Re-run `./scripts/install-macos.sh` after `git pull`.
 
 ### Requirements
 
+- macOS 13+
 - Python 3.11+
 - Node.js 18+
-- FFmpeg (`brew install ffmpeg` / `apt install ffmpeg`)
-- ~4 GB disk for the Demucs model (downloaded on first stem run)
-- Apple Silicon recommended for MLX/MPS; CPU fallback works anywhere
+- FFmpeg (`brew install ffmpeg`) — needed for YouTube ingest
+- ~4 GB disk for Demucs on first stem run
+- Apple Silicon recommended (MPS); CPU works
 
-Optional conda setup:
+## Dev loop (Terminal)
 
 ```bash
-conda create -n music-matters python=3.11
-conda activate music-matters
-pip install -e ".[dev]"
-cd frontend && npm ci
+./start.sh
+```
+
+Vite UI: **http://127.0.0.1:5173**. API docs: **http://127.0.0.1:8010/api/docs**.
+
+App-mode in Terminal (built UI, no Vite):
+
+```bash
+./start.sh --app
 ```
 
 ## What it does
@@ -41,9 +55,9 @@ cd frontend && npm ci
 | **Search & ingest** | Local files (copied into the library), URLs via yt-dlp, batch queue |
 | **Analysis** | BPM, key, smart phrases (intro / verse / chorus / drop / …) |
 | **Stem separation** | Demucs `htdemucs_6s` on Apple MPS — 6 stems; HPSS fallback |
-| **Library** | Track table with duration, loop counts, BPM/key, status |
+| **Library** | Track table with real waveform thumbs, duration, loop counts, BPM/key |
 | **Loop editor** | WaveSurfer waveform, beat-snap regions, phrase snap, preview |
-| **Isolation workspace** | Region extract from a parent stem, placeholder substem split/EQ |
+| **Isolation workspace** | Region extract → 5-band substem split → mix/EQ → export WAV |
 | **Ableton export** | `.als` ZIP with stems on the session grid |
 | **SQLite** | `library.db` with WAL + foreign keys; survives restarts |
 
@@ -61,16 +75,6 @@ HF_HOME=~/.cache/huggingface
 ```
 
 Audio is served only from `MUSIC_LIBRARY`. Local ingest **copies** files in; original paths are never streamed.
-
-## Manual run
-
-```bash
-# Terminal 1 — backend (from repo root)
-cd backend && python -m uvicorn app.main:app --host 127.0.0.1 --port 8010
-
-# Terminal 2 — frontend
-cd frontend && npm run dev -- --host 127.0.0.1
-```
 
 ## Tests
 

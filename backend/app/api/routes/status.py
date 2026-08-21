@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from fastapi import APIRouter, HTTPException
 
 from app.api.schemas import AgentStatus
@@ -12,8 +14,12 @@ router = APIRouter()
 
 
 @router.get("/health", tags=["system"])
-async def health() -> dict[str, str]:
-    return {"status": "ok", "version": settings.APP_VERSION}
+async def health() -> dict:
+    return {
+        "status": "ok",
+        "version": settings.APP_VERSION,
+        "app_mode": os.environ.get("MM_APP_MODE") == "1",
+    }
 
 
 @router.get("/agents", response_model=list[AgentStatus])

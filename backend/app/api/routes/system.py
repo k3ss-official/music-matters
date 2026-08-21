@@ -1,6 +1,11 @@
 """System resource information endpoint."""
 from __future__ import annotations
 
+import os
+import signal
+import threading
+import time
+
 from fastapi import APIRouter, HTTPException, Request
 import psutil
 
@@ -64,3 +69,17 @@ def kill_process(pid: int, request: Request):
         return {"killed": False, "reason": "Process not found"}
     except psutil.AccessDenied:
         return {"killed": False, "reason": "Access denied"}
+
+
+@router.post("/shutdown")
+def shutdown(request: Request):
+    """Stop the local server. Localhost only — used by the macOS app Quit button."""
+    if not is_localhost(request):
+        raise HTTPException(status_code=403, detail="Local requests only")
+
+    def _exit() -> None:
+        time.sleep(0.4)
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    threading.Thread(target=_exit, daemon=True).start()
+    return {"ok": True, "message": "Shutting down"}
