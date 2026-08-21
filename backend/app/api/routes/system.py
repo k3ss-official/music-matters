@@ -1,8 +1,10 @@
 """System resource information endpoint."""
 from __future__ import annotations
-import subprocess
-from fastapi import APIRouter
+
+from fastapi import APIRouter, HTTPException, Request
 import psutil
+
+from app.security import is_localhost, is_self_or_init
 
 router = APIRouter(prefix="/system", tags=["system"])
 
@@ -12,6 +14,7 @@ KNOWN_HEAVY_APPS = {
     "Chrome", "Firefox", "Safari", "Slack", "Zoom", "Teams",
     "Docker", "VirtualBox", "Parallels", "Xcode",
 }
+
 
 @router.get("/resources")
 def get_resources():
@@ -41,13 +44,22 @@ def get_resources():
         "processes": processes[:20],
     }
 
+
 @router.post("/kill/{pid}")
-def kill_process(pid: int):
+def kill_process(pid: int, request: Request):
+    if not is_localhost(request):
+        raise HTTPException(status_code=403, detail="Local requests only")
+    if is_self_or_init(pid):
+        raise HTTPException(status_code=403, detail="Refusing to kill this process")
     try:
         proc = psutil.Process(pid)
         name = proc.name()
+        if not any(app.lower() in name.lower() for app in KNOWN_HEAVY_APPS):
+            raise HTTPException(status_code=403, detail="PID is not a known heavy app")
         proc.terminate()
         return {"killed": True, "pid": pid, "name": name}
+    except HTTPException:
+        raise
     except psutil.NoSuchProcess:
         return {"killed": False, "reason": "Process not found"}
     except psutil.AccessDenied:

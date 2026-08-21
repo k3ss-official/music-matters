@@ -18,6 +18,7 @@ from app.api import schemas
 
 logger = logging.getLogger(__name__)
 from app.config import settings
+from app.security import AUDIO_SUFFIXES, confined_file, copy_into_library, safe_name
 from app.services.search.download_service import DownloadService
 from app.services.library import LibraryPaths
 from app.services.db import db
@@ -98,7 +99,7 @@ class LoopRecord:
             musical_key=self.musical_key,
             energy=self.energy,
             tags=self.tags,
-            file_url=f"/api/v1/library/tracks/{track_id}/loops/{self.id}/audio",
+            file_url=f"/api/library/tracks/{track_id}/loops/{self.id}/audio",
         )
 
 @dataclass
@@ -119,6 +120,11 @@ class TrackRecord:
     loops: list[str] = field(default_factory=list)
 
     def to_summary(self) -> schemas.TrackSummary:
+        duration = self.metadata.get("duration")
+        try:
+            duration_val = float(duration) if duration is not None else None
+        except (TypeError, ValueError):
+            duration_val = None
         return schemas.TrackSummary(
             track_id=self.track_id,
             title=self.title,
@@ -127,17 +133,15 @@ class TrackRecord:
             bpm=self.bpm,
             musical_key=self.musical_key,
             created_at=self.created_at,
+            duration=duration_val,
+            loop_count=len(self.loops),
+            stems=list(self.stems),
         )
 
     def to_detail(self) -> schemas.TrackDetailResponse:
+        summary = self.to_summary()
         return schemas.TrackDetailResponse(
-            track_id=self.track_id,
-            title=self.title,
-            artist=self.artist,
-            status=self.status,
-            bpm=self.bpm,
-            musical_key=self.musical_key,
-            created_at=self.created_at,
+            **summary.model_dump(),
             metadata=self.metadata,
             stems=self.stems,
             loops=self.loops,
@@ -473,18 +477,11 @@ class PipelineOrchestrator:
             # Check if it's a local file first
             source_path = Path(source).expanduser().resolve()
 
-            # Handle macOS path mapping (/Users -> /Volumes/deep-1t/Users)
-            if not source_path.exists() and str(source_path).startswith("/Users/"):
-                # Replace /Users/k3ss with /Volumes/deep-1t/Users/k3ss
-                alt_path_str = str(source_path).replace(
-                    "/Users/", "/Volumes/deep-1t/Users/", 1
-                )
-                alt_path = Path(alt_path_str)
-                if alt_path.exists():
-                    source_path = alt_path
-
-            if source_path.exists():
-                return source_path
+            if source_path.exists() and source_path.is_file():
+                if source_path.suffix.lower() not in AUDIO_SUFFIXES:
+                    raise ValueError(f"Unsupported audio type: {source_path.suffix}")
+                dest = copy_into_library(source_path, settings.resolved_downloads_dir)
+                return dest
 
             # It's a URL or search query
             if "://" in source:
@@ -511,6 +508,12 @@ class PipelineOrchestrator:
             return self._downloader.download(search_query)
 
         audio_path = await asyncio.to_thread(_download)
+
+        try:
+            info = sf.info(str(audio_path))
+            track.metadata["duration"] = float(info.duration)
+        except Exception:
+            pass
 
         stage.detail = f"Source staged at {audio_path}"
         stage.progress = 0.9
@@ -883,10 +886,21 @@ class PipelineOrchestrator:
     def list_tracks(
         self, limit: int = 50, offset: int = 0
     ) -> schemas.TrackListResponse:
-        items = list(self._tracks.values())
+        items = sorted(self._tracks.values(), key=lambda t: t.created_at, reverse=True)
         page = items[offset : offset + limit]
         return schemas.TrackListResponse(
             items=[record.to_summary() for record in page], total=len(items)
+        )
+
+    def get_stats(self) -> schemas.LibraryStats:
+        stemmed = {"stems_ready", "loops_ready", "project_ready", "completed", "done"}
+        stemming = {"queued", "running", "pending"}
+        tracks = list(self._tracks.values())
+        return schemas.LibraryStats(
+            total_tracks=len(tracks),
+            stems_ready=sum(1 for t in tracks if t.status in stemmed),
+            loops_exported=sum(len(v) for v in self._loop_records.values()),
+            processing=sum(1 for t in tracks if t.status in stemming),
         )
 
     def get_track(self, track_id: UUID) -> schemas.TrackDetailResponse:
@@ -1008,21 +1022,20 @@ class PipelineOrchestrator:
         return [loop.to_preview(track_id) for loop in loop_records]
 
     def get_loop_audio(self, track_id: UUID, loop_id: str) -> Path:
-        # Check if it is an AI generated loop map first
+        loop_id = safe_name(loop_id)
         loop_map = self._loop_records.get(track_id, {})
         record = loop_map.get(loop_id)
         if record and record.path.exists():
-            return record.path
+            return confined_file(settings.MUSIC_LIBRARY, record.path, suffixes=AUDIO_SUFFIXES)
 
-        track = self.get_track(track_id)
+        track = self._tracks.get(track_id)
+        if track is None:
+            raise KeyError(f"Track {track_id} not registered")
         if not track.loops_dir:
             raise FileNotFoundError("No loops generated yet")
 
-        # It's an exported custom loop
         loop_path = track.loops_dir / f"{loop_id}.wav"
-        if not loop_path.exists():
-            raise FileNotFoundError(f"Loop not found at {loop_path}")
-        return loop_path
+        return confined_file(settings.MUSIC_LIBRARY, loop_path, suffixes=AUDIO_SUFFIXES)
 
     async def extract_custom_loop(
         self, track_id: UUID, start_time: float, end_time: float, stems: list[str]
@@ -1114,15 +1127,17 @@ class PipelineOrchestrator:
 
     def get_stem_path(self, track_id: UUID, stem_name: str) -> Path:
         """Return the filesystem path for a named stem WAV file."""
+        stem_name = safe_name(stem_name)
         record = self._tracks.get(track_id)
         if record is None:
             raise KeyError(f"Track {track_id} not found")
         stems_dir = record.stems_dir or self._stems_dir(record.slug)
-        # stem_name may come with or without .wav extension
         for suffix in (stem_name, f"{stem_name}.wav"):
             candidate = stems_dir / suffix
             if candidate.exists():
-                return candidate
+                return confined_file(
+                    settings.MUSIC_LIBRARY, candidate, suffixes=AUDIO_SUFFIXES
+                )
         raise FileNotFoundError(f"Stem '{stem_name}' not found in {stems_dir}")
 
     def _derive_title(self, source: str) -> str:

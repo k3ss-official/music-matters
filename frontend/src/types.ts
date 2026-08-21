@@ -77,6 +77,9 @@ export interface TrackSummary {
   bpm?: number | null;
   musical_key?: string | null;
   created_at: string;
+  duration?: number | null;
+  loop_count?: number;
+  stems?: string[];
 }
 
 export interface TrackListResponse {

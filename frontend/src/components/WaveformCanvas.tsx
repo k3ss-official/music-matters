@@ -21,10 +21,15 @@ import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.js';
 import TimelinePlugin from 'wavesurfer.js/dist/plugins/timeline.js';
 import MinimapPlugin from 'wavesurfer.js/dist/plugins/minimap.js';
 
-// Minimal type for WaveSurfer's internal renderer — not part of the public API.
-interface WaveSurferInternal extends WaveSurfer {
+// Minimal type for WaveSurfer internals — not part of the public API.
+// Do not extend WaveSurfer: v7's class options type is incompatible with a Record.
+interface WaveSurferInternal {
     renderer: { scrollContainer: { scrollWidth: number; clientWidth: number } };
     options: Record<string, unknown>;
+}
+
+function asInternal(ws: WaveSurfer | null): WaveSurferInternal | null {
+    return ws as unknown as WaveSurferInternal | null;
 }
 
 // Minimal type for a WaveSurfer RegionsPlugin region handle.
@@ -33,7 +38,7 @@ interface WaveSurferRegion {
     id: string;
     start: number;
     end: number;
-    setOptions(opts: { start?: number; end?: number; color?: string; drag?: boolean; resize?: boolean }): void;
+    setOptions(opts: Record<string, unknown>): void;
     remove(): void;
 }
 
@@ -597,7 +602,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 regionLoopRef.current = enabled;
                 // Lock the view on the region when looping — stop WaveSurfer scrolling away.
                 // ws.options is internal state not exposed by the public WaveSurfer type.
-                const ws = wsRef.current as WaveSurferInternal;
+                const ws = asInternal(wsRef.current);
                 if (ws) {
                     ws.options.autoScroll = !enabled;
                     ws.options.autoCenter = !enabled;
@@ -642,7 +647,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                     activeRegionRef.current = null;
                 }
                 // Re-enable normal scrolling/centering after a loop is cleared
-                const ws = wsRef.current as WaveSurferInternal;
+                const ws = asInternal(wsRef.current);
                 if (ws) {
                     ws.options.autoScroll = true;
                     ws.options.autoCenter = true;
@@ -667,7 +672,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
                 // updated synchronously by ws.zoom(), rAF ensures browser layout committed
                 const centerScroll = () => {
                     try {
-                        const renderer = (ws as WaveSurferInternal).renderer;
+                        const renderer = asInternal(ws).renderer;
                         if (!renderer) return;
                         const { scrollWidth, clientWidth } = renderer.scrollContainer;
                         const dur = ws.getDuration() || 1;
@@ -695,7 +700,7 @@ const WaveformCanvas = forwardRef<WaveformHandle, WaveformCanvasProps>(
 
                 const centerScroll = () => {
                     try {
-                        const renderer = (ws as WaveSurferInternal).renderer;
+                        const renderer = asInternal(ws).renderer;
                         if (!renderer) return;
                         const { scrollWidth, clientWidth } = renderer.scrollContainer;
                         const dur = ws.getDuration() || 1;

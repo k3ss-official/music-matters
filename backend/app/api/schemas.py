@@ -66,11 +66,21 @@ class TrackSummary(BaseModel):
     bpm: Optional[float] = None
     musical_key: Optional[str] = None
     created_at: datetime
+    duration: Optional[float] = None
+    loop_count: int = 0
+    stems: List[str] = Field(default_factory=list)
 
 
 class TrackListResponse(BaseModel):
     items: List[TrackSummary]
     total: int
+
+
+class LibraryStats(BaseModel):
+    total_tracks: int
+    stems_ready: int
+    loops_exported: int
+    processing: int
 
 
 class TrackDetailResponse(TrackSummary):
