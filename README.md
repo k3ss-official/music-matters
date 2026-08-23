@@ -1,5 +1,17 @@
 # Music Matters
 
+<div align="center">
+
+<p>
+  <a href="https://hermes-agent.nousresearch.com/docs/user-guide/bot-mode"><img src="https://img.shields.io/badge/Hermes-Bot_Mode-6d28d9?style=for-the-badge&labelColor=0a0a0a" alt="Hermes Bot Mode" /></a>
+  <img src="https://img.shields.io/badge/Python-3-3776AB?style=for-the-badge&labelColor=0a0a0a&logo=python&logoColor=white" alt="Python-3" />
+  <img src="https://img.shields.io/badge/license-MIT-fbbf24?style=for-the-badge&labelColor=0a0a0a" alt="MIT" />
+  <img src="https://img.shields.io/badge/private-111111?style=for-the-badge&labelColor=0a0a0a" alt="private" />
+</p>
+
+</div>
+
+
 Local-first DJ and producer studio. Ingest audio, analyse structure, separate stems, slice loops, isolate substems, export to Ableton.
 
 This is a **localhost app for you**, not a hosted service. The API binds `127.0.0.1` only.
@@ -76,3 +88,29 @@ cd frontend && npx tsc --noEmit && npm run build
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+---
+
+## Hermes Bot Mode
+
+This desk is a named [Hermes](https://hermes-agent.nousresearch.com/) Bot — own model slot, memory, skills, routines, and `@mentions`.
+
+```bash
+# once
+curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+
+# this repo
+./scripts/install-hermes-bot.sh
+hermes -p music-matters chat
+```
+
+In Hermes Desktop the Bot lands under **Bots**. Type `@music-matters` from any chat; group it with the rest of the k3ss roster (`studio`).
+
+| File | Role |
+| --- | --- |
+| [`AGENTS.md`](AGENTS.md) | Project harness Hermes loads at session start |
+| [`.hermes/SOUL.md`](.hermes/SOUL.md) | Bot personality |
+| [`.hermes/bot.yaml`](.hermes/bot.yaml) | Roster, skills, groups |
+| [`.hermes/skills/music-matters/SKILL.md`](.hermes/skills/music-matters/SKILL.md) | Portable skill |
+
+Docs: [Bot Mode](https://hermes-agent.nousresearch.com/docs/user-guide/bot-mode) · [Context files](https://hermes-agent.nousresearch.com/docs/user-guide/features/context-files) · [Skills](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills)

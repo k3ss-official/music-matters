@@ -55,3 +55,14 @@ Conda env `music-matters` or repo `.venv`. `pip install -e ".[dev]"`.
 ## Product constraints
 
 This is a just-me tool. Do not add accounts, cloud sync, LAN bind, or multi-tenant anything unless the owner asks.
+
+## Hermes Bot Mode
+
+This repo now ships a Bot Mode profile in `.hermes/`.
+
+```bash
+./scripts/install-hermes-bot.sh
+hermes -p music-matters chat
+```
+
+Project-local skills: `.hermes/skills/`. Do not contradict the hard rules above.

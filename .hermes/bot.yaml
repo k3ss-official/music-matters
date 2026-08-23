@@ -1,0 +1,18 @@
+name: music-matters
+title: Music Matters
+description: "Local-first DJ/producer studio for macOS. Ingest, stems, loops, isolation. Loopback only."
+avatar:
+  silhouette: sun
+  color: fuchsia
+soul: SOUL.md
+skills:
+  - music-matters
+toolsets:
+  - terminal
+  - web
+groups:
+  - studio
+mentions:
+  - nocturne
+agent:
+  bot_mode_protocol: true

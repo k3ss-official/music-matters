@@ -75,3 +75,7 @@ backend/demix/
 music_matters.db
 /shazamlibrary.csv
 .claude/settings.local.json
+
+# Hermes personal overrides
+AGENTS.override.md
+.hermes/*.local.yaml
