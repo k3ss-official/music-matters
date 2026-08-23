@@ -1,37 +1,49 @@
-# Demucs Operations
+# Stem separation (Demucs)
 
-## Model Overview
-- Default model: `htdemucs_ft` (fine-tuned 6-stem)
-- Device: `mps` (Apple Silicon GPU). Fallback to `cpu` when GPU unavailable.
-- Sample rate: 48 kHz; chunk size tuned to avoid VRAM spikes on M4.
+Separation runs **inside the ingest pipeline**, not as a standalone worker. Default model is `htdemucs_6s` (six stems) on Apple Silicon `mps`.
 
-## CLI Usage
-```bash
-python scripts/run_demucs.py \
-  --input "/Volumes/hotblack-2tb/mm-files/library/originals/example.wav" \
-  --output "/Volumes/hotblack-2tb/mm-files/stems/separated" \
-  --model htdemucs_ft \
-  --device mps
+Stems: `drums`, `bass`, `vocals`, `guitar`, `piano`, `other`.
+
+## How it actually runs
+
+`backend/app/services/pipeline.py` (stage `separation`):
+
+1. Prefer `demucs-mlx` on Apple Silicon if that extra is installed
+2. Else official `demucs` CLI / Python API via `backend/app/services/processing/stem_separator.py` and `audio_processor.py`
+3. Else HPSS fallback (harmonic/percussive) so the rest of the pipeline can continue
+
+Output: `$MUSIC_LIBRARY/stems/<slug>/`. First run downloads weights into `HF_HOME` (`~/.cache/huggingface`, ~4 GB).
+
+Config (`backend/.env` or environment):
+
+```env
+DEMUCS_MODEL=htdemucs_6s
+DEMUCS_DEVICE=mps    # mps | cuda | cpu
+DEMUCS_SHIFTS=1      # 1 = faster; 2+ = slightly cleaner, slower
+HF_HOME=~/.cache/huggingface
 ```
 
-## Service Behaviour
-- `DemucsService` validates input audio, ensures output directories exist, and wraps the official `demucs` command.
-- Separation metadata (stem paths, duration, config) is returned to the caller so downstream orchestration can log the job.
-- Re-running on the same slug is idempotent: existing stems are reused unless `--force` is passed.
+## Devices
 
-## Performance Notes
-- Apple M4 + `mps` backend averages ~1.3x realtime on 6-stem runs (depends on track length).
-- For batch jobs, stagger start times to avoid saturating unified memory.
-- Use `--float32` when targeting compatibility-critical exports; default is FP16 for speed.
+| Device | When |
+|---|---|
+| `mps` | Apple Silicon (default) |
+| `cuda` | NVIDIA |
+| `cpu` | Anything else; slow |
+
+Jobs are capped by `MAX_CONCURRENT_JOBS` (default 3). Do not fire several 6-stem jobs at once on a 16 GB Mac — unified memory will spike.
+
+## What this is not
+
+- Isolation Workspace substems are **FFT bands** on a sliced region, not a second Demucs pass. See [isolation-workspace.md](isolation-workspace.md).
+- `scripts/run_demucs.py` is leftover CLI that imports a removed `app.core.settings` module. Do not use it; ingest a track in the app instead.
+- `docs/archive/` MLX notes are a 2026 research draft (Roformer / SAM Audio). Not wired.
 
 ## Troubleshooting
-| Symptom | Likely Cause | Fix |
-|---------|--------------|-----|
-| `RuntimeError: MPS backend out of memory` | Concurrent runs oversubscribed GPU | Reduce `--jobs` concurrency or move job to CPU |
-| `FileNotFoundError: demucs` | Package not installed | `pip install demucs` (included in `pyproject` dependencies) |
-| Auditory artifacts / ringing | Input loudness not normalised | Re-run Stage 1 normalisation before separation |
 
-## Future Enhancements
-- Hook Demucs into a Celery or Dramatiq worker pool for queue-based processing.
-- Experiment with Hybrid Transformer Demucs (HTDemucs) vs. `demucs_quantized` for faster preview renders.
-- Cache stem hashes for dedupe; share across remixes referencing identical sources.
+| Symptom | Fix |
+|---|---|
+| First job hangs 10+ min | Model download. Watch `~/Library/Logs/Music Matters.log` or the Terminal |
+| `MPS backend out of memory` | Wait for other jobs; drop `MAX_CONCURRENT_JOBS` to 1; or `DEMUCS_DEVICE=cpu` |
+| `demucs` missing | `pip install -e .` from the clone (package lists `demucs>=4`) |
+| Stems folder empty, status error | Open the job in Processing; HPSS may have run instead — re-run after fixing device |
