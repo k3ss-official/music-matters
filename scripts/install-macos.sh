@@ -2,7 +2,7 @@
 # Install Music Matters as a double-clickable app in ~/Applications.
 #
 # Usage (from a clone — do NOT clone into ~/music-matters, that's the audio library):
-#   git clone https://github.com/k3ss-official/music-matters.git ~/Developer/music-matters
+#   git clone https://github.com/anwhelan01/music-matters.git ~/Developer/music-matters
 #   cd ~/Developer/music-matters
 #   ./scripts/install-macos.sh
 #

@@ -100,7 +100,7 @@ Phase 4  ░░░░░░░░░░  0%    — ACE-Step, MIDI, chord overlay
 
 ```bash
 conda activate music-matters
-cd ~/k3ss-official/music-matters
+cd ~/anwhelan01/music-matters
 ./start.sh
 # Backend:  http://localhost:8010/api/docs
 # Frontend: http://localhost:5173

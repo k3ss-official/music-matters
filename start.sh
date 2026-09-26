@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
 #  Music Matters — Single-command local dev launcher
-#  Starts:  FastAPI backend  →  http://localhost:8010
-#           Vite frontend    →  http://localhost:5173
+#  Starts:  FastAPI backend  →  http://127.0.0.1:8010
+#           Vite frontend    →  http://127.0.0.1:5173
 #
 #  Usage:
-#    chmod +x start.sh   (first time only)
-#    ./start.sh
+#    ./start.sh          Vite UI + API
+#    ./start.sh --app    built UI served by FastAPI on :8010
 #
-#  Stop:  Ctrl+C  (kills both processes)
+#  Stop:  Ctrl+C  (kills both processes). App mode: power button in the header.
 # ─────────────────────────────────────────────────────────────────────────────
 
 set -e

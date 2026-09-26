@@ -1,24 +1,23 @@
-# Music Matters Documentation
+# Music Matters — documentation
 
-This directory captures how the Music Matters stack is wired together. Start here when orienting a new agent or contributor.
+Local-first DJ / producer studio. Code lives in this repo. Audio lives in `~/music-matters` (override with `MUSIC_LIBRARY`). The API binds `127.0.0.1` only.
 
-## Quick Links
-- `ARCHITECTURE.md` – workspace layout, storage volumes, and service boundaries
-- `PIPELINE.md` – ingest → analysis → separation → loop → project assembly sequence
-- `AGENTS.md` – active MCP/Agents SDK roles, scopes, and safety clauses
-- `API-SPEC.md` – REST entry points for automation clients
-- `DEMUCS.md` – stem separation notes, models, and GPU guidance
+| Doc | What it covers |
+|---|---|
+| [INSTALL.md](INSTALL.md) | Clone, Mac app, Terminal, requirements |
+| [USAGE.md](USAGE.md) | First track, views, library chips |
+| [MACOS-APP.md](MACOS-APP.md) | How `~/Applications/Music Matters.app` is built and launched |
+| [LIBRARY.md](LIBRARY.md) | On-disk layout of `~/music-matters` |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Stack, layout, data flow |
+| [PIPELINE.md](PIPELINE.md) | Ingest → analysis → stems → loops → project |
+| [API.md](API.md) | REST + SSE as the app actually exposes them |
+| [isolation-workspace.md](isolation-workspace.md) | Isolation workspace (region → 5-band split → export) |
+| [SECURITY.md](SECURITY.md) | Path jail, localhost bind, kill allowlist |
+| [DEVELOPMENT.md](DEVELOPMENT.md) | Tests, CI, conventions |
+| [DEMUCS.md](DEMUCS.md) | Stem models and devices |
 
-## Environment Pillars
-- `/Volumes/deep-1t/Users/k3ss/projects/music-matters` – fast SSD for code, virtualenvs, and transient artefacts
-- `/Volumes/hotblack-2tb/mm-files` – durable audio library storing originals, stems, loops, caches, and exports
+Live OpenAPI: `http://127.0.0.1:8010/api/docs` while the app is running.
 
-The repo focuses on code, configuration, and orchestration documents. All heavy audio assets stay on the `hotblack-2tb` volume and remain outside version control.
+Agent briefs: [AGENTS.md](../AGENTS.md), [CLAUDE.md](../CLAUDE.md).
 
-## Contributing Workflow
-1. Update `config/settings.yaml` to point to your local volumes.
-2. Run `uvicorn app.main:app --reload` for the HTTP interface or `scripts/run_demucs.py` for CLI separations.
-3. Document new behaviours in the relevant file inside `docs/` and register any new agents.
-4. Capture findings in the log stream at `/mm-files/cache/log-YYYYMMDD.json` for traceability.
-
-“Do no harm. Never lie. If you don’t know — say so.”
+`docs/archive/` is historical (old volume paths, `/api/v1`, agent-orchestrator drafts). Do not treat it as current.

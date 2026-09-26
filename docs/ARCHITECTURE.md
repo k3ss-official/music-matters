@@ -1,65 +1,80 @@
 # Architecture
 
-## System Vision
-Music Matters is an agent-orchestrated production environment. FastAPI exposes the workflow over HTTP, while OpenAI Agents + MCP govern long-running tasks and filesystem actions. Demucs, Librosa, and auxiliary tooling sit behind service interfaces so the automation surface stays clean and auditable.
+Music Matters is a **local-first** FastAPI + React studio. One user, one machine, loopback only.
 
-## Component Stack
-| Layer            | Responsibilities                                       | Tooling                               |
-|------------------|--------------------------------------------------------|----------------------------------------|
-| API & Orchestration | Task queue entrypoints, job status, logging            | FastAPI, Pydantic, HTTPX               |
-| Separation       | GPU-accelerated six-stem renders                       | Demucs v4 (PyTorch MPS)                |
-| Analysis         | BPM, key, waveform, and bar map extraction             | Librosa, Essentia, NumPy               |
-| Looping          | Beat-aligned slicing, tagging, FL Studio export prep   | Pydub, custom quantisation logic       |
-| Metadata Store   | Track provenance, dedupe signatures, agent actions     | SQLite, JSON cache                     |
-| Agent Control    | Declarative command surface with scoped permissions    | OpenAI Agents SDK, MCP (filesystem, browser) |
-
-## Directory Layout
 ```
-/Volumes/deep-1t/Users/k3ss/projects/music-matters
-├── app/                # FastAPI app + service layers
-├── config/             # Checked-in templates (*.example.*)
-├── docs/               # Architecture, pipeline, agent manifests
-├── scripts/            # Operational helpers (Demucs runner, linters)
-├── tests/              # Pytest suites
-└── .venv/              # Local virtual environment (ignored)
-
-/Volumes/hotblack-2tb/mm-files
-├── library/
-│   ├── originals/      # Ingested sources (free-first policy)
-│   ├── processed/      # Mastered or normalised mixes
-│   └── archive/        # Retired inputs
-├── stems/
-│   ├── separated/      # Demucs six-stem bundles per track
-│   └── sample-packs/   # External or purchased stems
-├── loops/
-│   ├── generated/      # Auto-sliced loops w/ metadata annotations
-│   └── custom/         # Hand-curated collections
-├── projects/
-│   ├── fl-studio/      # Auto-generated FLP sessions
-│   └── exports/        # Final bounces
-├── cache/              # Metadata JSON, waveform fingerprints, agent logs
-└── downloads/          # yt-dlp / SC payloads awaiting ingestion
+┌──────────────────┐     /api + /assets      ┌─────────────────────┐
+│  UI              │ ◄──────────────────────► │  FastAPI            │
+│  React 18 / Vite │   same origin in app     │  127.0.0.1:8010     │
+│  WaveSurfer v7   │                          │  uvicorn            │
+└──────────────────┘                          └─────────┬───────────┘
+                                                        │
+                          ┌─────────────────────────────┼─────────────────────────────┐
+                          ▼                             ▼                             ▼
+                   SQLite WAL                    MUSIC_LIBRARY                   optional ML
+                   library.db                    copies / stems /                Demucs, MLX
+                   tracks, loops, jobs           loops / isolation               analysis
 ```
 
-## Agent Surfaces
-- **REST API Agent** — exposes `/api/v1/*` endpoints; orchestrates long running jobs, returns job IDs.
-- **FileOps Agent** — server-filesystem MCP with access to the project repo (`deep-1t`) and audio library (`hotblack-2tb`). Can read/write touched assets, never create new directories outside scope.
-- **Fetch Agent** — Python adapter bridging yt-dlp and SoundCloud API, always preferring free sources before paid APIs.
-- **Compute Runner** — dispatches Demucs, Librosa, Essentia workloads; produces stem bundles and `metadata.json` payloads.
-- **Browser Agent** — Chrome DevTools MCP used for dashboards or scraping metadata when API access is unavailable.
-- **Pool Connector Agent** *(Phase 2 placeholder)* — Beatport, BPM Supreme, ZipDJ connectors. Disabled until production license keys are stored.
+## Layout
 
-## Logging & Audit
-Every agent writes a structured record (timestamp, agent, action, path, status, metrics) to `/mm-files/cache/log-YYYYMMDD.json`. These logs are source-of-truth for provenance and debugging. Long-running tasks should stream progress updates over WebSockets for UI clients, while metadata is stored in SQLite for fast lookup.
+```
+music-matters/                 # this clone
+├── backend/app/               # FastAPI (run with cwd=backend or PYTHONPATH=backend)
+│   ├── main.py                # lifespan, path jail, SPA mount of frontend/dist
+│   ├── config.py              # pydantic-settings
+│   ├── security.py            # confined_file, safe_name, localhost helpers
+│   ├── api/routes/            # REST
+│   └── services/              # pipeline, db, isolation, analysis, demucs
+├── frontend/                  # React 18 + Tailwind 3 + WaveSurfer
+│   ├── src/                   # live UI (Library, workspace, isolation)
+│   ├── src/_unused/           # archived components, tsc-excluded
+│   └── src-tauri/             # optional Tauri v2 shell
+├── scripts/
+│   ├── install-macos.sh
+│   ├── macos-app/             # Info.plist + launcher
+│   └── lib-env.sh             # conda / venv resolver
+├── backend/tests/             # pytest (no live Demucs / YouTube)
+└── docs/
+```
 
-## Safety Model
-1. Do not delete or export without explicit human approval.
-2. Never run commands outside declared runtimes.
-3. Keep heavy payloads outside the repository; push only code, configs, and docs.
-4. Treat all environment variables as placeholders until human operator injects secrets locally.
+## Runtime modes
 
-## Roadmap Highlights
-1. Implement an ingestion queue that normalises audio, stores provenance, and triggers downstream jobs automatically.
-2. Introduce background workers (Celery, RQ, or a light custom queue) to offload Demucs + analysis from the main FastAPI process.
-3. Tighten metadata schema (track UUIDs, BPM confidence, key detection heuristics, licensing flags).
-4. Automate FL Studio project templating once stems and loops are available.
+| Mode | Command | UI | API |
+|---|---|---|---|
+| Dev | `./start.sh` | Vite `127.0.0.1:5173`, proxies `/api` | uvicorn `--reload` |
+| App | `./start.sh --app` or the `.app` | FastAPI serves `frontend/dist` | uvicorn, no reload |
+
+## Persistence
+
+SQLite at `$MUSIC_LIBRARY/library.db` (`~/music-matters/library.db` by default).
+
+- `journal_mode=WAL`, `foreign_keys=ON`, `busy_timeout=5000`
+- Tables: `tracks`, `loop_records`, `jobs`
+- Pipeline hydrates into memory on boot; incomplete jobs marked failed after restart
+
+Isolation sessions are JSON files:
+
+`$MUSIC_LIBRARY/Library/Isolation/<uuid>/session.json`
+
+plus `extracted_region.wav`, `sub_N.wav`, `export.wav`.
+
+## Pipeline (happy path)
+
+1. **Ingest** — URL (yt-dlp), search query, or local file **copied** into `downloads/`
+2. **Analysis** — BPM, key, duration, phrases (allin1 / librosa path)
+3. **Separation** — Demucs `htdemucs_6s` (MPS / CUDA / CPU), HPSS fallback
+4. **Loops** — optional beat-aligned slices
+5. **Project** — `session.json` scaffold
+
+Jobs run under `asyncio.Semaphore(MAX_CONCURRENT_JOBS)` (default 3). Progress is pushed over SSE `GET /api/stream/{job_id}/stream`.
+
+## Frontend
+
+No client-side router. `App.tsx` view machine: `library | upload | processing | workspace | isolation`.
+
+Axios `baseURL: '/api'`. Job payloads are snake_case on the wire; `mapJob()` converts to camelCase.
+
+## What this is not
+
+Not SaaS. No accounts, no public bind, no multi-tenant DB. Security model is “this is your Mac.”

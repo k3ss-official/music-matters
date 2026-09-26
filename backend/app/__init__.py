@@ -4,4 +4,4 @@ Combining the best of search, analysis, stem separation, and intelligent samplin
 """
 
 __version__ = "2.0.0"
-__author__ = "k3ss-official"
+__author__ = "anwhelan01"

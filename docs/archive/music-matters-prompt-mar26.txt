@@ -1,6 +1,6 @@
 You are an expert Python developer specializing in high-performance audio applications and machine learning, with deep experience in FastAPI, Celery, MLX, and PyTorch.
 
-Analyze the GitHub repository: https://github.com/k3ss-official/music-matters
+Analyze the GitHub repository: https://github.com/anwhelan01/music-matters
 
 This is a functional audio stem separation tool that already uses FastAPI, SQLite, librosa, a Demucs model (htdemucs_6s), yt-dlp, soundfile, and numpy. The goal is to evolve this prototype into a State-of-the-Art (SOTA), production-ready application optimized for Apple Silicon.
 

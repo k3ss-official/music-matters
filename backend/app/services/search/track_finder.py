@@ -212,7 +212,7 @@ class TrackFinder:
             url = f"https://musicbrainz.org/ws/2/recording?query={urllib.parse.quote(query)}&fmt=json&limit=50"
             
             req = urllib.request.Request(url, headers={
-                "User-Agent": "DJLibraryTool/1.0 (github.com/k3ss-official)"
+                "User-Agent": "DJLibraryTool/1.0 (github.com/anwhelan01)"
             })
             
             with urllib.request.urlopen(req, timeout=10) as response:
