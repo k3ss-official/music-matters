@@ -2,7 +2,7 @@
 
 Status: **usable local studio** on macOS. Not a hosted product.
 
-Repo: [anwhelan01/music-matters](https://github.com/anwhelan01/music-matters)
+Repo: [k3ss-official/music-matters](https://github.com/k3ss-official/music-matters)
 
 ## Done
 

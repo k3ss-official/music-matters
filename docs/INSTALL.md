@@ -1,13 +1,13 @@
 # Install
 
-Repo: [anwhelan01/music-matters](https://github.com/anwhelan01/music-matters)
+Repo: [k3ss-official/music-matters](https://github.com/k3ss-official/music-matters)
 
 Do **not** clone into `~/music-matters`. That directory is the default **audio library**, not the source tree.
 
 ## Mac app (recommended)
 
 ```bash
-git clone https://github.com/anwhelan01/music-matters.git ~/Developer/music-matters
+git clone https://github.com/k3ss-official/music-matters.git ~/Developer/music-matters
 cd ~/Developer/music-matters
 ./scripts/install-macos.sh
 open ~/Applications/Music\ Matters.app

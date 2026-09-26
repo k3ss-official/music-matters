@@ -18,7 +18,7 @@ Ingest → analyse → stem-separate → loop edit → isolation → DAW export.
 
 **Clone:** `~/Developer/music-matters` — never `~/music-matters` (that is the audio library).
 
-**GitHub:** https://github.com/anwhelan01/music-matters
+**GitHub:** https://github.com/k3ss-official/music-matters
 
 ## Setup
 

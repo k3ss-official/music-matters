@@ -2,7 +2,7 @@
 
 _Last updated: 2026-08-23_
 
-Repo: [anwhelan01/music-matters](https://github.com/anwhelan01/music-matters)  
+Repo: [k3ss-official/music-matters](https://github.com/k3ss-official/music-matters)  
 Docs: [docs/README.md](docs/README.md)
 
 ## Overview
@@ -13,7 +13,7 @@ FastAPI (`127.0.0.1:8010`) + React 18 / Vite / Tailwind. SQLite WAL. Apple Silic
 ## Run it
 
 ```bash
-git clone https://github.com/anwhelan01/music-matters.git ~/Developer/music-matters
+git clone https://github.com/k3ss-official/music-matters.git ~/Developer/music-matters
 cd ~/Developer/music-matters
 ./scripts/install-macos.sh
 open ~/Applications/Music\ Matters.app

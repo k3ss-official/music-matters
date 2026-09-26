@@ -8,7 +8,7 @@ Local-first DJ / producer studio. One user, one Mac, loopback only.
 |---|---|
 | Clone (source) | `~/Developer/music-matters` recommended. **Never** `~/music-matters`. |
 | Audio library | `~/music-matters` (`MUSIC_LIBRARY`) — SQLite, copies, stems, isolation |
-| GitHub | https://github.com/anwhelan01/music-matters |
+| GitHub | https://github.com/k3ss-official/music-matters |
 | Desktop app | `~/Applications/Music Matters.app` via `./scripts/install-macos.sh` |
 
 ## Stack

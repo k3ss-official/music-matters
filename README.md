@@ -23,7 +23,7 @@ This is a **localhost app for you**, not a hosted service. The API binds `127.0.
 Do **not** clone into `~/music-matters` — that path is the default **audio library**. Clone next to it:
 
 ```bash
-git clone https://github.com/anwhelan01/music-matters.git ~/Developer/music-matters
+git clone https://github.com/k3ss-official/music-matters.git ~/Developer/music-matters
 cd ~/Developer/music-matters
 ./scripts/install-macos.sh
 open ~/Applications/Music\ Matters.app
