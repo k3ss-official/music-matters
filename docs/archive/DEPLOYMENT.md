@@ -19,7 +19,7 @@ Since you have **Genspark Pro**, you can deploy directly through the Genspark in
 
 1. **Go to your Genspark dashboard**
 2. **Click on "Deploy" or "Cloudflare Pages"**
-3. **Connect to GitHub**: https://github.com/anwhelan01/music-matters
+3. **Connect to GitHub**: https://github.com/k3ss-official/music-matters
 4. **Configure build settings**:
    - **Build command**: `cd frontend && npm install && npm run build`
    - **Build output directory**: `frontend/dist`
@@ -315,4 +315,4 @@ You'll have a beautiful, production-ready DJ tool live in minutes! 🚀🎧
 
 ---
 
-**Questions?** Check the GitHub repo: https://github.com/anwhelan01/music-matters
+**Questions?** Check the GitHub repo: https://github.com/k3ss-official/music-matters
