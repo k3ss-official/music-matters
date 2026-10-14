@@ -268,6 +268,7 @@ class IsolationService:
             four_bars = (60.0 / max(bpm, 1.0)) * 16.0
             region_end = round(min(parent_dur, max(1.0, four_bars)), 3)
 
+        default_loop_len = round(region_end - region_start, 3) if region_end > region_start else 4.0
         session = IsolationSession(
             id=session_id,
             source_track_id=source_track_id,
@@ -285,7 +286,8 @@ class IsolationService:
             selected_substem_ids=[],
             active_eq_target=None,
             audition_mode="full_context",
-            export_settings=export_settings or ExportSettings(bpm=bpm),
+            export_settings=export_settings
+            or ExportSettings(bpm=bpm, loop_length_seconds=default_loop_len),
             created_at=now,
             updated_at=now,
         )
@@ -491,6 +493,28 @@ class IsolationService:
             )
             sr = target_sr
 
+        # Apply export_settings loop_length_seconds and grid_snap
+        cur_sec = float(audio.shape[0] / sr) if sr > 0 else 0.0
+        target_sec = (
+            float(es.loop_length_seconds)
+            if (es.loop_length_seconds and es.loop_length_seconds > 0)
+            else cur_sec
+        )
+        bpm_val = float(es.bpm or session.bpm or 120.0)
+        if es.grid_snap in {"1_bar", "2_bars", "4_bars"} and bpm_val > 0 and target_sec > 0:
+            bars = {"1_bar": 1, "2_bars": 2, "4_bars": 4}[es.grid_snap]
+            snap_unit = (60.0 / bpm_val) * 4.0 * bars
+            target_sec = max(snap_unit, round(target_sec / snap_unit) * snap_unit)
+
+        if target_sec > 0 and sr > 0 and audio.size > 0:
+            target_frames = max(1, int(round(target_sec * sr)))
+            if audio.shape[0] > target_frames:
+                audio = audio[:target_frames]
+            elif audio.shape[0] < target_frames:
+                pad_len = target_frames - audio.shape[0]
+                pad_spec = ((0, pad_len),) + ((0, 0),) * (audio.ndim - 1)
+                audio = np.pad(audio, pad_spec)
+
         bits = int(es.bit_depth or 24)
         if fmt == "flac":
             subtype = "PCM_16" if bits == 16 else "PCM_24"
@@ -563,8 +587,34 @@ class IsolationService:
 
         info = sf.info(str(src))
         sr = int(info.samplerate)
-        start = max(0, int(float(session.region_start) * sr))
-        end = max(start + 1, int(float(session.region_end) * sr))
+        total_frames = int(info.frames)
+        if total_frames <= 0 or sr <= 0:
+            return {
+                "session_id": session_id,
+                "status": "placeholder",
+                "implementation_status": "placeholder",
+                "region_start": session.region_start,
+                "region_end": session.region_end,
+                "message": "Parent stem contains no audio frames",
+            }
+        total_dur = total_frames / sr
+        reg_start = float(session.region_start)
+        reg_end = float(session.region_end)
+        if reg_start < 0.0 or reg_start >= total_dur:
+            reg_start = 0.0
+        if reg_end <= reg_start or reg_end > total_dur:
+            bpm_val = float(session.bpm or 120.0)
+            four_bars = (60.0 / bpm_val) * 16.0 if bpm_val > 0 else 8.0
+            reg_end = min(total_dur, reg_start + four_bars)
+            if reg_end <= reg_start:
+                reg_end = total_dur
+        session.region_start = round(reg_start, 4)
+        session.region_end = round(reg_end, 4)
+        self._cache[session_id] = session
+        _save_session(session)
+
+        start = max(0, min(int(round(reg_start * sr)), total_frames - 1))
+        end = max(start + 1, min(int(round(reg_end * sr)), total_frames))
         data, _ = sf.read(str(src), start=start, stop=end, always_2d=False)
         if getattr(data, "size", 0) == 0:
             data = np.zeros(sr, dtype="float32")

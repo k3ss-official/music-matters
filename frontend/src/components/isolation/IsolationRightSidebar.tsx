@@ -96,14 +96,17 @@ export function IsolationRightSidebar({ session, onSessionUpdate }: Props) {
     setExportMessage('');
     try {
       const result = await exportLoop(session.id);
+      if (!result.output_path || result.status === 'placeholder') {
+        setExportState('error');
+        setExportMessage(result.message || 'Split a real stem before exporting');
+        return;
+      }
       setExportState('success');
       setExportMessage(result.message);
-      if (result.output_path) {
-        const a = document.createElement('a');
-        a.href = `/api/download-file?path=${encodeURIComponent(result.output_path)}`;
-        a.download = result.output_path.split('/').pop() || 'export.wav';
-        a.click();
-      }
+      const a = document.createElement('a');
+      a.href = `/api/download-file?path=${encodeURIComponent(result.output_path)}`;
+      a.download = result.output_path.split('/').pop() || 'export.wav';
+      a.click();
     } catch (e: unknown) {
       setExportState('error');
       setExportMessage(e instanceof Error ? e.message : 'Export failed');

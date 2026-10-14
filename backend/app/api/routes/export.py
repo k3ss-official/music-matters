@@ -242,7 +242,11 @@ async def export_ableton(request: AbletonExportRequest):
     # Fallback: use all WAV files in stems dir
     if not stem_files and stems_dir.exists():
         for wav in stems_dir.glob("*.wav"):
-            stem_files[wav.stem] = str(wav)
+            try:
+                safe_wav = confined_file(settings.MUSIC_LIBRARY, wav, suffixes=AUDIO_SUFFIXES)
+                stem_files[wav.stem] = str(safe_wav)
+            except HTTPException:
+                continue
 
     if not stem_files:
         raise HTTPException(status_code=400, detail="No stem files found")

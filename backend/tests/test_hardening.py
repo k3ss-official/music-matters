@@ -295,3 +295,54 @@ def test_daw_and_ableton_exports_work_and_enforce_confinement(tmp_path: Path):
         proj_xml = zf.read("project.xml").decode("utf-8")
         assert "<AudioClip" in proj_xml
         assert "Export Tune - drums" in proj_xml
+
+    # Multi-stem custom loop with mixed sample rates (44100 Hz mono + 48000 Hz stereo) resamples accurately
+    sr1, sr2 = 44100, 48000
+    t1 = np.linspace(0, 1.0, sr1, endpoint=False)
+    t2 = np.linspace(0, 1.0, sr2, endpoint=False)
+    s1 = (0.3 * np.sin(2 * np.pi * 220 * t1)).astype("float32")
+    s2 = np.column_stack([
+        (0.3 * np.sin(2 * np.pi * 440 * t2)).astype("float32"),
+        (0.3 * np.sin(2 * np.pi * 440 * t2)).astype("float32"),
+    ])
+    sf.write(str(stems_dir / "a.wav"), s1, sr1)
+    sf.write(str(stems_dir / "b.wav"), s2, sr2)
+    rec.stems = ["a.wav", "b.wav"]
+
+    mixed_loop = client.post(
+        f"/api/library/tracks/{track_id}/loops/custom",
+        json={"start_time": 0.0, "end_time": 0.5, "stems": ["a", "b"]},
+    )
+    assert mixed_loop.status_code == 200, mixed_loop.text
+    loop_audio_resp = client.get(mixed_loop.json()["file_url"])
+    assert loop_audio_resp.status_code == 200
+    import io
+    bounced, bounced_sr = sf.read(io.BytesIO(loop_audio_resp.content))
+    assert bounced_sr == sr1
+    expected = (0.3 * np.sin(2 * np.pi * 220 * t1[: sr1 // 2]) + 0.3 * np.sin(2 * np.pi * 440 * t1[: sr1 // 2]))
+    corr = float(np.corrcoef(bounced[:, 0], expected)[0, 1])
+    assert corr > 0.99
+
+    # Ableton glob fallback rejects symlinks pointing outside MUSIC_LIBRARY
+    sym_tid = uuid4()
+    sym_slug = f"sym-{sym_tid.hex[:6]}"
+    sym_dir = settings.resolved_stems_dir / sym_slug
+    sym_dir.mkdir(parents=True, exist_ok=True)
+    outside_target = tmp_path / "secret.wav"
+    sf.write(str(outside_target), tone, sr)
+    (sym_dir / "drums.wav").symlink_to(outside_target)
+    pipeline._tracks[sym_tid] = TrackRecord(
+        track_id=sym_tid,
+        title="Symlink Track",
+        artist="Attacker",
+        status="stems_ready",
+        created_at=datetime.now(timezone.utc),
+        slug=sym_slug,
+        stems_dir=sym_dir,
+        stems=["drums.wav"],
+    )
+    sym_als = client.post(
+        "/api/export/ableton",
+        json={"track_id": str(sym_tid), "stems": ["nonexistent"]},
+    )
+    assert sym_als.status_code == 400

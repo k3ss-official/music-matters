@@ -1112,8 +1112,8 @@ class PipelineOrchestrator:
             for path in selected_paths:
                 info = sf.info(str(path))
                 sr = info.samplerate
-                s_frame = max(0, min(int(start_time * sr), info.frames))
-                e_frame = max(s_frame, min(int(end_time * sr), info.frames))
+                s_frame = max(0, min(int(round(start_time * sr)), info.frames))
+                e_frame = max(s_frame, min(int(round(end_time * sr)), info.frames))
                 if e_frame <= s_frame:
                     continue
                 chunk, sr = sf.read(str(path), start=s_frame, stop=e_frame, dtype="float32", always_2d=True)
@@ -1121,6 +1121,20 @@ class PipelineOrchestrator:
                     mixed = chunk
                     target_sr = sr
                 else:
+                    if sr != target_sr and chunk.shape[0] > 0:
+                        import math
+                        from scipy.signal import resample_poly
+
+                        g = math.gcd(target_sr, sr)
+                        chunk = np.asarray(
+                            resample_poly(chunk, target_sr // g, sr // g, axis=0),
+                            dtype="float32",
+                        )
+                    if mixed.shape[1] != chunk.shape[1]:
+                        if mixed.shape[1] == 1 and chunk.shape[1] == 2:
+                            mixed = np.repeat(mixed, 2, axis=1)
+                        elif chunk.shape[1] == 1 and mixed.shape[1] == 2:
+                            chunk = np.repeat(chunk, 2, axis=1)
                     min_len = min(len(mixed), len(chunk))
                     mixed = mixed[:min_len] + chunk[:min_len]
 

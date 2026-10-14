@@ -233,4 +233,17 @@ def test_session_hydrates_from_track_and_exports_custom_format():
     assert out_path.is_file()
     info = sf.info(str(out_path))
     assert info.samplerate == 48000
+    # 2.0s loop_length_seconds with grid_snap="1_bar" at 125 BPM (1 bar = 1.92s) -> 1.92s
+    assert abs(info.duration - 1.92) < 0.05
+
+    # Out-of-bounds / inverted region_start=5.0, region_end=1.0 on a 2.0s parent normalizes and extracts non-silent audio
+    client.patch(f"/api/isolation/session/{sid}", json={"region_start": 5.0, "region_end": 1.0})
+    extracted = client.post(f"/api/isolation/session/{sid}/extract-region")
+    assert extracted.status_code == 200
+    ext_data = extracted.json()
+    assert ext_data["status"] == "extracted"
+    assert ext_data["region_start"] == 0.0
+    assert ext_data["region_end"] > 0.0
+    sliced_samples, _ = sf.read(ext_data["output_path"])
+    assert float(np.max(np.abs(sliced_samples))) > 0.1
 
