@@ -640,7 +640,9 @@ function App() {
                         </div>
                         <div className="min-w-0">
                           <div className="text-sm font-medium text-white truncate capitalize">{t.title}</div>
-                          <div className="text-[10px] text-white/30 font-mono">{Math.round(t.bpm)} BPM  {t.musical_key}</div>
+                          <div className="text-[10px] text-white/30 font-mono">
+                            {t.bpm ? `${Math.round(t.bpm)} BPM` : '— BPM'}  {t.musical_key || ''}
+                          </div>
                         </div>
                       </button>
                     ))}
@@ -805,12 +807,20 @@ function App() {
       {shazamImportOpen && (
         <ShazamImport
           onClose={() => setShazamImportOpen(false)}
-          onIngest={(query, title) => {
+          onIngest={(query) => {
             setShazamImportOpen(false);
             api.enqueueIngest({ source: query, tags: ['shazam'], collection: 'shazam' })
               .then(job => {
-                setActiveJob({ jobId: job.job_id, status: 'running', progress: 0, stages: [], currentStage: 'ingest' } as any);
+                setSelectedTrackId(job.track_id);
+                setActiveJob({
+                  jobId: job.job_id,
+                  trackId: job.track_id,
+                  status: 'queued',
+                  stages: [],
+                  currentStage: 'ingest',
+                });
                 setView('processing');
+                subscribeToActiveJob(job.job_id, job.track_id);
               })
               .catch(err => console.error('Shazam ingest failed:', err));
           }}

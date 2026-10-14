@@ -338,12 +338,32 @@ class PipelineOrchestrator:
     def delete_track(self, track_id: UUID) -> None:
         if track_id not in self._tracks:
             raise KeyError(f"Track {track_id} not found")
-        # delete track folder and clear it from memory
+        # Cancel and remove any jobs associated with this track
+        for job_id, job in list(self._jobs.items()):
+            if job.track_id == track_id:
+                if job.task and not job.task.done():
+                    job.task.cancel()
+                del self._jobs[job_id]
+                try:
+                    db.delete_job(job_id)
+                except Exception:
+                    pass
+
+        # Delete track folders and staged download copy (if confined inside downloads_dir)
         try:
             track = self._tracks[track_id]
-            for d in [track.stems_dir, track.loops_dir]:
+            projects_dir = settings.resolved_projects_dir / track.slug
+            for d in [track.stems_dir, track.loops_dir, projects_dir]:
                 if d and d.exists():
-                    shutil.rmtree(d)
+                    shutil.rmtree(d, ignore_errors=True)
+            if track.original_path and track.original_path.is_file():
+                try:
+                    dl_root = settings.resolved_downloads_dir.resolve()
+                    orig_resolved = track.original_path.resolve()
+                    orig_resolved.relative_to(dl_root)
+                    orig_resolved.unlink(missing_ok=True)
+                except ValueError:
+                    pass
         except Exception as e:
             logger.warning("Failed to remove track files for %s: %s", track_id, e)
         del self._tracks[track_id]
@@ -963,9 +983,12 @@ class PipelineOrchestrator:
         self, track_id: UUID, bar_length: int
     ) -> list[schemas.LoopPreview]:
         track = self._tracks.get(track_id)
-        if track is None or track.original_path is None:
+        if track is None or track.original_path is None or not track.original_path.exists():
             raise KeyError(f"Track {track_id} not registered")
-        bpm = track.bpm or 120.0
+        bpm = float(track.bpm or 120.0)
+        if bpm <= 0:
+            bpm = 120.0
+        loops_dir = track.loops_dir or self._loops_dir(track.slug)
 
         def _generate() -> list[LoopRecord]:
             info = sf.info(str(track.original_path))
@@ -974,16 +997,15 @@ class PipelineOrchestrator:
             if data.ndim > 1:
                 data = data.mean(axis=1)
             data = data.astype("float32", copy=False)
-            samples_per_beat = int(sr * (60.0 / bpm))
-            loop_samples = samples_per_beat * 4 * bar_length
-            loops_dir = self._library.loops_dir(track.slug)
+            samples_per_beat = max(1, int(sr * (60.0 / bpm)))
+            loop_samples = max(1, samples_per_beat * 4 * bar_length)
             loops_dir.mkdir(parents=True, exist_ok=True)
             records: list[LoopRecord] = []
 
             # Use stored beatgrid anchor so bars are phase-locked
             raw_anchor: float = track.metadata.get("beatgrid_anchor") or 0.0
             anchor_samples = max(0, int(raw_anchor * sr))
-            usable_samples = data.shape[0] - anchor_samples
+            usable_samples = max(0, data.shape[0] - anchor_samples)
             total_loops = max(1, usable_samples // loop_samples)
             for index in range(int(total_loops)):
                 start = anchor_samples + index * loop_samples
@@ -999,6 +1021,10 @@ class PipelineOrchestrator:
                 loop_id = f"{track.slug}-loop-{bar_length}b-{index + 1}"
                 file_path = loops_dir / f"{loop_id}.wav"
                 sf.write(file_path, slice_audio, sr)
+                slice_energy = PipelineOrchestrator._compute_energy(slice_audio, sr)
+                loop_tags = PipelineOrchestrator._auto_tags(
+                    slice_energy, bpm, track.musical_key
+                )
                 records.append(
                     LoopRecord(
                         id=loop_id,
@@ -1009,16 +1035,22 @@ class PipelineOrchestrator:
                         stem="mixdown",
                         bpm=bpm,
                         musical_key=track.musical_key,
+                        energy=slice_energy,
+                        tags=loop_tags,
                     )
                 )
             return records
 
-        loop_records = _generate()
+        loop_records = await asyncio.to_thread(_generate)
         loop_map = {loop.id: loop for loop in loop_records}
         existing = self._loop_records.get(track_id, {})
         existing.update(loop_map)
         self._loop_records[track_id] = existing
+        track.loops_dir = loops_dir
         track.loops = list(existing.keys())
+        db.save_track(track)
+        for loop_rec in loop_records:
+            db.save_loop(track_id, loop_rec)
         return [loop.to_preview(track_id) for loop in loop_records]
 
     def get_loop_audio(self, track_id: UUID, loop_id: str) -> Path:
