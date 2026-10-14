@@ -139,11 +139,11 @@ class TrackRecord:
         )
 
     def to_detail(self) -> schemas.TrackDetailResponse:
-        summary = self.to_summary()
+        summary = self.to_summary().model_dump()
+        summary["stems"] = list(self.stems)
         return schemas.TrackDetailResponse(
-            **summary.model_dump(),
+            **summary,
             metadata=self.metadata,
-            stems=self.stems,
             loops=self.loops,
             provenance={"slug": self.slug},
         )
@@ -1040,53 +1040,108 @@ class PipelineOrchestrator:
     async def extract_custom_loop(
         self, track_id: UUID, start_time: float, end_time: float, stems: list[str]
     ) -> schemas.LoopPreview:
+        from fastapi import HTTPException
+        from app.security import AUDIO_SUFFIXES, confined_file, safe_name
+
         track = self._tracks.get(track_id)
         if track is None:
             raise KeyError(f"Track {track_id} not registered")
-        if not track.original_path or not track.original_path.exists():
-            raise FileNotFoundError(f"Original audio not found for {track_id}")
+        if end_time <= start_time:
+            raise ValueError("end_time must be greater than start_time")
 
-        def _generate():
-            from app.services.processing.sample_extractor import get_sample_extractor
-
-            xtp = get_sample_extractor()
-
-            # Use sample extractor to do the bounce
-            out_path = xtp.extract_custom_sample(
-                track_path=track.original_path,
-                start_time=start_time,
-                end_time=end_time,
-                artist=track.artist or "Unknown",
-                title=track.title,
-                extract_stems=len(stems) > 0,
-            )
-
-            # Record it
+        def _generate() -> schemas.LoopPreview:
             import time
+            import uuid
+            import numpy as np
+            import soundfile as sf
 
-            loop_id = f"custom-{int(time.time())}"
-            if track.loops_dir:
-                dest = track.loops_dir / f"{loop_id}.wav"
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                import shutil
+            # Resolve stem files if stems were requested and stems_dir exists
+            selected_paths: list[Path] = []
+            if stems and track.stems_dir and track.stems_dir.exists():
+                for raw_stem in stems:
+                    clean = safe_name(raw_stem)
+                    stem_key = clean[:-4] if clean.lower().endswith(".wav") else clean
+                    for cand in (track.stems_dir / f"{stem_key}.wav", track.stems_dir / clean):
+                        if cand.is_file():
+                            selected_paths.append(
+                                confined_file(settings.MUSIC_LIBRARY, cand, suffixes=AUDIO_SUFFIXES)
+                            )
+                            break
 
-                shutil.copy(out_path, dest)
-                out_path = dest
+            if not selected_paths:
+                if not track.original_path or not track.original_path.exists():
+                    raise FileNotFoundError(f"Original audio not found for {track_id}")
+                selected_paths = [
+                    confined_file(settings.MUSIC_LIBRARY, track.original_path, suffixes=AUDIO_SUFFIXES)
+                ]
 
-            return LoopRecord(
+            mixed: np.ndarray | None = None
+            target_sr = 44100
+            for path in selected_paths:
+                info = sf.info(str(path))
+                sr = info.samplerate
+                s_frame = max(0, min(int(start_time * sr), info.frames))
+                e_frame = max(s_frame, min(int(end_time * sr), info.frames))
+                if e_frame <= s_frame:
+                    continue
+                chunk, sr = sf.read(str(path), start=s_frame, stop=e_frame, dtype="float32", always_2d=True)
+                if mixed is None:
+                    mixed = chunk
+                    target_sr = sr
+                else:
+                    min_len = min(len(mixed), len(chunk))
+                    mixed = mixed[:min_len] + chunk[:min_len]
+
+            if mixed is None or len(mixed) == 0:
+                raise ValueError("Selected time range produced an empty audio slice")
+
+            peak = float(np.max(np.abs(mixed)))
+            if peak > 0.99:
+                mixed = mixed * (0.98 / peak)
+
+            loops_dir = track.loops_dir or self._loops_dir(track.slug)
+            loops_dir.mkdir(parents=True, exist_ok=True)
+            track.loops_dir = loops_dir
+
+            loop_id = f"custom-{int(time.time())}-{uuid.uuid4().hex[:6]}"
+            out_path = loops_dir / f"{loop_id}.wav"
+            sf.write(str(out_path), mixed, target_sr)
+
+            bpm = float(track.bpm or 120.0)
+            bar_seconds = (60.0 / bpm) * 4.0 if bpm > 0 else 2.0
+            duration = max(0.0, end_time - start_time)
+            bar_count = max(1, int(round(duration / bar_seconds)))
+            start_bar = max(1, int(round(start_time / bar_seconds)) + 1)
+            rms_energy = min(1.0, float(np.sqrt(np.mean(mixed**2))) * 3.0)
+            stem_label = "+".join(s.replace(".wav", "") for s in stems) if stems else "custom"
+
+            record = LoopRecord(
                 id=loop_id,
-                label=f"Custom Loop ({end_time - start_time:.1f}s)",
+                label=f"Custom Loop ({duration:.1f}s)",
                 path=out_path,
-                start_bar=0,
-                bar_count=0,
-                stem="custom",
-                bpm=track.bpm or 120.0,
+                start_bar=start_bar,
+                bar_count=bar_count,
+                stem=stem_label,
+                bpm=bpm,
                 musical_key=track.musical_key,
-                energy=0.5,
-            ).to_preview(track.track_id)
+                energy=round(rms_energy, 3),
+                tags=["custom"],
+            )
+            existing = self._loop_records.get(track_id, {})
+            if not isinstance(existing, dict):
+                existing = {r.id: r for r in existing}
+            existing[loop_id] = record
+            self._loop_records[track_id] = existing
+            if loop_id not in track.loops:
+                track.loops.append(loop_id)
+            db.save_track(track)
+            db.save_loop(track_id, record)
+            return record.to_preview(track.track_id)
 
         try:
             return await asyncio.to_thread(_generate)
+        except HTTPException:
+            raise
         except Exception as exc:
             import logging
 

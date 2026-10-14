@@ -9,6 +9,9 @@ from typing import List
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
+from app.config import settings
+from app.security import AUDIO_SUFFIXES, confined_file
+
 router = APIRouter(prefix="/fingerprint", tags=["fingerprint"])
 
 
@@ -31,16 +34,22 @@ class FindSimilarRequest(BaseModel):
 async def generate_fingerprint(request: FingerprintRequest):
     """Generate audio fingerprint for a track."""
     from app.services.fingerprint.audio_fingerprint import get_fingerprint_service
-    
+
+    audio_path = confined_file(
+        settings.MUSIC_LIBRARY, request.audio_path, suffixes=AUDIO_SUFFIXES
+    )
+
     try:
         service = get_fingerprint_service()
-        fingerprint = service.generate_fingerprint(request.audio_path)
-        
+        fingerprint = service.generate_fingerprint(str(audio_path))
+
         return {
-            "audio_path": request.audio_path,
+            "audio_path": str(audio_path),
             "fingerprint": fingerprint,
             "success": True
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -49,20 +58,29 @@ async def generate_fingerprint(request: FingerprintRequest):
 async def compare_tracks(request: SimilarityRequest):
     """Compare similarity between two tracks."""
     from app.services.fingerprint.audio_fingerprint import get_fingerprint_service
-    
+
+    path1 = confined_file(
+        settings.MUSIC_LIBRARY, request.audio_path1, suffixes=AUDIO_SUFFIXES
+    )
+    path2 = confined_file(
+        settings.MUSIC_LIBRARY, request.audio_path2, suffixes=AUDIO_SUFFIXES
+    )
+
     try:
         service = get_fingerprint_service()
         similarity = service.compare_tracks(
-            request.audio_path1,
-            request.audio_path2
+            str(path1),
+            str(path2)
         )
-        
+
         return {
-            "track1": request.audio_path1,
-            "track2": request.audio_path2,
+            "track1": str(path1),
+            "track2": str(path2),
             "similarity_score": similarity,
             "is_similar": similarity > 0.7
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -71,20 +89,30 @@ async def compare_tracks(request: SimilarityRequest):
 async def find_similar_tracks(request: FindSimilarRequest):
     """Find similar tracks in a library."""
     from app.services.fingerprint.audio_fingerprint import get_fingerprint_service
-    
+
+    query_path = confined_file(
+        settings.MUSIC_LIBRARY, request.audio_path, suffixes=AUDIO_SUFFIXES
+    )
+    confined_library = [
+        str(confined_file(settings.MUSIC_LIBRARY, p, suffixes=AUDIO_SUFFIXES))
+        for p in request.library_paths
+    ]
+
     try:
         service = get_fingerprint_service()
         similar = service.find_similar(
-            audio_path=request.audio_path,
-            library_paths=request.library_paths,
+            audio_path=str(query_path),
+            library_paths=confined_library,
             threshold=request.threshold
         )
-        
+
         return {
-            "query_track": request.audio_path,
+            "query_track": str(query_path),
             "similar_tracks": similar,
             "count": len(similar)
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -98,7 +126,9 @@ async def recognize_track(audio: UploadFile = File(...)):
     when fpcalc is installed and ACOUSTID_API_KEY is configured in settings,
     plus the best similarity match within the local library.
     """
-    suffix = Path(audio.filename or "clip.wav").suffix or ".wav"
+    suffix = Path(audio.filename or "clip.wav").suffix.lower() or ".wav"
+    if suffix not in AUDIO_SUFFIXES:
+        raise HTTPException(status_code=400, detail=f"Unsupported audio format: {suffix}")
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp.write(await audio.read())
         tmp_path = Path(tmp.name)

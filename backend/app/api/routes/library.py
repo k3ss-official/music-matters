@@ -151,6 +151,9 @@ async def reslice_loops(
 
 @router.get("/tracks/{track_id}/loops/{loop_id}/audio")
 async def loop_audio(track_id: str, loop_id: str) -> FileResponse:
+    from app.config import settings
+    from app.security import AUDIO_SUFFIXES, confined_file
+
     track_uuid = _parse_uuid(track_id)
 
     try:
@@ -158,8 +161,8 @@ async def loop_audio(track_id: str, loop_id: str) -> FileResponse:
     except (KeyError, FileNotFoundError) as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
-    filename = path.name
-    return FileResponse(path, media_type="audio/wav", filename=filename)
+    path = confined_file(settings.MUSIC_LIBRARY, path, suffixes=AUDIO_SUFFIXES)
+    return FileResponse(path, media_type="audio/wav", filename=path.name)
 
 
 @router.post("/tracks/{track_id}/loops/custom", response_model=LoopPreview)
@@ -218,25 +221,33 @@ async def get_smart_phrases(track_id: str):
 @router.post("/tracks/{track_id}/stems/{stem_name}/midi")
 async def stem_to_midi(track_id: str, stem_name: str) -> FileResponse:
     """Convert a separated stem to MIDI using basic-pitch (CoreML / Neural Engine)."""
-    import tempfile
-    from pathlib import Path
+    from app.config import settings
+    from app.security import AUDIO_SUFFIXES, EXPORT_SUFFIXES, confined_file, safe_name
 
     track_uuid = _parse_uuid(track_id)
+    clean_stem = safe_name(stem_name)
 
     try:
-        stem_path = pipeline.get_stem_path(track_uuid, stem_name)
+        stem_path = pipeline.get_stem_path(track_uuid, clean_stem)
+        stem_path = confined_file(settings.MUSIC_LIBRARY, stem_path, suffixes=AUDIO_SUFFIXES)
+    except HTTPException:
+        raise
     except (KeyError, FileNotFoundError) as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
     try:
         from basic_pitch.inference import predict
-        import pretty_midi
 
         _, midi_data, _ = predict(str(stem_path))
-        out_dir = Path(tempfile.mkdtemp())
-        midi_path = out_dir / f"{track_id}_{stem_name}.mid"
+        out_dir = settings.MUSIC_LIBRARY / "exports" / "midi"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        midi_name = safe_name(f"{track_uuid}_{clean_stem}.mid")
+        midi_path = out_dir / midi_name
         midi_data.write(str(midi_path))
-        return FileResponse(midi_path, media_type="audio/midi", filename=midi_path.name)
+        confined_midi = confined_file(settings.MUSIC_LIBRARY, midi_path, suffixes=EXPORT_SUFFIXES)
+        return FileResponse(confined_midi, media_type="audio/midi", filename=confined_midi.name)
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(
             status_code=500,
@@ -247,32 +258,30 @@ async def stem_to_midi(track_id: str, stem_name: str) -> FileResponse:
 @router.post("/tracks/{track_id}/extract")
 async def surgical_extract(track_id: str, payload: SurgicalExtractRequest) -> FileResponse:
     """SAM Audio text-prompted surgical extraction from a track's audio."""
-    import asyncio
-    import tempfile
-    from pathlib import Path
+    import re
+    from app.config import settings
+    from app.security import AUDIO_SUFFIXES, confined_file, safe_name
 
     track_uuid = _parse_uuid(track_id)
 
-    try:
-        track = pipeline.get_track(track_uuid)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+    record = pipeline._tracks.get(track_uuid)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Track not found")
 
-    audio_path = track.metadata.get("source_path") or track.original_path
-    if audio_path is None:
+    raw_audio_path = record.metadata.get("source_path") or record.original_path
+    if raw_audio_path is None:
         raise HTTPException(status_code=404, detail="No audio path for track")
-    audio_path = str(audio_path)
+    audio_path = confined_file(settings.MUSIC_LIBRARY, raw_audio_path, suffixes=AUDIO_SUFFIXES)
 
     try:
         from mlx_audio.sts import SAMAudio, SAMAudioProcessor, save_audio
-        import mlx.core as mx
 
         processor = SAMAudioProcessor.from_pretrained("facebook/sam-audio-small")
         model = SAMAudio.from_pretrained("facebook/sam-audio-small")
 
         batch = processor(
             descriptions=[payload.description],
-            audios=[audio_path],
+            audios=[str(audio_path)],
         )
         result = model.separate_long(
             audios=batch.audios,
@@ -284,12 +293,17 @@ async def surgical_extract(track_id: str, payload: SurgicalExtractRequest) -> Fi
             ode_decode_chunk_size=50,
         )
 
-        out_dir = Path(tempfile.mkdtemp())
-        label = payload.description.replace(" ", "_")[:40]
-        out_path = out_dir / f"{track_id}_{label}.wav"
+        out_dir = settings.MUSIC_LIBRARY / "exports" / "extracts"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        label = re.sub(r"[^a-zA-Z0-9_-]", "_", payload.description)[:40].strip("_") or "extract"
+        out_name = safe_name(f"{track_uuid}_{label}.wav")
+        out_path = out_dir / out_name
         save_audio(result.target[0], str(out_path), sample_rate=model.sample_rate)
+        confined_out = confined_file(settings.MUSIC_LIBRARY, out_path, suffixes=AUDIO_SUFFIXES)
 
-        return FileResponse(out_path, media_type="audio/wav", filename=out_path.name)
+        return FileResponse(confined_out, media_type="audio/wav", filename=confined_out.name)
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(
             status_code=500,

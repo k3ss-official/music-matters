@@ -121,6 +121,31 @@ class AbletonExporter:
             for scene_idx in range(8):
                 clip_slot = ET.SubElement(clip_slots, "ClipSlot")
                 clip_slot.set("Id", str(scene_idx + 1))
+                matching_clip = next(
+                    (
+                        c
+                        for c in self.clips
+                        if c.track_index == i and c.scene_index == scene_idx
+                    ),
+                    None,
+                )
+                if matching_clip is not None:
+                    slot_val = ET.SubElement(clip_slot, "Value")
+                    audio_clip = ET.SubElement(slot_val, "AudioClip")
+                    audio_clip.set("Id", str(i * 8 + scene_idx + 1))
+                    clip_name = ET.SubElement(audio_clip, "Name")
+                    ET.SubElement(clip_name, "Value").text = matching_clip.name
+                    ET.SubElement(audio_clip, "CurrentStart").set(
+                        "Value", str(matching_clip.start_time)
+                    )
+                    ET.SubElement(audio_clip, "CurrentEnd").set(
+                        "Value", str(matching_clip.end_time)
+                    )
+                    sample_ref = ET.SubElement(audio_clip, "SampleRef")
+                    file_el = ET.SubElement(sample_ref, "File")
+                    ET.SubElement(file_el, "Path").text = (
+                        f"Samples/{Path(matching_clip.file_path).name}"
+                    )
 
         # Scenes
         scenes = ET.SubElement(live_set, "Scenes")
@@ -206,6 +231,7 @@ class AbletonExporter:
 
         # Set BPM and register clips so _create_project_xml can embed them
         self.bpm = bpm
+        self.clips = []
         for idx, (stem_name, file_path) in enumerate(stem_files.items()):
             if Path(file_path).exists():
                 self.add_clip(

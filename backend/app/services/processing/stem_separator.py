@@ -6,11 +6,15 @@ Optimized for Apple Silicon (M4 Mini)
 import logging
 import os
 import shutil
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 import subprocess
-import torch
+try:
+    import torch
+except ImportError:
+    torch = None
 
 from app.config import (
     STEMS_DIR, TEMP_DIR, DEMUCS_MODEL, DEMUCS_STEMS,
@@ -64,10 +68,10 @@ class StemSeparator:
         
     def _get_device(self) -> str:
         """Determine the best device for inference"""
-        if torch.backends.mps.is_available():
+        if torch is not None and hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
             logger.info("Using Apple Silicon MPS for Demucs")
             return 'mps'
-        elif torch.cuda.is_available():
+        elif torch is not None and torch.cuda.is_available():
             logger.info("Using CUDA for Demucs")
             return 'cuda'
         else:
@@ -78,7 +82,7 @@ class StemSeparator:
         """Check if demucs is installed and available"""
         try:
             result = subprocess.run(
-                ['python', '-c', 'import demucs'],
+                [sys.executable, '-c', 'import demucs'],
                 capture_output=True,
                 timeout=10
             )
@@ -132,7 +136,7 @@ class StemSeparator:
         try:
             # Build demucs command
             cmd = [
-                'python', '-m', 'demucs',
+                sys.executable, '-m', 'demucs',
                 '--name', self.model_name,
                 '--out', str(temp_output),
                 '--device', self.device,

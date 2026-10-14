@@ -142,9 +142,12 @@ class AudioAnalyzer:
             # Handle array return type in newer librosa
             if isinstance(tempo, np.ndarray):
                 tempo = float(tempo[0]) if len(tempo) > 0 else 120.0
-            
+            tempo_val = float(tempo)
+            if tempo_val <= 0 or np.isnan(tempo_val):
+                return 120.0
+
             # Round to 1 decimal
-            return round(float(tempo), 1)
+            return round(tempo_val, 1)
         except Exception as e:
             logger.error(f"BPM detection error: {e}")
             return 120.0  # Default fallback
@@ -239,8 +242,13 @@ class AudioAnalyzer:
             )
             
             # Get segment boundaries using spectral clustering
-            bounds = librosa.segment.agglomerative(chroma, k=None)
-            bound_times = librosa.frames_to_time(bounds, sr=sr)
+            n_frames = chroma.shape[1]
+            if n_frames >= 4:
+                k_clusters = max(2, min(8, n_frames // 4))
+                bounds = librosa.segment.agglomerative(chroma, k=k_clusters)
+                bound_times = librosa.frames_to_time(bounds, sr=sr)
+            else:
+                bound_times = np.array([0.0, duration])
             
             # Ensure we have at least start and end
             if len(bound_times) == 0:

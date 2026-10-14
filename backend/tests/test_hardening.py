@@ -144,3 +144,154 @@ def test_split_and_export_real_bands():
     assert body["status"] == "exported"
     assert body["output_path"]
     assert Path(body["output_path"]).is_file()
+
+
+def test_routes_reject_paths_outside_music_library(tmp_path: Path):
+    outside_wav = tmp_path / "outside.wav"
+    sr = 22050
+    sf.write(str(outside_wav), np.zeros(sr, dtype="float32"), sr)
+
+    # Analysis routes
+    assert client.post("/api/analysis/analyze", json={"audio_path": str(outside_wav)}).status_code == 403
+    assert (
+        client.post(
+            "/api/analysis/mashup-score",
+            params={"track1_path": str(outside_wav), "track2_path": str(outside_wav)},
+        ).status_code
+        == 403
+    )
+
+    # Processing routes
+    assert (
+        client.post(
+            "/api/processing/process",
+            json={"audio_path": str(outside_wav), "artist": "A", "title": "B"},
+        ).status_code
+        == 403
+    )
+    assert (
+        client.post("/api/processing/extract-sample", json={"audio_path": str(outside_wav)}).status_code
+        == 403
+    )
+
+    # Fingerprint routes
+    assert client.post("/api/fingerprint/generate", json={"audio_path": str(outside_wav)}).status_code == 403
+    assert (
+        client.post(
+            "/api/fingerprint/compare",
+            json={"audio_path1": str(outside_wav), "audio_path2": str(outside_wav)},
+        ).status_code
+        == 403
+    )
+    assert (
+        client.post(
+            "/api/fingerprint/find-similar",
+            json={"audio_path": str(outside_wav), "library_paths": [str(outside_wav)]},
+        ).status_code
+        == 403
+    )
+
+    # Export routes
+    assert (
+        client.post(
+            "/api/export/rekordbox",
+            json={"tracks": [str(outside_wav)], "output_path": "crate", "format": "rekordbox"},
+        ).status_code
+        == 403
+    )
+
+
+def test_daw_and_ableton_exports_work_and_enforce_confinement(tmp_path: Path):
+    import zipfile
+    from datetime import datetime, timezone
+    from uuid import uuid4
+    from app.services.pipeline import TrackRecord, pipeline
+
+    sr = 22050
+    t = np.linspace(0, 1.0, sr, endpoint=False)
+    tone = (0.3 * np.sin(2 * np.pi * 220 * t)).astype("float32")
+
+    track_id = uuid4()
+    slug = f"export-test-{track_id.hex[:6]}"
+    stems_dir = settings.resolved_stems_dir / slug
+    stems_dir.mkdir(parents=True, exist_ok=True)
+    drums_path = stems_dir / "drums.wav"
+    sf.write(str(drums_path), tone, sr)
+
+    rec = TrackRecord(
+        track_id=track_id,
+        title="Export Tune",
+        artist="Tester",
+        status="stems_ready",
+        created_at=datetime.now(timezone.utc),
+        slug=slug,
+        original_path=drums_path,
+        stems_dir=stems_dir,
+        bpm=126.0,
+        musical_key="8A",
+        metadata={"duration": 1.0},
+        stems=["drums.wav"],
+    )
+    pipeline._tracks[track_id] = rec
+
+    # Reject stem traversal on MIDI and Ableton export
+    bad_midi = client.post(f"/api/library/tracks/{track_id}/stems/..%2F..%2Fetc/midi")
+    assert bad_midi.status_code in {400, 404}
+
+    bad_ableton = client.post(
+        "/api/export/ableton",
+        json={"track_id": str(track_id), "stems": ["../../../etc/passwd"]},
+    )
+    assert bad_ableton.status_code == 400
+
+    # Valid custom loop extraction writes inside MUSIC_LIBRARY/loops and streams via /audio
+    custom_loop = client.post(
+        f"/api/library/tracks/{track_id}/loops/custom",
+        json={"start_time": 0.0, "end_time": 0.5, "stems": ["drums"]},
+    )
+    assert custom_loop.status_code == 200, custom_loop.text
+    loop_file_url = custom_loop.json()["file_url"]
+    dl = client.get(loop_file_url)
+    assert dl.status_code == 200
+
+    # Rekordbox, Serato, M3U exports succeed when given track ID or confined path
+    rb = client.post(
+        "/api/export/rekordbox",
+        json={"tracks": [str(track_id)], "output_path": "my_rekordbox", "format": "rekordbox"},
+    )
+    assert rb.status_code == 200, rb.text
+    assert Path(rb.json()["output_file"]).is_file()
+
+    sr_exp = client.post(
+        "/api/export/serato",
+        json={"tracks": [str(drums_path)], "output_path": "my_serato", "format": "serato"},
+    )
+    assert sr_exp.status_code == 200, sr_exp.text
+    assert Path(sr_exp.json()["output_file"]).is_dir()
+
+    m3u = client.post(
+        "/api/export/m3u",
+        json={"tracks": [str(track_id)], "output_path": "my_playlist", "format": "m3u"},
+    )
+    assert m3u.status_code == 200, m3u.text
+    assert Path(m3u.json()["output_file"]).is_file()
+
+    # Reject output_path outside MUSIC_LIBRARY
+    escape_out = client.post(
+        "/api/export/m3u",
+        json={"tracks": [str(track_id)], "output_path": str(tmp_path / "escape.m3u8"), "format": "m3u"},
+    )
+    assert escape_out.status_code == 403
+
+    # Ableton export embeds AudioClip inside project.xml
+    als = client.post(
+        "/api/export/ableton",
+        json={"track_id": str(track_id), "stems": ["drums"], "start_time": 0.0, "end_time": 1.0},
+    )
+    assert als.status_code == 200, als.text
+    als_path = Path(als.json()["output_file"])
+    assert als_path.is_file()
+    with zipfile.ZipFile(als_path, "r") as zf:
+        proj_xml = zf.read("project.xml").decode("utf-8")
+        assert "<AudioClip" in proj_xml
+        assert "Export Tune - drums" in proj_xml
