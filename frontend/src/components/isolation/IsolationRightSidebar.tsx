@@ -2,10 +2,15 @@
  * IsolationRightSidebar — Multi-Select / Combined Output list,
  * Audition Mode buttons, Export Settings, and EXPORT LOOP button.
  */
-import React, { useState } from 'react';
-import { Download, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Download, Loader2, CheckCircle2, AlertCircle, Play, Square } from 'lucide-react';
 import type { IsolationSession, AuditionMode } from '../../types/isolation';
-import { updateIsolationSession, exportLoop } from '../../services/isolationApi';
+import {
+  updateIsolationSession,
+  exportLoop,
+  previewIsolation,
+  getIsolationAudioUrl,
+} from '../../services/isolationApi';
 
 interface Props {
   session: IsolationSession;
@@ -35,8 +40,21 @@ const AUDITION_MODES: { key: AuditionMode; label: string; description: string }[
 export function IsolationRightSidebar({ session, onSessionUpdate }: Props) {
   const [exportState, setExportState] = useState<ExportState>('idle');
   const [exportMessage, setExportMessage] = useState('');
+  const [previewing, setPreviewing] = useState(false);
+  const [previewPlaying, setPreviewPlaying] = useState(false);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const selectedSubstems = session.substems.filter(s => s.selected);
+  const hasExtractedSubstems = session.substems.some(s => !s.is_placeholder && s.file_path);
+
+  useEffect(() => {
+    return () => {
+      if (previewAudioRef.current) {
+        previewAudioRef.current.pause();
+        previewAudioRef.current = null;
+      }
+    };
+  }, []);
 
   const handleAuditionMode = async (mode: AuditionMode) => {
     try {
@@ -44,6 +62,32 @@ export function IsolationRightSidebar({ session, onSessionUpdate }: Props) {
       onSessionUpdate(updated);
     } catch (e) {
       console.error('audition mode update failed', e);
+    }
+  };
+
+  const handlePreview = async () => {
+    if (previewPlaying && previewAudioRef.current) {
+      previewAudioRef.current.pause();
+      previewAudioRef.current = null;
+      setPreviewPlaying(false);
+      return;
+    }
+    setPreviewing(true);
+    try {
+      const res = await previewIsolation(session.id);
+      if (res.output_path) {
+        const audio = new Audio(getIsolationAudioUrl(session.id, 'preview', Date.now()));
+        previewAudioRef.current = audio;
+        audio.onended = () => setPreviewPlaying(false);
+        audio.onerror = () => setPreviewPlaying(false);
+        setPreviewPlaying(true);
+        await audio.play();
+      }
+    } catch (e) {
+      console.error('preview failed', e);
+      setPreviewPlaying(false);
+    } finally {
+      setPreviewing(false);
     }
   };
 
@@ -129,9 +173,23 @@ export function IsolationRightSidebar({ session, onSessionUpdate }: Props) {
             </button>
           ))}
         </div>
-        <div className="text-[9px] font-mono text-white/20 italic">
-          Audition mode is used when you Preview — split substems first
-        </div>
+        <button
+          onClick={handlePreview}
+          disabled={previewing || !hasExtractedSubstems}
+          className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg
+                     bg-[#7F77DD]/15 border border-[#7F77DD]/40 text-[#7F77DD]
+                     hover:bg-[#7F77DD]/25 text-[11px] font-mono font-bold transition-all
+                     disabled:opacity-30 disabled:cursor-not-allowed mt-1"
+        >
+          {previewing ? (
+            <Loader2 size={11} className="animate-spin" />
+          ) : previewPlaying ? (
+            <Square size={11} />
+          ) : (
+            <Play size={11} />
+          )}
+          {previewing ? 'Rendering…' : previewPlaying ? 'Stop Preview' : 'Preview Mix'}
+        </button>
       </div>
 
       <div className="border-t border-white/5" />

@@ -64,9 +64,26 @@ export const updateSubstem = async (
   return resp.data;
 };
 
-export const previewIsolation = async (sessionId: string): Promise<unknown> => {
+export const previewIsolation = async (
+  sessionId: string,
+): Promise<{
+  session_id: string;
+  status: string;
+  implementation_status: string;
+  output_path?: string;
+  message: string;
+}> => {
   const resp = await api.post(`/isolation/session/${sessionId}/preview`);
   return resp.data;
+};
+
+export const getIsolationAudioUrl = (
+  sessionId: string,
+  target: 'parent' | 'region' | 'preview' | string,
+  cacheBust?: number,
+): string => {
+  const qs = cacheBust ? `?t=${cacheBust}` : '';
+  return `/api/isolation/session/${encodeURIComponent(sessionId)}/audio/${encodeURIComponent(target)}${qs}`;
 };
 
 export const exportLoop = async (

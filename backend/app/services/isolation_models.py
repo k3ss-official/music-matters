@@ -43,9 +43,13 @@ class Substem(BaseModel):
 
 class IsolationSession(BaseModel):
     id: str
+    source_track_id: Optional[str] = None
     source_track_path: Optional[str] = None
     parent_stem_path: Optional[str] = None
     parent_stem_name: str = "untitled"
+    available_stems: List[str] = Field(default_factory=list)
+    parent_waveform_peaks: List[float] = Field(default_factory=list)
+    parent_duration: float = 0.0
     region_start: float = 0.0
     region_end: float = 0.0
     bpm: float = 120.0
@@ -64,6 +68,7 @@ class IsolationSession(BaseModel):
 # ---------------------------------------------------------------------------
 
 class CreateSessionRequest(BaseModel):
+    source_track_id: Optional[str] = None
     source_track_path: Optional[str] = None
     parent_stem_path: Optional[str] = None
     parent_stem_name: str = "untitled"

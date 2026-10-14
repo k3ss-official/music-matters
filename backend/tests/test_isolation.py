@@ -133,3 +133,104 @@ def test_export_loop():
     assert data["status"] == "placeholder"
     assert "export_settings" in data
     assert "selected_substems" in data
+
+
+def test_session_hydrates_from_track_and_exports_custom_format():
+    from datetime import datetime, timezone
+    from pathlib import Path
+    from uuid import uuid4
+    import numpy as np
+    import soundfile as sf
+    from app.config import settings
+    from app.services.pipeline import TrackRecord, pipeline
+
+    sr = 44100
+    t = np.linspace(0, 2.0, sr * 2, endpoint=False)
+    drums_audio = (0.45 * np.sin(2 * np.pi * 90 * t) + 0.25 * np.sin(2 * np.pi * 3500 * t)).astype("float32")
+    bass_audio = (0.6 * np.sin(2 * np.pi * 60 * t)).astype("float32")
+
+    tid = uuid4()
+    stems_dir = settings.resolved_stems_dir / f"iso-{tid.hex[:8]}"
+    stems_dir.mkdir(parents=True, exist_ok=True)
+    sf.write(str(stems_dir / "drums.wav"), drums_audio, sr)
+    sf.write(str(stems_dir / "bass.wav"), bass_audio, sr)
+
+    record = TrackRecord(
+        track_id=tid,
+        slug=f"iso-{tid.hex[:8]}",
+        title="Hydrated Track",
+        artist="Test Artist",
+        status="stems_ready",
+        created_at=datetime.now(timezone.utc),
+        bpm=125.0,
+        musical_key="Am",
+        original_path=stems_dir / "drums.wav",
+        stems_dir=stems_dir,
+        stems=["drums.wav", "bass.wav"],
+    )
+    pipeline._tracks[tid] = record
+
+    # Create session passing source_track_id and region_end=0 (as UI does when no loop region set yet)
+    resp = client.post(
+        "/api/isolation/session",
+        json={
+            "source_track_id": str(tid),
+            "parent_stem_name": "Hydrated Track",
+            "region_start": 0.0,
+            "region_end": 0.0,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    session = resp.json()
+    sid = session["id"]
+    assert session["source_track_id"] == str(tid)
+    assert session["parent_stem_name"] == "drums"
+    assert session["parent_stem_path"] == str(stems_dir / "drums.wav")
+    assert set(session["available_stems"]) == {"drums", "bass"}
+    assert len(session["parent_waveform_peaks"]) == 200
+    assert session["region_end"] > 0.0
+
+    # Switch parent stem to bass via PATCH
+    patched = client.patch(
+        f"/api/isolation/session/{sid}",
+        json={
+            "parent_stem_name": "bass",
+            "export_settings": {
+                "loop_length_seconds": 2.0,
+                "bpm": 125.0,
+                "grid_snap": "1_bar",
+                "format": "flac",
+                "sample_rate": 48000,
+                "bit_depth": 16,
+            },
+        },
+    )
+    assert patched.status_code == 200
+    assert patched.json()["parent_stem_path"] == str(stems_dir / "bass.wav")
+
+    # Split substems — must extract real region and produce non-placeholder substems
+    split = client.post(f"/api/isolation/session/{sid}/split-substems")
+    assert split.status_code == 200
+    subs = split.json()["substems"]
+    assert len(subs) == 5
+    assert all(not s["is_placeholder"] for s in subs)
+
+    # Preview and stream audio via /audio/preview and /audio/parent
+    prev = client.post(f"/api/isolation/session/{sid}/preview")
+    assert prev.status_code == 200
+    assert prev.json()["status"] == "mixed"
+
+    parent_stream = client.get(f"/api/isolation/session/{sid}/audio/parent")
+    assert parent_stream.status_code == 200
+    preview_stream = client.get(f"/api/isolation/session/{sid}/audio/preview")
+    assert preview_stream.status_code == 200
+
+    # Export with custom format=flac, sample_rate=48000, bit_depth=16
+    exp = client.post(f"/api/isolation/session/{sid}/export-loop")
+    assert exp.status_code == 200
+    out_path = Path(exp.json()["output_path"])
+    assert out_path.suffix == ".flac"
+    assert out_path.is_file()
+    info = sf.info(str(out_path))
+    assert info.samplerate == 48000
+

@@ -12,7 +12,7 @@
  */
 import React, { useState, useCallback } from 'react';
 import type { IsolationSession, EQ5Band } from '../../types/isolation';
-import { updateSubstem } from '../../services/isolationApi';
+import { updateSubstem, updateIsolationSession } from '../../services/isolationApi';
 
 interface Props {
   session: IsolationSession;
@@ -117,14 +117,15 @@ export function SubstemEQShaper({ session, onSessionUpdate }: Props) {
   const [saving, setSaving] = useState(false);
 
   const activeTargetId = session.active_eq_target;
-  const activeSubstem = session.substems.find(s => s.id === activeTargetId);
+  const isCombined = activeTargetId === '__combined__';
+  const selectedSubstems = session.substems.filter(s => s.selected);
+  const activeSubstem = isCombined
+    ? (selectedSubstems[0] ?? session.substems[0])
+    : session.substems.find(s => s.id === activeTargetId);
 
   const currentEQ: EQ5Band = activeSubstem?.eq_5band ?? {
     low_db: 0, low_mid_db: 0, mid_db: 0, high_mid_db: 0, high_db: 0,
   };
-
-  const selectedSubstems = session.substems.filter(s => s.selected);
-  const isCombined = activeTargetId === '__combined__';
 
   const handleBandChange = useCallback(
     async (key: keyof EQ5Band, db: number) => {
@@ -132,13 +133,22 @@ export function SubstemEQShaper({ session, onSessionUpdate }: Props) {
       setSaving(true);
       try {
         const newEQ = { ...currentEQ, [key]: db };
-        const updated = await updateSubstem(session.id, activeSubstem.id, { eq_5band: newEQ });
-        onSessionUpdate(updated);
+        if (isCombined) {
+          const targets = selectedSubstems.length > 0 ? selectedSubstems : session.substems;
+          let latest = session;
+          for (const sub of targets) {
+            latest = await updateSubstem(session.id, sub.id, { eq_5band: newEQ });
+          }
+          onSessionUpdate(latest);
+        } else {
+          const updated = await updateSubstem(session.id, activeSubstem.id, { eq_5band: newEQ });
+          onSessionUpdate(updated);
+        }
       } finally {
         setSaving(false);
       }
     },
-    [activeSubstem, bypassed, saving, session.id, currentEQ, onSessionUpdate],
+    [activeSubstem, bypassed, saving, session, currentEQ, isCombined, selectedSubstems, onSessionUpdate],
   );
 
   const handleReset = useCallback(async () => {
@@ -146,12 +156,21 @@ export function SubstemEQShaper({ session, onSessionUpdate }: Props) {
     setSaving(true);
     try {
       const zeroEQ: EQ5Band = { low_db: 0, low_mid_db: 0, mid_db: 0, high_mid_db: 0, high_db: 0 };
-      const updated = await updateSubstem(session.id, activeSubstem.id, { eq_5band: zeroEQ });
-      onSessionUpdate(updated);
+      if (isCombined) {
+        const targets = selectedSubstems.length > 0 ? selectedSubstems : session.substems;
+        let latest = session;
+        for (const sub of targets) {
+          latest = await updateSubstem(session.id, sub.id, { eq_5band: zeroEQ });
+        }
+        onSessionUpdate(latest);
+      } else {
+        const updated = await updateSubstem(session.id, activeSubstem.id, { eq_5band: zeroEQ });
+        onSessionUpdate(updated);
+      }
     } finally {
       setSaving(false);
     }
-  }, [activeSubstem, saving, session.id, onSessionUpdate]);
+  }, [activeSubstem, saving, session, isCombined, selectedSubstems, onSessionUpdate]);
 
   return (
     <div className="bg-[#1a1830] border border-white/5 rounded-xl p-4 flex flex-col gap-4">
@@ -174,12 +193,9 @@ export function SubstemEQShaper({ session, onSessionUpdate }: Props) {
           <button
             key={sub.id}
             onClick={() => {
-              /* fire-and-forget — just update local active target via session PATCH */
-              import('../../services/isolationApi').then(({ updateIsolationSession }) => {
-                updateIsolationSession(session.id, { active_eq_target: sub.id })
-                  .then(onSessionUpdate)
-                  .catch(console.error);
-              });
+              updateIsolationSession(session.id, { active_eq_target: sub.id })
+                .then(onSessionUpdate)
+                .catch(console.error);
             }}
             className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold transition-all
               ${activeTargetId === sub.id && !isCombined
@@ -197,11 +213,9 @@ export function SubstemEQShaper({ session, onSessionUpdate }: Props) {
         {session.substems.length > 0 && (
           <button
             onClick={() => {
-              import('../../services/isolationApi').then(({ updateIsolationSession }) => {
-                updateIsolationSession(session.id, { active_eq_target: '__combined__' })
-                  .then(onSessionUpdate)
-                  .catch(console.error);
-              });
+              updateIsolationSession(session.id, { active_eq_target: '__combined__' })
+                .then(onSessionUpdate)
+                .catch(console.error);
             }}
             className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold transition-all
               ${isCombined

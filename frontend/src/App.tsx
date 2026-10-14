@@ -770,6 +770,8 @@ function App() {
               sourceBpm={trackDetail?.bpm ?? undefined}
               sourceKey={trackDetail?.musical_key ?? undefined}
               sourceTitle={trackDetail?.title ?? undefined}
+              regionStart={regionStart}
+              regionEnd={regionEnd}
             />
           </ErrorBoundary>
         )}
