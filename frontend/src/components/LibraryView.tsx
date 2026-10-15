@@ -2,22 +2,22 @@
  * LibraryView — main dashboard / Library page.
  *
  * Layout (top-to-bottom):
- *   1. Toolbar    — search input + Filter / Sort / Import buttons
- *   2. Stats bar  — Total Tracks / Stems Ready / Loops Exported / Processing
- *   3. Track list — # | waveform thumb | title+artist | BPM | key | duration | status | actions
- *
- * Wired to GET /api/library/tracks (real). Placeholders are marked inline.
+ *   1. UnifiedTrackBar — radio-button mode chooser (Title/Artist, Song URL, Lyrics/Explain, Upload, Shazam)
+ *      with Reset button, direct file upload, and Default Music Folder shortcut
+ *   2. Active Job Banner (if a job is running in background, shows live status bar & narrative)
+ *   3. Stats & Filter bar — Total Tracks / Stems Ready / Loops Exported / Processing + Filter & Sort
+ *   4. Track list — # | waveform thumb | title+artist | BPM | key | duration | status | actions
  */
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  Search, SlidersHorizontal, ArrowUpDown, Plus,
-  Microscope, AudioWaveform, Download, Music,
+  SlidersHorizontal, ArrowUpDown, Plus,
+  Microscope, AudioWaveform, Download, Music, Loader2, Activity,
 } from 'lucide-react';
-import type { TrackSummary } from '../types';
+import type { TrackSummary, JobProgress } from '../types';
 import * as api from '../services/api';
+import { UnifiedTrackBar } from './UnifiedTrackBar';
 
 // ── Status mapping ──────────────────────────────────────────────────────────
-// Backend pipeline statuses → the three dashboard states.
 type UiStatus = 'raw' | 'stemming' | 'stemmed';
 
 const STEMMED_STATUSES = ['stems_ready', 'loops_ready', 'project_ready', 'completed', 'done'];
@@ -26,21 +26,20 @@ const STEMMING_STATUSES = ['queued', 'running', 'pending'];
 export function uiStatus(status: string): UiStatus {
   if (STEMMED_STATUSES.includes(status)) return 'stemmed';
   if (STEMMING_STATUSES.includes(status)) return 'stemming';
-  return 'raw'; // ingested / analysed / anything else
+  return 'raw';
 }
 
 const STATUS_META: Record<UiStatus, { label: string; dot: string; text: string; pulse?: boolean }> = {
-  raw:      { label: 'Raw',       dot: 'bg-mm-muted',  text: 'text-mm-muted' },
+  raw:      { label: 'Raw',       dot: 'bg-mm-muted',      text: 'text-mm-muted' },
   stemming: { label: 'Stemming…', dot: 'bg-mm-amber-deep', text: 'text-mm-amber', pulse: true },
-  stemmed:  { label: 'Stemmed',   dot: 'bg-mm-teal',   text: 'text-mm-teal' },
+  stemmed:  { label: 'Stemmed',   dot: 'bg-mm-teal',       text: 'text-mm-teal' },
 };
 
 // ── Key badge ───────────────────────────────────────────────────────────────
-// Minor: "Am", "F#m", "8A" (camelot A-side), "d minor". Major: everything else.
 function isMinorKey(key: string): boolean {
   const k = key.trim();
-  if (/^\d{1,2}A$/i.test(k)) return true;   // camelot minor
-  if (/^\d{1,2}B$/i.test(k)) return false;  // camelot major
+  if (/^\d{1,2}A$/i.test(k)) return true;
+  if (/^\d{1,2}B$/i.test(k)) return false;
   return /m(in(or)?)?$/i.test(k) && !/maj(or)?$/i.test(k);
 }
 
@@ -103,9 +102,9 @@ function WaveThumb({ trackId, color }: { trackId: string; color: string }) {
 // ── Stat card ───────────────────────────────────────────────────────────────
 function StatCard({ label, value, accent }: { label: string; value: string | number; accent?: string }) {
   return (
-    <div className="flex-1 bg-mm-panel border border-mm-border rounded-lg px-4 py-3">
+    <div className="flex-1 bg-mm-panel border border-mm-border rounded-lg px-4 py-2.5">
       <div className="text-[10px] uppercase tracking-widest text-mm-muted font-semibold">{label}</div>
-      <div className={`text-xl font-bold mt-1 ${accent ?? 'text-mm-text'}`}>{value}</div>
+      <div className={`text-lg font-bold mt-0.5 ${accent ?? 'text-mm-text'}`}>{value}</div>
     </div>
   );
 }
@@ -144,14 +143,37 @@ type FilterMode = 'all' | 'stemmed' | 'raw' | 'stemming';
 interface Props {
   selectedTrackId: string | null;
   autoFocusSearch?: boolean;
+  isConnected?: boolean;
+  uploading?: boolean;
+  activeJob?: JobProgress | null;
+  libraryPath?: string;
   onOpenTrack: (trackId: string) => void;
   onOpenIsolation: (trackId: string) => void;
   onExportTrack: (trackId: string) => void;
   onImport: () => void;
+  onUploadFile?: (file: File) => void;
+  onIngestSource?: (source: string, label?: string, tags?: string[]) => Promise<void> | void;
+  onOpenShazamCsv?: () => void;
+  onOpenFolderSettings?: () => void;
+  onOpenProcessing?: () => void;
 }
 
 export function LibraryView({
-  selectedTrackId, autoFocusSearch, onOpenTrack, onOpenIsolation, onExportTrack, onImport,
+  selectedTrackId,
+  autoFocusSearch,
+  isConnected = true,
+  uploading = false,
+  activeJob,
+  libraryPath,
+  onOpenTrack,
+  onOpenIsolation,
+  onExportTrack,
+  onImport,
+  onUploadFile,
+  onIngestSource,
+  onOpenShazamCsv,
+  onOpenFolderSettings,
+  onOpenProcessing,
 }: Props) {
   const [tracks, setTracks] = useState<TrackSummary[]>([]);
   const [total, setTotal] = useState(0);
@@ -159,7 +181,6 @@ export function LibraryView({
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortMode>('recent');
   const [filter, setFilter] = useState<FilterMode>('all');
-  const searchRef = useRef<HTMLInputElement>(null);
 
   const fetchTracks = useCallback(async () => {
     try {
@@ -179,14 +200,9 @@ export function LibraryView({
     return () => clearInterval(interval);
   }, [fetchTracks]);
 
-  useEffect(() => {
-    if (autoFocusSearch) searchRef.current?.focus();
-  }, [autoFocusSearch]);
-
   const handleRestem = useCallback(async (trackId: string) => {
     try {
       await api.refreshTrack(trackId);
-      // optimistic: show as processing immediately
       setTracks(prev => prev.map(t => t.track_id === trackId ? { ...t, status: 'queued' } : t));
     } catch (e) {
       console.error('Re-stem failed', e);
@@ -196,14 +212,14 @@ export function LibraryView({
   const visible = useMemo(() => {
     let list = tracks;
     const q = query.trim().toLowerCase();
-    if (q) {
+    // Only filter local table when query is not a URL
+    if (q && !q.startsWith('http://') && !q.startsWith('https://')) {
       list = list.filter(t =>
         t.title.toLowerCase().includes(q) || (t.artist ?? '').toLowerCase().includes(q));
     }
     if (filter !== 'all') list = list.filter(t => uiStatus(t.status) === filter);
     if (sort === 'title') list = [...list].sort((a, b) => a.title.localeCompare(b.title));
     else if (sort === 'bpm') list = [...list].sort((a, b) => (b.bpm ?? 0) - (a.bpm ?? 0));
-    // 'recent' — API order (created_at desc)
     return list;
   }, [tracks, query, filter, sort]);
 
@@ -219,66 +235,109 @@ export function LibraryView({
   };
 
   const FILTER_LABELS: Record<FilterMode, string> = {
-    all: 'Filter', stemmed: 'Stemmed', raw: 'Raw', stemming: 'Processing',
+    all: 'Filter: All', stemmed: 'Stemmed', raw: 'Raw', stemming: 'Processing',
   };
   const SORT_LABELS: Record<SortMode, string> = {
-    recent: 'Sort', title: 'Title A–Z', bpm: 'BPM',
+    recent: 'Sort: Recent', title: 'Title A–Z', bpm: 'BPM',
   };
+
+  const jobRunning = activeJob && (activeJob.status === 'running' || activeJob.status === 'queued');
+  const jobPct = Math.min(100, Math.max(4, Math.round((activeJob?.progress ?? 0) * 100)));
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* ── Toolbar ─────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-2 px-5 py-3 flex-shrink-0">
-        <div className="relative flex-1 max-w-md">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-mm-muted" />
-          <input
-            ref={searchRef}
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder="Search tracks or artists…"
-            className="w-full bg-mm-panel border border-mm-border rounded-lg pl-8 pr-3 py-1.5
-                       text-[12px] text-mm-text placeholder-mm-muted
-                       focus:outline-none focus:border-mm-purple transition-colors"
-          />
-        </div>
-        <button
-          onClick={() => setFilter(f =>
-            f === 'all' ? 'stemmed' : f === 'stemmed' ? 'raw' : f === 'raw' ? 'stemming' : 'all')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition-colors
-            ${filter !== 'all'
-              ? 'border-mm-purple text-mm-purple bg-mm-active'
-              : 'border-mm-border text-mm-body hover:border-mm-purple hover:text-mm-purple'}`}
-        >
-          <SlidersHorizontal size={12} />
-          {FILTER_LABELS[filter]}
-        </button>
-        <button
-          onClick={() => setSort(s => s === 'recent' ? 'title' : s === 'title' ? 'bpm' : 'recent')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition-colors
-            ${sort !== 'recent'
-              ? 'border-mm-purple text-mm-purple bg-mm-active'
-              : 'border-mm-border text-mm-body hover:border-mm-purple hover:text-mm-purple'}`}
-        >
-          <ArrowUpDown size={12} />
-          {SORT_LABELS[sort]}
-        </button>
-        <button
-          onClick={onImport}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg
-                     bg-mm-teal text-white text-[11px] font-bold
-                     hover:brightness-110 transition-all"
-        >
-          <Plus size={13} />
-          Import
-        </button>
-      </div>
+      {/* ── Unified Search / URL / Lyrics / Upload / Shazam Hub (Issues #2, #3, #4, #6, #7, #8, #9) ── */}
+      <UnifiedTrackBar
+        isConnected={isConnected}
+        query={query}
+        onQueryChange={setQuery}
+        onUploadFile={(file) => onUploadFile ? onUploadFile(file) : onImport()}
+        onIngestSource={async (src, label, tags) => {
+          if (onIngestSource) {
+            await onIngestSource(src, label, tags);
+          }
+        }}
+        onOpenTrack={onOpenTrack}
+        onOpenShazamCsv={() => onOpenShazamCsv && onOpenShazamCsv()}
+        onOpenFolderSettings={onOpenFolderSettings}
+        libraryPath={libraryPath}
+        autoFocusSearch={autoFocusSearch}
+        uploading={uploading}
+      />
 
-      {/* ── Stats bar ───────────────────────────────────────────────────── */}
-      <div className="flex gap-3 px-5 pb-3 flex-shrink-0">
-        <StatCard label="Total Tracks" value={total} />
-        <StatCard label="Stems Ready" value={stemsReady} accent="text-mm-teal" />
-        <StatCard label="Loops Exported" value={loopsExported} />
-        <StatCard label="Processing" value={processing} accent={processing > 0 ? 'text-mm-amber' : undefined} />
+      {/* ── Live Background Pipeline Narrative Bar (Issue #9) ─────────────── */}
+      {jobRunning && (
+        <div
+          onClick={onOpenProcessing}
+          className="mx-5 mb-2 px-4 py-2.5 rounded-xl bg-mm-panel border border-mm-purple/40
+                     cursor-pointer hover:border-mm-purple transition-all space-y-1.5 flex-shrink-0"
+        >
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2 font-semibold text-white">
+              <Loader2 size={13} className="text-mm-purple animate-spin" />
+              <span>Active Pipeline: {activeJob.currentStage ? activeJob.currentStage.toUpperCase() : 'QUEUED'}</span>
+              <span className="text-mm-muted font-mono text-[11px] truncate max-w-md">
+                — {activeJob.detail || 'Preparing audio stages…'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[11px] text-mm-teal font-bold">{jobPct}%</span>
+              <span className="text-[10px] font-mono text-mm-purple underline">View Live Details →</span>
+            </div>
+          </div>
+          <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{
+                width: `${jobPct}%`,
+                background: 'linear-gradient(90deg, #7F77DD 0%, #1D9E75 100%)',
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── Stats & Library Filter Bar ──────────────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-2.5 px-5 py-2 flex-shrink-0">
+        <div className="flex flex-1 gap-2.5 min-w-[340px]">
+          <StatCard label="Total Tracks" value={total} />
+          <StatCard label="Stems Ready" value={stemsReady} accent="text-mm-teal" />
+          <StatCard label="Loops Exported" value={loopsExported} />
+          <StatCard label="Processing" value={processing} accent={processing > 0 ? 'text-mm-amber' : undefined} />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setFilter(f =>
+              f === 'all' ? 'stemmed' : f === 'stemmed' ? 'raw' : f === 'raw' ? 'stemming' : 'all')}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-[11px] font-semibold transition-colors
+              ${filter !== 'all'
+                ? 'border-mm-purple text-mm-purple bg-mm-active'
+                : 'border-mm-border text-mm-body hover:border-mm-purple hover:text-mm-purple'}`}
+          >
+            <SlidersHorizontal size={12} />
+            {FILTER_LABELS[filter]}
+          </button>
+          <button
+            onClick={() => setSort(s => s === 'recent' ? 'title' : s === 'title' ? 'bpm' : 'recent')}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-[11px] font-semibold transition-colors
+              ${sort !== 'recent'
+                ? 'border-mm-purple text-mm-purple bg-mm-active'
+                : 'border-mm-border text-mm-body hover:border-mm-purple hover:text-mm-purple'}`}
+          >
+            <ArrowUpDown size={12} />
+            {SORT_LABELS[sort]}
+          </button>
+          <button
+            onClick={onImport}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg
+                       bg-mm-teal text-white text-[11px] font-bold
+                       hover:brightness-110 transition-all"
+          >
+            <Plus size={13} />
+            Full Import View
+          </button>
+        </div>
       </div>
 
       {/* ── Track list ──────────────────────────────────────────────────── */}
@@ -297,10 +356,12 @@ export function LibraryView({
           )}
 
           {!loading && visible.length === 0 && (
-            <div className="py-12 flex flex-col items-center gap-2 text-mm-muted">
+            <div className="py-10 px-4 flex flex-col items-center gap-2 text-mm-muted text-center">
               <Music size={24} className="opacity-40" />
               <span className="text-sm">
-                {tracks.length === 0 ? 'No tracks yet — import one to get started' : 'No tracks match'}
+                {tracks.length === 0
+                  ? 'Your local library is empty — use the unified bar above to search a track, paste a URL, describe lyrics, or upload an audio file.'
+                  : 'No local tracks match that filter — click "Search Tracks" above to search YouTube, SoundCloud & MusicBrainz.'}
               </span>
             </div>
           )}

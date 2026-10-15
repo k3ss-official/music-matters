@@ -81,3 +81,80 @@ def test_reslice_loops_search_and_delete_track() -> None:
     assert not orig_path.exists()
     assert not proj_dir.exists()
     assert client.get(f"/api/library/tracks/{tid}").status_code == 404
+
+
+def test_unified_online_search_and_library_path_config(tmp_path) -> None:
+    from datetime import datetime, timezone
+    from uuid import uuid4
+    from app.config import settings, set_music_library
+    from app.services.pipeline import TrackRecord, pipeline
+
+    original_lib = settings.MUSIC_LIBRARY
+
+    try:
+        # 1. System config & library-path endpoints
+        cfg_resp = client.get("/api/system/config")
+        assert cfg_resp.status_code == 200
+        cfg_data = cfg_resp.json()
+        assert "music_library" in cfg_data
+        assert "downloads_dir" in cfg_data
+
+        custom_lib = tmp_path / "custom-music-folder"
+        update_resp = client.post(
+            "/api/system/library-path",
+            json={"path": str(custom_lib)},
+        )
+        assert update_resp.status_code == 200
+        updated_data = update_resp.json()
+        assert updated_data["updated"] is True
+        assert updated_data["music_library"] == str(custom_lib.resolve())
+        assert (custom_lib / "downloads").is_dir()
+        assert (custom_lib / "stems").is_dir()
+
+        # Reject forbidden root path
+        bad_resp = client.post("/api/system/library-path", json={"path": "/"})
+        assert bad_resp.status_code == 400
+
+        # 2. Online search endpoint with local library fallback & hints (lyrics/explain)
+        tid = uuid4()
+        pipeline._tracks[tid] = TrackRecord(
+            track_id=tid,
+            slug="garage-love-test",
+            title="Feel The Garage Love",
+            artist="DJ Test",
+            status="stems_ready",
+            created_at=datetime.now(timezone.utc),
+            bpm=132.0,
+            musical_key="8A",
+            metadata={"tags": ["vocal", "garage"]},
+        )
+
+        online_resp = client.post(
+            "/api/search/online",
+            json={
+                "query": "Feel The Garage",
+                "hints": "vocal garage",
+                "source": "library",
+                "limit": 5,
+            },
+        )
+        assert online_resp.status_code == 200
+        online_data = online_resp.json()
+        assert online_data["count"] >= 1
+        assert any(t["title"] == "Feel The Garage Love" for t in online_data["tracks"])
+        assert isinstance(online_data.get("narrative"), list)
+
+        # 3. URL resolution endpoint handles arbitrary URLs gracefully without 500
+        resolve_resp = client.post(
+            "/api/search/resolve-url",
+            json={"url": "https://soundcloud.com/example-artist/example-track"},
+        )
+        assert resolve_resp.status_code == 200
+        res_data = resolve_resp.json()
+        assert res_data["platform"] == "soundcloud"
+        assert res_data["title"]
+
+        del pipeline._tracks[tid]
+    finally:
+        set_music_library(original_lib)
+

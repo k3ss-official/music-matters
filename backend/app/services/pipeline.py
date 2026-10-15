@@ -452,13 +452,16 @@ class PipelineOrchestrator:
         stage.status = "running"
         stage.progress = 0.05
         job.current_stage = stage_id
-        job.detail = stage.detail or stage.label
+        job.detail = stage.detail or f"Starting {stage.label}…"
+        db.save_job(job)
+        self._broadcast(job.job_id)
 
         try:
             result = await func(job, stage, track, *args)
             stage.status = "done"
             stage.progress = 1.0
             stage.detail = stage.detail or "Completed"
+            job.detail = stage.detail
 
             # Persist job and track state changes after each stage
             db.save_job(job)
@@ -491,7 +494,9 @@ class PipelineOrchestrator:
 
         source = str(payload.source)
         stage.detail = f"Ingesting {source}"
-        stage.progress = 0.1
+        stage.progress = 0.15
+        job.detail = stage.detail
+        self._broadcast(job.job_id)
 
         def _download() -> Path:
             # Check if it's a local file first
@@ -500,16 +505,33 @@ class PipelineOrchestrator:
             if source_path.exists() and source_path.is_file():
                 if source_path.suffix.lower() not in AUDIO_SUFFIXES:
                     raise ValueError(f"Unsupported audio type: {source_path.suffix}")
+                stage.detail = f"Copying local audio file into library ({source_path.name})"
+                stage.progress = 0.55
+                job.detail = stage.detail
+                self._broadcast(job.job_id)
                 dest = copy_into_library(source_path, settings.resolved_downloads_dir)
                 return dest
 
+            # Normalise bare streaming domains without protocol
+            target = source
+            if not ("//" in target) and target.startswith(
+                ("youtu.be/", "youtube.com/", "www.youtube.com/", "soundcloud.com/", "bandcamp.com/")
+            ):
+                target = f"https://{target}"
+
             # It's a URL or search query
-            if "://" in source:
+            if "://" in target:
                 import yt_dlp
 
+                stage.detail = f"Resolving stream metadata from {target}"
+                stage.progress = 0.30
+                job.detail = stage.detail
+                self._broadcast(job.job_id)
                 try:
                     with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True}) as ydl:
-                        info = ydl.extract_info(source, download=False)
+                        info = ydl.extract_info(target, download=False)
+                        if info and "entries" in info and info["entries"]:
+                            info = info["entries"][0]
                         if info:
                             track.title = info.get("title", track.title)
                             track.artist = info.get("artist") or info.get(
@@ -517,14 +539,42 @@ class PipelineOrchestrator:
                             )
                 except Exception:
                     pass
-                return self._downloader.download(source)
-            # Check if it's a URL without protocol (e.g., youtu.be/xxx)
-            if source.startswith(
-                ("youtu.be/", "youtube.com/", "soundcloud.com/", "bandcamp.com/")
-            ):
-                return self._downloader.download(f"https://{source}")
+                stage.detail = f"Downloading & transcoding 24-bit WAV for '{track.title}'"
+                stage.progress = 0.60
+                job.detail = stage.detail
+                self._broadcast(job.job_id)
+                return self._downloader.download(target)
+
             # Text query - use yt-dlp search to find and download top result
-            search_query = f"ytsearch1:{source}"
+            search_query = f"ytsearch1:{target}"
+            stage.detail = f"Searching online stream for '{target}'"
+            stage.progress = 0.30
+            job.detail = stage.detail
+            self._broadcast(job.job_id)
+            try:
+                import yt_dlp
+
+                with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "extract_flat": True}) as ydl:
+                    info = ydl.extract_info(search_query, download=False)
+                    if info and "entries" in info and info["entries"]:
+                        first = info["entries"][0] or {}
+                        resolved_title = first.get("title")
+                        resolved_artist = first.get("artist") or first.get("uploader") or first.get("channel")
+                        if resolved_title:
+                            if not resolved_artist and " - " in resolved_title:
+                                parts = resolved_title.split(" - ", 1)
+                                track.artist = parts[0].strip()
+                                track.title = parts[1].strip()
+                            else:
+                                track.title = resolved_title
+                                if resolved_artist:
+                                    track.artist = resolved_artist
+            except Exception:
+                pass
+            stage.detail = f"Downloading best audio stream for '{track.title}'"
+            stage.progress = 0.60
+            job.detail = stage.detail
+            self._broadcast(job.job_id)
             return self._downloader.download(search_query)
 
         audio_path = await asyncio.to_thread(_download)
@@ -535,8 +585,10 @@ class PipelineOrchestrator:
         except Exception:
             pass
 
-        stage.detail = f"Source staged at {audio_path}"
-        stage.progress = 0.9
+        stage.detail = f"Source staged at {audio_path.name}"
+        stage.progress = 0.95
+        job.detail = stage.detail
+        self._broadcast(job.job_id)
         track.original_path = audio_path
         track.metadata["source_path"] = str(audio_path)
         track.status = "ingested"
@@ -550,7 +602,9 @@ class PipelineOrchestrator:
         audio_path: Path,
     ) -> dict[str, Any]:
         stage.detail = "Running allin1 analysis (beats · key · chords · structure)"
-        stage.progress = 0.2
+        stage.progress = 0.25
+        job.detail = stage.detail
+        self._broadcast(job.job_id)
 
         def _compute() -> dict[str, Any]:
             from app.services.analysis.mlx_analyzer import analyze_track
@@ -566,6 +620,7 @@ class PipelineOrchestrator:
         stage.detail = (
             f"BPM {bpm:.1f} · Key {key} · {n_beats} beats · {n_segs} sections"
         )
+        job.detail = stage.detail
 
         track.bpm = bpm
         track.musical_key = key
@@ -582,8 +637,10 @@ class PipelineOrchestrator:
         audio_path: Path,
         separation_mode: str = "fast",
     ) -> Path:
-        stage.detail = f"Running separation (mode={separation_mode})"
-        stage.progress = 0.1
+        stage.detail = f"Running 6-stem separation (mode={separation_mode})"
+        stage.progress = 0.15
+        job.detail = stage.detail
+        self._broadcast(job.job_id)
         stems_dir = self._stems_dir(track.slug)
         stems_dir.mkdir(parents=True, exist_ok=True)
 
