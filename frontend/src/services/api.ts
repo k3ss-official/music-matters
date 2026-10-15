@@ -154,6 +154,41 @@ export const createCustomLoop = async (trackId: string, startTime: number, endTi
   return response.data;
 };
 
+export const getTrackLoops = async (trackId: string, barLength?: number): Promise<LoopPreview[]> => {
+  const response = await api.get(`/library/tracks/${trackId}/loops`, {
+    params: barLength ? { bar_length: barLength } : undefined,
+  });
+  return response.data;
+};
+
+export const saveLoopBundle = async (
+  trackId: string,
+  payload: {
+    start_time: number;
+    end_time: number;
+    label?: string;
+    include_all_stems?: boolean;
+    post_production?: boolean;
+  },
+): Promise<import('../types').LoopBundleResult> => {
+  const response = await api.post(`/library/tracks/${trackId}/loops/save-bundle`, payload);
+  return response.data;
+};
+
+export const cleanTrackAudio = async (
+  trackId: string,
+): Promise<import('../types').AudioConditioningResult> => {
+  const response = await api.post(`/library/tracks/${trackId}/clean`);
+  return response.data;
+};
+
+export const discoverTracks = async (
+  payload: import('../types').MultiAngleDiscoveryRequest,
+): Promise<import('../types').MultiAngleDiscoveryResponse> => {
+  const response = await api.post('/search/discover', payload);
+  return response.data;
+};
+
 
 // ---------------------------------------------------------------------------
 // Batch ingest
@@ -401,6 +436,17 @@ export interface RecognizeResult {
         artist: string | null;
         similarity: number;
     } | null;
+    top_matches?: Array<{
+        track_id: string;
+        title: string;
+        artist: string | null;
+        bpm?: number | null;
+        key?: string | null;
+        status?: string;
+        similarity: number;
+        confidence?: number;
+        preview_url?: string;
+    }>;
     fpcalc_available: boolean;
     acoustid_key_configured: boolean;
 }

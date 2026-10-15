@@ -44,8 +44,84 @@ export interface LoopPreview {
   stem: string;
   bpm: number;
   key?: string;
+  musical_key?: string | null;
   fileUrl?: string;
+  file_url?: string;
   energy?: number;
+  tags?: string[];
+}
+
+export interface DiscoveryMatch {
+  id: string;
+  track_id?: string | null;
+  title: string;
+  artist: string;
+  producer?: string | null;
+  remixer?: string | null;
+  year?: number | null;
+  track_type?: string | null;
+  bpm?: number | null;
+  key?: string | null;
+  duration?: number | null;
+  status: string;
+  source: string;
+  in_library: boolean;
+  preview_url?: string | null;
+  stems_count?: number;
+  loops_count?: number;
+  confidence: number;
+  match_reasons: string[];
+}
+
+export interface MultiAngleDiscoveryRequest {
+  angle?: 'all' | 'title' | 'lyrics' | 'natural_language' | 'producer' | 'shazam' | 'recording';
+  query?: string;
+  lyrics?: string;
+  description?: string;
+  producer?: string;
+  remixer?: string;
+  year_from?: number | null;
+  year_to?: number | null;
+  track_type?: string;
+  bpm_min?: number | null;
+  bpm_max?: number | null;
+  musical_key?: string;
+  include_online?: boolean;
+  limit?: number;
+}
+
+export interface MultiAngleDiscoveryResponse {
+  angle: string;
+  query: string;
+  count: number;
+  matches: DiscoveryMatch[];
+}
+
+export interface AudioConditioningResult {
+  cleaned: boolean;
+  dc_offset_removed?: number;
+  highpass_hz?: number;
+  declipped_samples?: number;
+  normalized?: boolean;
+  target_dbfs?: number;
+  peak_before_db?: number;
+  peak_after_db?: number;
+  rms_db?: number;
+  sample_rate?: number;
+  channels?: number;
+}
+
+export interface LoopBundleResult {
+  bundle_id: string;
+  track_id: string;
+  label: string;
+  start_time: number;
+  end_time: number;
+  bar_count: number;
+  post_production: boolean;
+  complete_loop?: LoopPreview | null;
+  stem_loops: LoopPreview[];
+  total_saved: number;
 }
 
 export interface SearchResult {

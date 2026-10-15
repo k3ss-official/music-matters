@@ -15,15 +15,19 @@ import { TransportBar } from './TransportBar';
 import { LoopEditorToolbar } from './LoopEditorToolbar';
 import { EditLoopSection } from './EditLoopSection';
 import { StemLanes } from './StemLanes';
+import { UltraEditWindow } from './UltraEditWindow';
 import { useStemMixer } from '../hooks/useStemMixer';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import {
     getTrackAudioUrl,
     createCustomLoop,
     getSmartPhrases,
+    cleanTrackAudio,
+    saveLoopBundle,
+    getPeaks,
     type SmartPhrase,
 } from '../services/api';
-import { Zap, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Zap, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Sparkles, Wand2, Layers, Save } from 'lucide-react';
 
 interface CentreWorkspaceProps {
     trackId: string | null;
@@ -127,8 +131,13 @@ export function CentreWorkspace({
 
     // ── Loop selection state ──────────────────────────────────────────────
     const [activeBarPreset, setActiveBarPreset] = useState<number | null>(null);
+    const [selectedBeatPreset, setSelectedBeatPreset] = useState<number | null>(null);
     const [editLoopOpen, setEditLoopOpen] = useState(false);
-    const [loopMode, setLoopMode] = useState<'beat' | 'bar'>('beat');
+    const [loopMode, setLoopMode] = useState<'beat' | 'bar'>('bar');
+    const [stemsCollapsed, setStemsCollapsed] = useState(false);
+    const [peaks, setPeaks] = useState<number[]>([]);
+    const [cleaningAudio, setCleaningAudio] = useState(false);
+    const [conditioningToast, setConditioningToast] = useState<string | null>(null);
 
     const bpm: number | null = trackDetail?.bpm ?? null;
     const downbeats: number[] = (trackDetail?.metadata?.downbeats as number[]) ?? [];
@@ -138,8 +147,12 @@ export function CentreWorkspace({
     const chords: Array<{ start: number; end: number; chord: string }> =
         (trackDetail?.metadata?.chords as any[]) ?? [];
 
-    // ── Stem names (strip .wav) ───────────────────────────────────────────
-    const stemNames = (trackDetail?.stems ?? []).map(s => s.replace(/\.wav$/, ''));
+    // ── Stem names (strip .wav, always surface all 6 canonical stems) ─────
+    const CANONICAL_6_STEMS = ['drums', 'bass', 'vocals', 'guitar', 'piano', 'other'];
+    const rawStemNames = (trackDetail?.stems ?? []).map(s => s.replace(/\.wav$/, ''));
+    const stemNames = rawStemNames.length >= 6
+        ? rawStemNames
+        : Array.from(new Set([...rawStemNames, ...CANONICAL_6_STEMS]));
 
     // ── Stem mixer ───────────────────────────────────────────────────────
     const stemMixer = useStemMixer(trackId, stemNames);
@@ -167,13 +180,23 @@ export function CentreWorkspace({
         setEditLoopOpen(false);
     }, [trackId]);
 
-    // ── Load smart phrases ────────────────────────────────────────────────
+    // ── Load smart phrases & waveform peaks ──────────────────────────────
+    useEffect(() => {
+        if (!trackId) return;
+        getPeaks(trackId, 256)
+            .then(resp => setPeaks(resp.peaks || []))
+            .catch(() => setPeaks([]));
+    }, [trackId]);
+
     useEffect(() => {
         if (!trackId || !waveformReady) return;
         setPhrasesError(null);
         setLoadingPhrases(true);
         getSmartPhrases(trackId)
-            .then(resp => setSmartPhrases(Array.isArray(resp) ? resp : (resp.phrases || [])))
+            .then(resp => {
+                const list = Array.isArray(resp) ? resp : (resp.phrases || []);
+                setSmartPhrases(list);
+            })
             .catch((err: any) => {
                 setSmartPhrases([]);
                 setPhrasesError(err?.response?.data?.detail || err?.message || 'Failed to load phrases');
@@ -449,10 +472,67 @@ export function CentreWorkspace({
 
     // ── Smart phrase → set region ─────────────────────────────────────────
     const handleSmartPhrase = useCallback((phrase: SmartPhrase) => {
+        setSelectedBeatPreset(null);
+        setActiveBarPreset(phrase.bar_count || null);
         onUpdateRegion(phrase.start_time, phrase.end_time);
         waveformRef.current?.syncRegion(phrase.start_time, phrase.end_time);
         waveformRef.current?.seek(phrase.start_time);
     }, [onUpdateRegion]);
+
+    // ── Beat preset select (from UltraEditWindow) ─────────────────────────
+    const handleBeatPresetSelect = useCallback((beats: number) => {
+        setSelectedBeatPreset(beats);
+        setActiveBarPreset(null);
+        const effectiveBpm = bpm || 120;
+        const beatDur = 60 / effectiveBpm;
+        const beatgridAnchor = (trackDetail?.metadata?.beatgrid_anchor as number) ?? 0;
+        const playhead = regionEnd > regionStart ? regionStart : (waveformRef.current?.getCurrentTime() ?? currentTime);
+        const stepsFromAnchor = Math.round(Math.max(0, playhead - beatgridAnchor) / beatDur);
+        const anchorStart = Math.max(0, beatgridAnchor + stepsFromAnchor * beatDur);
+        const newEnd = Math.min(anchorStart + beatDur * beats, duration || (anchorStart + beatDur * beats));
+        if (newEnd > anchorStart + 0.05) {
+            handleRegionChange(anchorStart, newEnd);
+        }
+    }, [bpm, trackDetail, regionStart, regionEnd, currentTime, duration, handleRegionChange]);
+
+    // ── Clean / DC Offset / Normalize handler ─────────────────────────────
+    const handleCleanTrack = useCallback(async () => {
+        if (!trackId || cleaningAudio) return;
+        setCleaningAudio(true);
+        try {
+            const cond = await cleanTrackAudio(trackId);
+            setConditioningToast(
+                `DC offset removed (${cond?.dc_offset_removed?.toFixed(4) ?? '0.0000'}) · Normalized to -0.3 dBFS`
+            );
+            setTimeout(() => setConditioningToast(null), 4000);
+        } catch (err) {
+            console.error('Track conditioning failed', err);
+        } finally {
+            setCleaningAudio(false);
+        }
+    }, [trackId, cleaningAudio]);
+
+    // ── Save phrase / loop + 6 stems bundle ──────────────────────────────
+    const handleSaveSectionBundle = useCallback(async (label?: string) => {
+        if (!trackId || saving || regionEnd <= regionStart) return;
+        setSaving(true);
+        setSaveSuccess(false);
+        try {
+            await saveLoopBundle(trackId, {
+                start_time: regionStart,
+                end_time: regionEnd,
+                label: label || 'quantized_loop',
+                include_all_stems: true,
+                post_production: true,
+            });
+            setSaveSuccess(true);
+            setTimeout(() => setSaveSuccess(false), 3500);
+        } catch (err) {
+            console.error('Failed to save loop + 6-stem bundle:', err);
+        } finally {
+            setSaving(false);
+        }
+    }, [trackId, saving, regionStart, regionEnd]);
 
     // ── No track loaded ───────────────────────────────────────────────────
     if (!trackId) {
@@ -484,9 +564,22 @@ export function CentreWorkspace({
         loop: '#EF9F27', project: '#7F77DD',
     };
 
+    const effectiveBpm = bpm || 120;
+    const beatDur = 60 / effectiveBpm;
+    const barDur = beatDur * 4;
+    const loopLenSec = Math.max(0, regionEnd - regionStart);
+    const loopBars = loopLenSec > 0 ? (loopLenSec / barDur).toFixed(1) : '0.0';
+    const loopBeats = loopLenSec > 0 ? Math.round(loopLenSec / beatDur) : 0;
+    const formatMmSs = (sec: number) => {
+        if (!sec || sec <= 0) return '0:00';
+        const m = Math.floor(sec / 60);
+        const s = Math.floor(sec % 60);
+        return `${m}:${s.toString().padStart(2, '0')}`;
+    };
+
     return (
         <div
-            className="flex flex-col flex-1 min-h-0 bg-[#0d0f1c] overflow-hidden outline-none focus-within:ring-1 focus-within:ring-[#7F77DD]/20"
+            className="flex flex-col flex-1 min-h-0 bg-[#0d0f1c] overflow-y-auto outline-none focus-within:ring-1 focus-within:ring-[#7F77DD]/20"
             tabIndex={-1}
             onDoubleClick={handleDoubleClickCenter}
         >
@@ -565,6 +658,72 @@ export function CentreWorkspace({
                 </div>
             )}
 
+            {/* ── 1. HEAD TRACK TELEMETRY & AUDIO CONDITIONING BAR ────────── */}
+            <div className="px-4 py-2 bg-[#111326] border-b border-white/10 flex items-center justify-between gap-3 flex-wrap shrink-0">
+                <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded bg-[#7F77DD]/20 border border-[#7F77DD]/40 text-[#7F77DD] text-[10px] font-mono font-bold uppercase tracking-wider">
+                            HEAD TRACK
+                        </span>
+                        <span className="text-xs font-bold text-white truncate max-w-[220px]">
+                            {trackDetail.title}
+                        </span>
+                        {trackDetail.artist && (
+                            <span className="text-[11px] text-white/45 truncate max-w-[160px]">
+                                · {trackDetail.artist}
+                            </span>
+                        )}
+                    </div>
+
+                    {/* Telemetry pills: BPM, Key, Length, Loop Length, Beatgrid */}
+                    <div className="flex items-center gap-1.5 text-[10px] font-mono">
+                        <span className="px-2 py-0.5 rounded bg-white/5 border border-white/10 text-white/85 font-bold">
+                            {bpm ? `${bpm.toFixed(1)} BPM` : '120.0 BPM'}
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-[#7F77DD]/15 border border-[#7F77DD]/30 text-[#7F77DD] font-bold">
+                            KEY {trackDetail.musical_key || 'Am'}
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-white/5 border border-white/10 text-white/70">
+                            LEN {formatMmSs(duration || trackDetail.duration || 0)}
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-[#1D9E75]/15 border border-[#1D9E75]/35 text-[#1D9E75] font-bold">
+                            LOOP {loopBars} BARS · {loopBeats} BEATS ({loopLenSec.toFixed(2)}s)
+                        </span>
+                        <span className={`px-2 py-0.5 rounded border font-bold ${
+                            snapEnabled
+                                ? 'bg-[#EF9F27]/15 border-[#EF9F27]/40 text-[#EF9F27]'
+                                : 'bg-white/5 border-white/10 text-white/40'
+                        }`}>
+                            BEATGRID {snapEnabled ? 'QUANTIZED SNAP ON' : 'FREE'}
+                        </span>
+                    </div>
+                </div>
+
+                {/* Audio Pre-Conditioning Status + On-Demand Clean / Normalize / DC Offset */}
+                <div className="flex items-center gap-2">
+                    <span className="text-[9px] font-mono text-[#1D9E75] bg-[#1D9E75]/10 border border-[#1D9E75]/25 px-2 py-0.5 rounded flex items-center gap-1">
+                        <CheckCircle2 size={10} />
+                        DC Offset Removed · Normalized -0.3 dBFS · 6 Stems
+                    </span>
+                    <button
+                        onClick={handleCleanTrack}
+                        disabled={cleaningAudio}
+                        title="Re-run DC offset removal, 25Hz rumble high-pass filter, de-clip, and -0.3 dBFS peak normalization"
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/5 hover:bg-[#7F77DD]/20 border border-white/10 hover:border-[#7F77DD]/40 text-[10px] font-mono text-white/75 hover:text-white transition-all"
+                    >
+                        {cleaningAudio ? <Loader2 size={10} className="animate-spin text-[#7F77DD]" /> : <Wand2 size={10} className="text-[#7F77DD]" />}
+                        Clean + DC Offset + Normalize
+                    </button>
+                </div>
+            </div>
+
+            {conditioningToast && (
+                <div className="px-4 py-1.5 bg-[#1D9E75]/15 border-b border-[#1D9E75]/30 text-[#1D9E75] text-[11px] font-mono flex items-center gap-2 shrink-0">
+                    <CheckCircle2 size={12} />
+                    {conditioningToast}
+                </div>
+            )}
+
             {/* ── Transport bar ──────────────────────────────────────────── */}
             <TransportBar
                 waveformRef={editLoopOpen ? loopEditorRef : waveformRef}
@@ -594,8 +753,8 @@ export function CentreWorkspace({
                 onLoopModeToggle={() => setLoopMode(m => m === 'beat' ? 'bar' : 'beat')}
             />
 
-            {/* ── Waveform ───────────────────────────────────────────────── */}
-            <div className="flex-1 shrink-0 min-h-[200px] relative px-0 overflow-x-auto">
+            {/* ── Main Head Waveform ─────────────────────────────────────── */}
+            <div className="shrink-0 min-h-[165px] relative px-0 overflow-x-auto border-b border-white/5">
                 {/* External error banner */}
                 {(externalError || loadError) && (
                     <div className="flex items-center gap-2 px-4 py-2 bg-[#ff3b5c]/10 border-b border-[#ff3b5c]/20 text-[#ff3b5c] text-xs font-mono">
@@ -610,7 +769,7 @@ export function CentreWorkspace({
                                     bg-[#1D9E75]/15 border border-[#1D9E75]/30 text-[#1D9E75]
                                     px-3 py-2 rounded-lg text-xs font-mono tracking-wider shadow-xl">
                         <CheckCircle2 size={12} />
-                        Loop saved
+                        Loop + 6 Stems Saved
                     </div>
                 )}
 
@@ -628,7 +787,7 @@ export function CentreWorkspace({
                     ref={waveformRef}
                     audioUrl={audioUrl}
                     hideOverview={true}
-                    waveHeight={165}
+                    waveHeight={155}
                     downbeats={downbeats}
                     chords={chords}
                     bpm={bpm}
@@ -643,8 +802,20 @@ export function CentreWorkspace({
                     onReady={dur => {
                         setDuration(dur);
                         setWaveformReady(true);
-                        // Cache the media element so loop editor can share it without a render-phase call
                         cachedMediaElementRef.current = waveformRef.current?.getMediaElement() ?? null;
+                        // Auto-initialize a quantized 4-bar loop on the head track so the loop highlight
+                        // and the expanded Ultra Edit Window below are immediately active
+                        if (dur > 0 && regionEnd <= regionStart) {
+                            const effBpm = bpm || 120;
+                            const fourBars = (60 / effBpm) * 16;
+                            const start = Math.min(beatAnchor || 0, Math.max(0, dur - 1));
+                            const end = Math.min(dur, start + Math.min(fourBars, dur - start));
+                            if (end > start + 0.1) {
+                                setActiveBarPreset(4);
+                                onUpdateRegion(start, end);
+                                waveformRef.current?.syncRegion(start, end);
+                            }
+                        }
                     }}
                     onError={(err) => {
                         setLoadError(err.message);
@@ -665,8 +836,6 @@ export function CentreWorkspace({
                         onTimeUpdateProp?.(t);
                         const dt = t - lastTimeRef.current;
                         lastTimeRef.current = t;
-                        // Resync stems only on backward jump (loop restart) or
-                        // very large forward jump (>2s = user seek, not bar-preset nav)
                         if (isPlayingRef.current && (dt < -0.1 || dt > 2.0)) {
                             stemMixer.seek(t);
                         }
@@ -676,12 +845,9 @@ export function CentreWorkspace({
                         isPlayingRef.current = playing;
                         onPlayStateChangeProp?.(playing);
                         if (playing) {
-                            // Debounce: WaveSurfer fires 'play' on loop restarts too.
-                            // Cancel any pending call and schedule a fresh one so rapid
-                            // back-to-back play events collapse into a single stemMixer.play().
                             if (stemPlayDebounceRef.current) clearTimeout(stemPlayDebounceRef.current);
                             stemPlayDebounceRef.current = setTimeout(() => {
-                                if (!isPlayingRef.current) return; // paused before debounce fired
+                                if (!isPlayingRef.current) return;
                                 const offset = waveformRef.current?.getCurrentTime() ?? 0;
                                 stemMixer.play(offset);
                             }, 30);
@@ -692,84 +858,6 @@ export function CentreWorkspace({
                     }}
                 />
             </div>
-
-            {/* ── Loop editor pane (3rd pane — fine-tune the loop) ──────────── */}
-            {editLoopOpen && waveformReady && (
-                <div className="border-t-2 border-[#7F77DD]/30 bg-[#0d0f1c] flex flex-col shrink-0">
-                    {/* Header row */}
-                    <div className="flex items-center justify-between px-4 py-2 border-b border-white/5 bg-[#0d0f1c] shrink-0">
-                        <div className="flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-[#7F77DD] animate-pulse" />
-                            <span className="text-[10px] font-mono uppercase tracking-widest text-[#7F77DD]/70">
-                                Loop Editor
-                            </span>
-                            {regionEnd > regionStart && bpm && (
-                                <span className="text-[10px] font-mono text-white/25 ml-1">
-                                    {loopMode === 'bar'
-                                        ? `${((regionEnd - regionStart) / ((60 / bpm) * 4)).toFixed(1)} bars`
-                                        : `${Math.round((regionEnd - regionStart) / (60 / bpm))} beats`}
-                                </span>
-                            )}
-                        </div>
-                        <button
-                            onClick={() => onOpenExportDialog?.()}
-                            disabled={!trackId || regionEnd <= regionStart}
-                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#7F77DD]/10 border border-[#7F77DD]/30 text-[#7F77DD] hover:bg-[#7F77DD]/20 hover:border-[#7F77DD]/60 disabled:opacity-30 disabled:cursor-not-allowed transition-all font-semibold text-xs"
-                        >
-                            Save / Export…
-                        </button>
-                    </div>
-
-                    {/* Zoomed waveform — taller + inset (focused fine-tune panel) */}
-                    <div className="relative w-4/5 mx-auto" style={{ minHeight: 200 }}>
-                        <WaveformCanvas
-                            key={`loop-editor-${trackId}`}
-                            ref={loopEditorRef}
-                            audioUrl={audioUrl}
-                            hideOverview={true}
-                            waveHeight={280}
-                            downbeats={downbeats}
-                            bpm={bpm}
-                            beatAnchor={beatAnchor}
-                            snapEnabled={snapEnabled}
-                            isLooping={isLooping}
-                            regionStart={regionStart}
-                            regionEnd={regionEnd}
-                            onReady={() => {
-                                if (regionEnd > regionStart) {
-                                    loopEditorRef.current?.syncRegion(regionStart, regionEnd);
-                                    loopEditorRef.current?.zoomToFitRegion(regionStart, regionEnd);
-                                }
-                            }}
-                            onRegionUpdate={(s, e) => {
-                                onUpdateRegion(s, e);
-                                waveformRef.current?.syncRegion(s, e);
-                            }}
-                            onPlayStateChange={playing => {
-                                setIsPlaying(playing);
-                                onPlayStateChangeProp?.(playing);
-                            }}
-                            onTimeUpdate={t => {
-                                setCurrentTime(t);
-                                onTimeUpdateProp?.(t);
-                            }}
-                        />
-                    </div>
-
-                    {/* Fine-tune controls */}
-                    <EditLoopSection
-                        regionStart={regionStart}
-                        regionEnd={regionEnd}
-                        bpm={bpm}
-                        barCount={activeBarPreset ?? 0}
-                        quantizeEnabled={snapEnabled}
-                        onQuantizeToggle={() => setSnapEnabled(v => !v)}
-                        onClose={() => setEditLoopOpen(false)}
-                        onRegionChange={handleRegionChange}
-                        duration={duration}
-                    />
-                </div>
-            )}
 
             {/* ── Loop editor toolbar ────────────────────────────────────── */}
             <LoopEditorToolbar
@@ -783,50 +871,20 @@ export function CentreWorkspace({
                 editLoopOpen={editLoopOpen}
             />
 
-            {/* ── Stem lanes ─────────────────────────────────────────────── */}
-            {stemNames.length > 0 && (
-                <div className="shrink-0 max-h-[220px] overflow-y-auto border-t border-white/5">
-                    <StemLanes
-                        trackId={trackId ?? undefined}
-                        availableStems={stemNames}
-                        stemMixerStates={stemMixer.stemStates}
-                        onToggleMute={stemMixer.toggleMute}
-                        onToggleSolo={stemMixer.toggleSolo}
-                        onPlayStem={handlePlayStem}
-                        mixerLoaded={stemMixer.isLoaded}
-                        isPlaying={isPlaying}
-                        selectedStems={selectedStems}
-                        editLoopOpen={editLoopOpen}
-                        regionStart={regionStart}
-                        regionEnd={regionEnd}
-                        trackDuration={duration}
-                        onToggleStemSelection={name => {
-                            setSelectedStems(prev => {
-                                const next = prev.includes(name)
-                                    ? prev.filter(s => s !== name)
-                                    : [...prev, name];
-                                onSelectedStemsChange?.(next);
-                                return next;
-                            });
-                        }}
-                    />
-                </div>
-            )}
-
-            {/* ── Smart phrases ──────────────────────────────────────────── */}
-            {(loadingPhrases || smartPhrases.length > 0 || phrasesError) && (
-                <div className="px-4 py-2 bg-[#0d0f1c] border-t border-white/5 flex items-center gap-2 flex-wrap">
-                    <div className="flex items-center gap-1 mr-1">
-                        <Zap size={11} className="text-[#7F77DD]" />
-                        <span className="text-[10px] font-mono text-white/30 uppercase tracking-widest">
-                            Phrases
+            {/* ── Ready-Made One-Touch Structural Phrase Loops (Intro, Drop, Breakdown, Chorus, Outro) ── */}
+            <div className="px-4 py-2 bg-[#111326] border-t border-b border-white/5 flex items-center justify-between gap-2 flex-wrap shrink-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 mr-1">
+                        <Zap size={12} className="text-[#EF9F27]" />
+                        <span className="text-[10px] font-mono font-bold text-white/60 uppercase tracking-widest">
+                            One-Touch Structural Loops:
                         </span>
                     </div>
 
                     {loadingPhrases && (
-                        <div className="flex items-center gap-1.5 text-white/25 text-xs">
+                        <div className="flex items-center gap-1.5 text-white/30 text-xs">
                             <Loader2 size={11} className="animate-spin" />
-                            <span className="font-mono text-[10px]">Detecting...</span>
+                            <span className="font-mono text-[10px]">Analysing structure…</span>
                         </div>
                     )}
 
@@ -834,25 +892,126 @@ export function CentreWorkspace({
                         <span className="text-[10px] text-red-400/60 font-mono">{phrasesError}</span>
                     )}
 
-                    {smartPhrases.map((phrase, i) => (
-                        <button
-                            key={i}
-                            onClick={() => handleSmartPhrase(phrase)}
-                            title={`${phrase.type} · ${phrase.start_time.toFixed(2)}s–${phrase.end_time.toFixed(2)}s · ${Math.round((phrase.confidence ?? 0) * 100)}% confidence`}
-                            className={`
-                                flex items-center gap-1.5 px-2 py-0.5 rounded border text-[11px] font-mono
-                                transition-all hover:scale-105 active:scale-95 cursor-pointer
-                                ${phraseColor(phrase.type)}
-                            `}
-                        >
-                            <span
-                                className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${confidenceDot(phrase.confidence ?? 0)}`}
-                            />
-                            {phraseLabel(phrase.type)}
-                        </button>
-                    ))}
+                    {smartPhrases.map((phrase, i) => {
+                        const isPhraseActive =
+                            Math.abs(regionStart - phrase.start_time) < 0.25 &&
+                            Math.abs(regionEnd - phrase.end_time) < 0.25;
+                        return (
+                            <button
+                                key={i}
+                                onClick={() => handleSmartPhrase(phrase)}
+                                title={`${phraseLabel(phrase.type)} · ${phrase.start_time.toFixed(2)}s–${phrase.end_time.toFixed(2)}s (${phrase.bar_count} bars)`}
+                                className={`
+                                    flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11px] font-mono font-bold
+                                    transition-all hover:scale-105 active:scale-95 cursor-pointer
+                                    ${phraseColor(phrase.type)}
+                                    ${isPhraseActive ? 'ring-1 ring-white shadow-[0_0_12px_rgba(127,119,221,0.4)]' : ''}
+                                `}
+                            >
+                                <span
+                                    className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${confidenceDot(phrase.confidence ?? 0.9)}`}
+                                />
+                                <span>{phraseLabel(phrase.type)}</span>
+                                <span className="text-[9px] opacity-70">{phrase.bar_count}B</span>
+                            </button>
+                        );
+                    })}
                 </div>
-            )}
+
+                <button
+                    onClick={() => handleSaveSectionBundle('one_touch_phrase')}
+                    disabled={saving || regionEnd <= regionStart}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#1D9E75]/15 hover:bg-[#1D9E75]/25 border border-[#1D9E75]/40 text-[#1D9E75] text-[10px] font-mono font-bold transition-all disabled:opacity-40"
+                >
+                    <Save size={11} />
+                    Save Loop + 6 Stems (.wav)
+                </button>
+            </div>
+
+            {/* ── 2. COLLAPSIBLE 6-STEM LANES DIRECTLY BELOW MAIN TRACK ──── */}
+            <div className="shrink-0 border-b border-white/10 bg-[#151429]">
+                <div
+                    onClick={() => setStemsCollapsed(c => !c)}
+                    className="px-4 py-2 flex items-center justify-between cursor-pointer hover:bg-white/[0.02] transition-colors select-none"
+                >
+                    <div className="flex items-center gap-2">
+                        {stemsCollapsed ? (
+                            <ChevronRight size={14} className="text-[#7F77DD]" />
+                        ) : (
+                            <ChevronDown size={14} className="text-[#7F77DD]" />
+                        )}
+                        <Layers size={13} className="text-[#1D9E75]" />
+                        <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-white/85">
+                            Collapsible 6-Stem Lanes
+                        </span>
+                        <span className="text-[10px] font-mono text-white/40">
+                            (Drums · Bass · Vocals · Guitar · Piano · Other)
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded bg-[#1D9E75]/15 border border-[#1D9E75]/30 text-[#1D9E75] text-[9px] font-mono font-bold">
+                            {stemNames.length} STEMS ACTIVE
+                        </span>
+                        <span className="text-[10px] font-mono text-white/40">
+                            {stemsCollapsed ? 'Click to expand' : 'Click to collapse'}
+                        </span>
+                    </div>
+                </div>
+
+                {!stemsCollapsed && (
+                    <div className="max-h-[300px] overflow-y-auto border-t border-white/5">
+                        <StemLanes
+                            trackId={trackId ?? undefined}
+                            availableStems={stemNames}
+                            stemMixerStates={stemMixer.stemStates}
+                            onToggleMute={stemMixer.toggleMute}
+                            onToggleSolo={stemMixer.toggleSolo}
+                            onPlayStem={handlePlayStem}
+                            mixerLoaded={stemMixer.isLoaded}
+                            isPlaying={isPlaying}
+                            selectedStems={selectedStems}
+                            editLoopOpen={true}
+                            regionStart={regionStart}
+                            regionEnd={regionEnd}
+                            trackDuration={duration}
+                            onToggleStemSelection={name => {
+                                setSelectedStems(prev => {
+                                    const next = prev.includes(name)
+                                        ? prev.filter(s => s !== name)
+                                        : [...prev, name];
+                                    onSelectedStemsChange?.(next);
+                                    return next;
+                                });
+                            }}
+                        />
+                    </div>
+                )}
+            </div>
+
+            {/* ── 3. THE CHEF'S KISS: MAIN / ULTRA EDIT WINDOW BELOW STEMS ── */}
+            <div className="shrink-0">
+                <UltraEditWindow
+                    trackId={trackId}
+                    trackTitle={trackDetail.title}
+                    bpm={bpm ?? 120}
+                    musicalKey={trackDetail.musical_key ?? 'Am'}
+                    duration={duration || trackDetail.duration || 0}
+                    loopStart={regionStart}
+                    loopEnd={regionEnd}
+                    selectedBarCount={activeBarPreset ?? 4}
+                    selectedBeatCount={selectedBeatPreset}
+                    quantizeEnabled={snapEnabled}
+                    waveformPeaks={peaks}
+                    onLoopRegionChange={handleRegionChange}
+                    onSelectBeatLoop={handleBeatPresetSelect}
+                    onSelectBarLoop={bars => {
+                        setLoopMode('bar');
+                        setSelectedBeatPreset(null);
+                        handleBarPresetToggle(bars);
+                    }}
+                    onToggleQuantize={() => setSnapEnabled(v => !v)}
+                />
+            </div>
         </div>
     );
 }

@@ -6,6 +6,17 @@ export interface EQ5Band {
   high_db: number;
 }
 
+export interface EQ8Band {
+  hz_31: number;
+  hz_63: number;
+  hz_125: number;
+  hz_250: number;
+  hz_500: number;
+  hz_1k: number;
+  hz_4k: number;
+  hz_12k: number;
+}
+
 export interface ExportSettings {
   loop_length_seconds: number;
   bpm: number;
@@ -13,6 +24,7 @@ export interface ExportSettings {
   format: string;
   sample_rate: number;
   bit_depth: number;
+  post_production?: boolean;
 }
 
 export interface Substem {
@@ -24,7 +36,13 @@ export interface Substem {
   solo: boolean;
   muted: boolean;
   gain_db: number;
+  gain_left_db?: number;
+  gain_right_db?: number;
+  kill_low?: boolean;
+  kill_mid?: boolean;
+  kill_high?: boolean;
   eq_5band: EQ5Band;
+  eq_8band?: EQ8Band;
   meter_level: number;
   color: string;
   is_placeholder: boolean;
@@ -49,6 +67,14 @@ export interface IsolationSession {
   substems: Substem[];
   selected_substem_ids: string[];
   active_eq_target: string | null;
+  eq_target_ids?: string[];
+  master_eq_8band?: EQ8Band;
+  master_gain_left_db?: number;
+  master_gain_right_db?: number;
+  master_kill_low?: boolean;
+  master_kill_mid?: boolean;
+  master_kill_high?: boolean;
+  post_production?: boolean;
   audition_mode: AuditionMode;
   export_settings: ExportSettings;
   created_at: string;
@@ -71,7 +97,13 @@ export interface UpdateSubstemRequest {
   solo?: boolean;
   muted?: boolean;
   gain_db?: number;
+  gain_left_db?: number;
+  gain_right_db?: number;
+  kill_low?: boolean;
+  kill_mid?: boolean;
+  kill_high?: boolean;
   eq_5band?: EQ5Band;
+  eq_8band?: EQ8Band;
   meter_level?: number;
 }
 

@@ -269,7 +269,7 @@ export function LibraryView({
                      hover:brightness-110 transition-all"
         >
           <Plus size={13} />
-          Import
+          Street Capture & Discover
         </button>
       </div>
 
