@@ -285,7 +285,16 @@ export const exportToAbleton = async (
 // --- Legacy / Domain Specific APIs ---
 
 // Health & Info
-export const checkHealth = async (): Promise<{ status: string; app_mode?: boolean; version?: string }> => {
+export interface HealthInfo {
+  status: string;
+  app_mode?: boolean;
+  version?: string;
+  name?: string;
+  music_library?: string;
+  features?: Record<string, boolean>;
+}
+
+export const checkHealth = async (): Promise<HealthInfo> => {
   const response = await api.get('/health');
   return response.data;
 };
@@ -294,16 +303,126 @@ export const shutdownApp = async (): Promise<void> => {
   await api.post('/system/shutdown');
 };
 
+// System & Default Music Folder Configuration
+export interface SystemConfigResponse {
+  music_library: string;
+  default_music_library: string;
+  downloads_dir: string;
+  stems_dir: string;
+  loops_dir: string;
+  projects_dir: string;
+  exists: boolean;
+  writable: boolean;
+  updated?: boolean;
+}
+
+export const getSystemConfig = async (): Promise<SystemConfigResponse> => {
+  try {
+    const response = await api.get('/system/config');
+    return response.data;
+  } catch (err) {
+    handleAxiosError(err);
+  }
+};
+
+export const updateLibraryPath = async (
+  path?: string,
+  reset = false,
+): Promise<SystemConfigResponse> => {
+  try {
+    const response = await api.post('/system/library-path', { path, reset });
+    return response.data;
+  } catch (err) {
+    handleAxiosError(err);
+  }
+};
+
+// Online / Unified Track Search
+export interface OnlineSearchTrack {
+  id: string;
+  track_id?: string;
+  title: string;
+  artist: string;
+  url?: string;
+  youtube_url?: string;
+  soundcloud_url?: string;
+  duration?: number | null;
+  thumbnail?: string | null;
+  source: string;
+  in_library?: boolean;
+  bpm?: number | null;
+  key?: string | null;
+  status?: string;
+  year?: number | null;
+  confidence?: number;
+  section_hint?: string | null;
+}
+
+export interface OnlineSearchResponse {
+  query: string;
+  hints?: string;
+  effective_query?: string;
+  source: string;
+  count: number;
+  tracks: OnlineSearchTrack[];
+  sources_status?: Record<string, string>;
+  online_available?: boolean;
+  narrative?: string[];
+}
+
+export const searchOnline = async (params: {
+  query?: string;
+  hints?: string;
+  source?: string;
+  limit?: number;
+  year_from?: number;
+  year_to?: number;
+}): Promise<OnlineSearchResponse> => {
+  try {
+    const response = await api.post('/search/online', {
+      query: params.query ?? '',
+      hints: params.hints ?? undefined,
+      source: params.source ?? 'all',
+      limit: params.limit ?? 12,
+      year_from: params.year_from,
+      year_to: params.year_to,
+    });
+    return response.data;
+  } catch (err) {
+    handleAxiosError(err);
+  }
+};
+
+export interface ResolvedUrlInfo {
+  url: string;
+  platform: string;
+  resolved: boolean;
+  title: string;
+  artist: string;
+  duration?: number | null;
+  thumbnail?: string | null;
+  note?: string;
+}
+
+export const resolveTrackUrl = async (url: string): Promise<ResolvedUrlInfo> => {
+  try {
+    const response = await api.post('/search/resolve-url', { url });
+    return response.data;
+  } catch (err) {
+    handleAxiosError(err);
+  }
+};
+
 // Artist Search
 export const searchArtists = async (query: string): Promise<Artist[]> => {
   const response = await api.get('/search/artists', { params: { q: query } });
-  return response.data.results;
+  return response.data.artists ?? response.data.results ?? [];
 };
 
 // Track Search
 export const searchTracks = async (query: string, limit = 20): Promise<Track[]> => {
   const response = await api.get('/search/tracks', { params: { q: query, limit } });
-  return response.data.results;
+  return response.data.tracks ?? response.data.results ?? [];
 };
 
 // Audio file URL helper

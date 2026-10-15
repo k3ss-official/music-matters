@@ -265,21 +265,38 @@ class TrackOutput:
 
 
 # Initialize directories on import
-def init_directories():
+def init_directories(lib_path: Optional[Path] = None):
     """Create necessary directories."""
-    settings = Settings()
-    settings.MUSIC_LIBRARY.mkdir(parents=True, exist_ok=True)
-    settings.CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    settings.TEMP_DIR.mkdir(parents=True, exist_ok=True)
-    settings.resolved_downloads_dir.mkdir(parents=True, exist_ok=True)
-    settings.resolved_stems_dir.mkdir(parents=True, exist_ok=True)
-    settings.resolved_loops_dir.mkdir(parents=True, exist_ok=True)
-    settings.resolved_projects_dir.mkdir(parents=True, exist_ok=True)
+    target_settings = settings if "settings" in globals() else Settings()
+    if lib_path is not None:
+        target_settings.MUSIC_LIBRARY = Path(lib_path).expanduser().resolve()
+    target_settings.MUSIC_LIBRARY.mkdir(parents=True, exist_ok=True)
+    target_settings.CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    target_settings.TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    target_settings.resolved_downloads_dir.mkdir(parents=True, exist_ok=True)
+    target_settings.resolved_stems_dir.mkdir(parents=True, exist_ok=True)
+    target_settings.resolved_loops_dir.mkdir(parents=True, exist_ok=True)
+    target_settings.resolved_projects_dir.mkdir(parents=True, exist_ok=True)
+    (target_settings.MUSIC_LIBRARY / "samples").expanduser().mkdir(parents=True, exist_ok=True)
 
 
 # Create global settings instance
 settings = Settings()
 init_directories()
+
+
+def set_music_library(new_path: str | Path) -> Path:
+    """Update the active MUSIC_LIBRARY path and initialize its folder hierarchy."""
+    global DOWNLOADS_DIR, STEMS_DIR, LOOPS_DIR, PROJECTS_DIR, SAMPLES_DIR, DATA_DIR
+    resolved = Path(new_path).expanduser().resolve()
+    init_directories(resolved)
+    DOWNLOADS_DIR = settings.resolved_downloads_dir
+    STEMS_DIR = settings.resolved_stems_dir
+    LOOPS_DIR = settings.resolved_loops_dir
+    PROJECTS_DIR = settings.resolved_projects_dir
+    SAMPLES_DIR = (settings.MUSIC_LIBRARY / "samples").expanduser()
+    DATA_DIR = settings.MUSIC_LIBRARY.expanduser()
+    return resolved
 
 # Legacy constants for backwards compatibility with service modules
 # -- Paths --

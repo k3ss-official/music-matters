@@ -18,9 +18,10 @@ const RECORD_SECONDS = 10;
 
 interface Props {
     onLibraryMatch?: (trackId: string) => void;
+    onIngestMatch?: (query: string, title?: string) => void;
 }
 
-export function RecognizeButton({ onLibraryMatch }: Props) {
+export function RecognizeButton({ onLibraryMatch, onIngestMatch }: Props) {
     const [phase, setPhase] = useState<Phase>('idle');
     const [countdown, setCountdown] = useState(RECORD_SECONDS);
     const [result, setResult] = useState<RecognizeResult | null>(null);
@@ -230,21 +231,41 @@ export function RecognizeButton({ onLibraryMatch }: Props) {
     return (
         <div className="flex flex-col gap-3 w-full max-w-md">
             {shazam && (
-                <div className="px-4 py-3 rounded-xl bg-[#7F77DD]/5 border border-[#7F77DD]/20">
-                    <div className="text-[10px] font-mono tracking-[0.15em] text-[#7F77DD]/60 mb-1">SHAZAM MATCH</div>
-                    <div className="text-white font-semibold text-sm">{shazam.title ?? '—'}</div>
-                    <div className="text-white/50 text-xs mt-0.5">
-                        {[shazam.artist, shazam.album, shazam.year].filter(Boolean).join(' · ')}
+                <div className="px-4 py-3 rounded-xl bg-[#7F77DD]/5 border border-[#7F77DD]/20 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                        <div className="text-[10px] font-mono tracking-[0.15em] text-[#7F77DD]/60 mb-1">SHAZAM MATCH</div>
+                        <div className="text-white font-semibold text-sm truncate">{shazam.title ?? '—'}</div>
+                        <div className="text-white/50 text-xs mt-0.5 truncate">
+                            {[shazam.artist, shazam.album, shazam.year].filter(Boolean).join(' · ')}
+                        </div>
                     </div>
+                    {onIngestMatch && shazam.title && (
+                        <button
+                            onClick={() => onIngestMatch(`${shazam.artist ? `${shazam.artist} - ` : ''}${shazam.title}`, shazam.title ?? undefined)}
+                            className="shrink-0 px-3 py-1.5 rounded-lg bg-[#1D9E75] text-white text-xs font-bold hover:brightness-110 transition-all"
+                        >
+                            Import Track
+                        </button>
+                    )}
                 </div>
             )}
             {!shazam && acoustid && (
-                <div className="px-4 py-3 rounded-xl bg-[#7F77DD]/5 border border-[#7F77DD]/20">
-                    <div className="text-[10px] font-mono tracking-[0.15em] text-[#7F77DD]/60 mb-1">ACOUSTID MATCH · {Math.round(acoustid.score * 100)}%</div>
-                    <div className="text-white font-semibold text-sm">{acoustid.title ?? '—'}</div>
-                    <div className="text-white/50 text-xs mt-0.5">
-                        {[acoustid.artist, acoustid.album, acoustid.year].filter(Boolean).join(' · ')}
+                <div className="px-4 py-3 rounded-xl bg-[#7F77DD]/5 border border-[#7F77DD]/20 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                        <div className="text-[10px] font-mono tracking-[0.15em] text-[#7F77DD]/60 mb-1">ACOUSTID MATCH · {Math.round(acoustid.score * 100)}%</div>
+                        <div className="text-white font-semibold text-sm truncate">{acoustid.title ?? '—'}</div>
+                        <div className="text-white/50 text-xs mt-0.5 truncate">
+                            {[acoustid.artist, acoustid.album, acoustid.year].filter(Boolean).join(' · ')}
+                        </div>
                     </div>
+                    {onIngestMatch && acoustid.title && (
+                        <button
+                            onClick={() => onIngestMatch(`${acoustid.artist ? `${acoustid.artist} - ` : ''}${acoustid.title}`, acoustid.title ?? undefined)}
+                            className="shrink-0 px-3 py-1.5 rounded-lg bg-[#1D9E75] text-white text-xs font-bold hover:brightness-110 transition-all"
+                        >
+                            Import Track
+                        </button>
+                    )}
                 </div>
             )}
             {library_match && (

@@ -124,6 +124,7 @@ async def health_check():
         "version": settings.APP_VERSION,
         "name": settings.APP_NAME,
         "app_mode": _app_mode(),
+        "music_library": str(settings.MUSIC_LIBRARY),
         "features": {
             "search": True,
             "sota_analysis": settings.ENABLE_SOTA_ANALYSIS,

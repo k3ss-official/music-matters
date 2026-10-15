@@ -16,6 +16,7 @@ import json
 import yt_dlp
 
 from app.config import (
+    settings as global_settings,
     DOWNLOADS_DIR,
     TEMP_DIR,
     YTDLP_OPTIONS,
@@ -57,9 +58,9 @@ class DownloadService:
     """Service for downloading audio tracks from various sources"""
 
     def __init__(self, settings=None):
-        self.downloads_dir = DOWNLOADS_DIR
+        self.settings = settings or global_settings
+        self.downloads_dir = self.settings.resolved_downloads_dir
         self.temp_dir = TEMP_DIR
-        self.settings = settings
 
     def _get_safe_filename(self, title: str, artist: str) -> str:
         """Generate a safe filename from title and artist"""
@@ -159,8 +160,10 @@ class DownloadService:
         )
 
     def download(self, url: str) -> Path:
-        """Download a track from a URL directly."""
-        is_youtube = "youtube.com" in url or "youtu.be" in url
+        """Download a track from a URL or search query directly."""
+        self.downloads_dir = (self.settings or global_settings).resolved_downloads_dir
+        self.downloads_dir.mkdir(parents=True, exist_ok=True)
+        is_youtube = "youtube.com" in url or "youtu.be" in url or url.startswith("ytsearch")
 
         ydl_opts = {
             "format": "bestaudio*/[ext=m4a]/best",
@@ -177,6 +180,9 @@ class DownloadService:
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
+                if info and "entries" in info and info["entries"]:
+                    info = info["entries"][0]
+                info = info or {}
                 title = info.get("title", "unknown")
                 artist = info.get("artist") or info.get("uploader", "unknown")
                 safe_filename = self._get_safe_filename(title, artist)

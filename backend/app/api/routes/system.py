@@ -6,12 +6,97 @@ import signal
 import threading
 import time
 
+from pathlib import Path
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
 import psutil
 
+from app.config import settings, set_music_library
 from app.security import is_localhost, is_self_or_init
 
 router = APIRouter(prefix="/system", tags=["system"])
+
+
+class LibraryPathRequest(BaseModel):
+    path: Optional[str] = None
+    reset: bool = False
+
+
+FORBIDDEN_LIBRARY_ROOTS = {
+    Path("/"),
+    Path("/bin"),
+    Path("/sbin"),
+    Path("/usr"),
+    Path("/etc"),
+    Path("/var"),
+    Path("/System"),
+    Path("/Library"),
+}
+
+
+def _build_library_config() -> dict:
+    lib = Path(settings.MUSIC_LIBRARY).expanduser().resolve()
+    default_lib = (Path.home() / "music-matters").expanduser().resolve()
+    return {
+        "music_library": str(lib),
+        "default_music_library": str(default_lib),
+        "downloads_dir": str(settings.resolved_downloads_dir),
+        "stems_dir": str(settings.resolved_stems_dir),
+        "loops_dir": str(settings.resolved_loops_dir),
+        "projects_dir": str(settings.resolved_projects_dir),
+        "exists": lib.exists(),
+        "writable": os.access(lib, os.W_OK) if lib.exists() else True,
+    }
+
+
+@router.get("/config")
+def get_system_config():
+    """Return current music library folder configuration and paths."""
+    return _build_library_config()
+
+
+@router.get("/library-path")
+def get_library_path():
+    """Return current default music folder configuration."""
+    return _build_library_config()
+
+
+@router.post("/library-path")
+def update_library_path(payload: LibraryPathRequest, request: Request):
+    """Set or reset the default music folder (MUSIC_LIBRARY). Localhost only."""
+    if not is_localhost(request):
+        raise HTTPException(status_code=403, detail="Local requests only")
+
+    if payload.reset:
+        target = (Path.home() / "music-matters").expanduser().resolve()
+    else:
+        raw = (payload.path or "").strip()
+        if not raw:
+            raise HTTPException(status_code=400, detail="Music folder path cannot be empty")
+        target = Path(raw).expanduser().resolve()
+
+    if target in FORBIDDEN_LIBRARY_ROOTS:
+        raise HTTPException(status_code=400, detail="Cannot use system root directory as music folder")
+
+    try:
+        resolved = set_music_library(target)
+        from app.services.library import LibraryPaths
+        from app.services.pipeline import pipeline
+
+        pipeline._library = LibraryPaths(settings)
+        pipeline._downloader.downloads_dir = settings.resolved_downloads_dir
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=f"Permission denied creating folder: {target}") from exc
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid folder path: {exc}") from exc
+
+    return {
+        **_build_library_config(),
+        "music_library": str(resolved),
+        "updated": True,
+    }
 
 KNOWN_HEAVY_APPS = {
     "Photoshop", "Lightroom", "Final Cut Pro", "DaVinci Resolve",
