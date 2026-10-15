@@ -35,6 +35,10 @@ echo -e "${CYAN}║       Music Matters — Dev Server         ║${RESET}"
 echo -e "${CYAN}╚══════════════════════════════════════════╝${RESET}"
 echo ""
 
+# ── Python env & PATH (conda: music-matters, else venv) ──────────────────────
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/scripts/lib-env.sh"
+
 # ── Prereq checks ───────────────────────────────────────────────────────────
 check_command() {
     if ! command -v "$1" &>/dev/null; then
@@ -44,13 +48,10 @@ check_command() {
     fi
 }
 
-check_command python3  "brew install python3  OR  https://python.org"
-check_command node     "brew install node     OR  https://nodejs.org"
+check_command python3  "brew install python@3.11  OR  ./scripts/install-macos.sh"
+check_command node     "brew install node         OR  ./scripts/install-macos.sh"
 check_command npm      "comes with node"
 
-# ── Python env (conda: music-matters, else venv) ─────────────────────────────
-# shellcheck disable=SC1091
-source "$SCRIPT_DIR/scripts/lib-env.sh"
 mm_resolve_python "$SCRIPT_DIR"
 if [ "$MM_PYTHON" = "python3" ] && [ ! -d "$BACKEND_DIR/.venv" ] && [ ! -d "$SCRIPT_DIR/.venv" ]; then
     warn "No conda env or venv — creating $SCRIPT_DIR/.venv"

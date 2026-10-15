@@ -8,7 +8,9 @@ from app.config import settings
 from app.security import AUDIO_SUFFIXES, confined_file
 from app.services.isolation_models import (
     CreateSessionRequest,
+    IsolateElementRequest,
     IsolationSession,
+    SaveCompleteBundleRequest,
     UpdateSessionRequest,
     UpdateSubstemRequest,
 )
@@ -50,6 +52,8 @@ async def update_session(session_id: str, payload: UpdateSessionRequest) -> Isol
     updates = payload.model_dump(exclude_none=True)
     if "export_settings" in updates and updates["export_settings"] is not None:
         updates["export_settings"] = payload.export_settings.model_dump() if payload.export_settings else None
+    if "master_eq_8band" in updates and updates["master_eq_8band"] is not None:
+        updates["master_eq_8band"] = payload.master_eq_8band.model_dump() if payload.master_eq_8band else None
     updated = isolation_service.update_session(session_id, updates)
     if updated is None:
         raise HTTPException(status_code=404, detail=f"Session {session_id!r} not found")
@@ -79,6 +83,8 @@ async def update_substem(
     updates = payload.model_dump(exclude_none=True)
     if "eq_5band" in updates and updates["eq_5band"] is not None:
         updates["eq_5band"] = payload.eq_5band.model_dump() if payload.eq_5band else None
+    if "eq_8band" in updates and updates["eq_8band"] is not None:
+        updates["eq_8band"] = payload.eq_8band.model_dump() if payload.eq_8band else None
     updated = isolation_service.update_substem(session_id, substem_id, updates)
     if updated is None:
         raise HTTPException(
@@ -86,6 +92,36 @@ async def update_substem(
             detail=f"Session {session_id!r} or substem {substem_id!r} not found",
         )
     return updated
+
+
+@router.post("/session/{session_id}/isolate-element", response_model=IsolationSession)
+async def isolate_element(
+    session_id: str, payload: IsolateElementRequest
+) -> IsolationSession:
+    _require_session(session_id)
+    updated = isolation_service.isolate_element(
+        session_id,
+        element=payload.element,
+        assign_to_eq=payload.assign_to_eq,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Session {session_id!r} not found")
+    return updated
+
+
+@router.post("/session/{session_id}/save-complete-bundle")
+async def save_complete_bundle(
+    session_id: str, payload: SaveCompleteBundleRequest
+) -> dict:
+    _require_session(session_id)
+    return await isolation_service.save_complete_bundle(
+        session_id,
+        label=payload.label,
+        save_isolated_sound=payload.save_isolated_sound,
+        save_complete_loop=payload.save_complete_loop,
+        save_six_stems=payload.save_six_stems,
+        post_production=payload.post_production,
+    )
 
 
 @router.post("/session/{session_id}/preview")

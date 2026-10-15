@@ -6,6 +6,7 @@ import type {
   AuditionMode,
   ExportSettings,
   ExportLoopResult,
+  EQ8Band,
 } from '../types/isolation';
 
 export const createIsolationSession = async (
@@ -32,11 +33,56 @@ export const updateIsolationSession = async (
     key?: string;
     selected_substem_ids?: string[];
     active_eq_target?: string | null;
+    eq_target_ids?: string[];
+    master_eq_8band?: EQ8Band;
+    master_gain_left_db?: number;
+    master_gain_right_db?: number;
+    master_kill_low?: boolean;
+    master_kill_mid?: boolean;
+    master_kill_high?: boolean;
+    post_production?: boolean;
     audition_mode?: AuditionMode;
     export_settings?: Partial<ExportSettings>;
   },
 ): Promise<IsolationSession> => {
   const resp = await api.patch(`/isolation/session/${sessionId}`, updates);
+  return resp.data;
+};
+
+export const isolateElement = async (
+  sessionId: string,
+  element: string,
+  assignToEq = true,
+): Promise<IsolationSession> => {
+  const resp = await api.post(`/isolation/session/${sessionId}/isolate-element`, {
+    element,
+    assign_to_eq: assignToEq,
+  });
+  return resp.data;
+};
+
+export const saveCompleteBundle = async (
+  sessionId: string,
+  payload: {
+    label?: string;
+    save_isolated_sound?: boolean;
+    save_complete_loop?: boolean;
+    save_six_stems?: boolean;
+    post_production?: boolean;
+  },
+): Promise<{
+  session_id: string;
+  status: string;
+  post_production: boolean;
+  isolated_output_path?: string | null;
+  saved_loops: any[];
+  total_saved: number;
+  message: string;
+}> => {
+  const resp = await api.post(
+    `/isolation/session/${sessionId}/save-complete-bundle`,
+    payload,
+  );
   return resp.data;
 };
 

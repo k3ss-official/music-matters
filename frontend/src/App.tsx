@@ -53,9 +53,10 @@ import { ResourceChecker } from './components/ResourceChecker';
 import { ShazamImport } from './components/ShazamImport';
 import { StartupCheck } from './components/StartupCheck';
 import { LibraryView } from './components/LibraryView';
+import { DiscoveryHub } from './components/DiscoveryHub';
 import {
   Library as LibraryIcon, Search as SearchIcon, ListMusic,
-  AudioWaveform, Microscope, Download as DownloadIcon, Bell, Power,
+  AudioWaveform, Microscope, Download as DownloadIcon, Bell, Power, Radio,
 } from 'lucide-react';
 import type WaveSurfer from 'wavesurfer.js';
 
@@ -276,8 +277,8 @@ function App() {
     const options: ProcessingOptions = {
       analysis: true,
       separation: true,
-      loopSlicing: false,
-      mastering: false,
+      loopSlicing: true,
+      mastering: true,
     };
 
     try {
@@ -436,14 +437,26 @@ function App() {
                   ? (trackDetail?.title ?? 'Track')
                   : view === 'isolation'
                     ? 'Isolation Workspace'
-                    : view === 'upload' ? 'Import' : 'Processing'}
+                    : view === 'upload' ? 'Street Capture & Multi-Angle Discovery' : 'Processing'}
               </span>
             </>
           )}
         </div>
 
-        {/* Right: connection dot, shortcuts, bell, avatar */}
+        {/* Right: Street Capture / Multi-Angle Discovery button, connection dot, shortcuts, bell, avatar */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setView('upload')}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all border ${
+              view === 'upload'
+                ? 'bg-[#7F77DD] border-[#7F77DD] text-white'
+                : 'bg-[#7F77DD]/15 border-[#7F77DD]/35 text-[#7F77DD] hover:bg-[#7F77DD]/25'
+            }`}
+            title="Street Capture, Shazam, Natural Language + Producer/Remixer/Date Range Search"
+          >
+            <Radio size={12} />
+            Street Capture & Search
+          </button>
           <div
             title={isConnected ? 'Backend online' : 'Backend offline'}
             className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-mm-teal' : 'bg-[#ff3b5c] animate-status-pulse'}`}
@@ -492,9 +505,9 @@ function App() {
         {/* ─── ICON SIDEBAR — persistent, 52px ──────────────────────────── */}
         <nav className="w-[52px] bg-mm-surface border-r border-mm-border flex flex-col items-center py-2 gap-1 flex-shrink-0">
           {([
-            { key: 'library', label: 'Library', icon: <LibraryIcon size={15} />, onClick: () => { setFocusLibrarySearch(false); setView('library'); }, active: view === 'library' || view === 'upload' || view === 'processing', disabled: false },
-            { key: 'search', label: 'Search', icon: <SearchIcon size={15} />, onClick: () => { setFocusLibrarySearch(true); setView('library'); }, active: false, disabled: false },
-            { key: 'tracks', label: 'Tracks', icon: <ListMusic size={15} />, onClick: () => setView('workspace'), active: view === 'workspace', disabled: !selectedTrackId },
+            { key: 'library', label: 'Library', icon: <LibraryIcon size={15} />, onClick: () => { setFocusLibrarySearch(false); setView('library'); }, active: view === 'library' || view === 'processing', disabled: false },
+            { key: 'search', label: 'Discover', icon: <SearchIcon size={15} />, onClick: () => setView('upload'), active: view === 'upload', disabled: false },
+            { key: 'tracks', label: 'Studio', icon: <ListMusic size={15} />, onClick: () => setView('workspace'), active: view === 'workspace', disabled: !selectedTrackId },
             { key: 'stems', label: 'Stems', icon: <AudioWaveform size={15} />, onClick: () => setView('workspace'), active: false, disabled: !selectedTrackId },
             { key: 'isolation', label: 'Isolation', icon: <Microscope size={15} />, onClick: () => setView('isolation'), active: view === 'isolation', disabled: false },
             { key: 'export', label: 'Export', icon: <DownloadIcon size={15} />, onClick: () => { setView('workspace'); setExportDialogOpen(true); }, active: false, disabled: !selectedTrackId },
@@ -534,123 +547,29 @@ function App() {
         )}
 
         {/* ═══════════════════════════════════════════════════════════════ */}
-        {/* VIEW: UPLOAD ─────────────────────────────────────────────── */}
+        {/* VIEW: UPLOAD / MULTI-ANGLE STREET CAPTURE & DISCOVERY HUB ──── */}
         {/* ═══════════════════════════════════════════════════════════════ */}
         {view === 'upload' && (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="flex flex-col items-center gap-8 max-w-md">
-              {/* Hero */}
-              <div className="text-center space-y-3">
-                <div className="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-[#7F77DD]/20 to-[#7F77DD]/20 border border-white/10 flex items-center justify-center text-4xl shadow-[0_0_40px_rgba(127,119,221,0.15)]">
-                  🎧
-                </div>
-                <h2 className="text-2xl font-bold text-white">
-                  Load a Track
-                </h2>
-                <p className="text-white/40 text-sm max-w-sm">
-                  Upload an audio file to analyse, separate stems, and export.
-                </p>
-              </div>
-
-              {/* Upload drop zone */}
-              <div
-                onClick={openFilePicker}
-                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragActive(true); }}
-                onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setDragActive(true); }}
-                onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragActive(false); }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setDragActive(false);
-                  const file = e.dataTransfer.files?.[0];
-                  if (file && !uploading && isConnected) {
-                    handleFileUpload(file);
-                  }
+          <ErrorBoundary key="discovery-hub">
+            <div className="flex-1 overflow-y-auto p-5 bg-[#0a0b14]">
+              <DiscoveryHub
+                tracks={recentTracks}
+                onLoadTrackIntoEditor={(id) => openTrack(id, 'workspace')}
+                onJobStarted={(jobId, trackId) => {
+                  setSelectedTrackId(trackId);
+                  setActiveJob({
+                    jobId,
+                    trackId,
+                    status: 'queued',
+                    stages: [],
+                  });
+                  setView('processing');
+                  subscribeToActiveJob(jobId, trackId);
                 }}
-                className={`group relative flex flex-col items-center gap-4 w-full py-10 px-8
-                           rounded-2xl border-2 border-dashed transition-all duration-300 cursor-pointer
-                           ${dragActive
-                             ? 'border-[#7F77DD] bg-[#7F77DD]/10 shadow-[0_0_30px_rgba(127,119,221,0.2)]'
-                             : 'border-white/10 hover:border-[#7F77DD]/50 hover:bg-[#7F77DD]/5'}
-                           ${(!isConnected || uploading) ? 'opacity-40 cursor-not-allowed' : ''}`}
-              >
-                <div className={`transition-colors ${dragActive ? 'text-[#7F77DD]' : 'text-white/30 group-hover:text-[#7F77DD]'}`}>
-                  {uploading ? <SpinnerIcon size={48} /> : <UploadIcon />}
-                </div>
-                <div className="text-center">
-                  <div className={`text-sm font-semibold transition-colors ${dragActive ? 'text-[#7F77DD]' : 'text-white/70 group-hover:text-white'}`}>
-                    {uploading ? 'Uploading...' : dragActive ? 'Drop it!' : 'Click or drag audio here'}
-                  </div>
-                  <div className="text-xs text-white/25 mt-1">
-                    MP3, WAV, FLAC, M4A, OGG, AAC
-                  </div>
-                </div>
-
-                {/* Glow effect on hover */}
-                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[#7F77DD]/0 to-[#7F77DD]/0 group-hover:from-[#7F77DD]/5 group-hover:to-[#7F77DD]/5 transition-all duration-500 pointer-events-none" />
-              </div>
-
-              {/* Backend offline warning */}
-              {!isConnected && (
-                <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#ff3b5c]/10 border border-[#ff3b5c]/20 text-[#ff3b5c] text-xs font-mono">
-                  <AlertIcon />
-                  Backend offline — start the server first
-                </div>
-              )}
-
-              {/* Identify a track by ear (Shazam-style) */}
-              {isConnected && (
-                <div className="flex flex-col items-center gap-2 w-full max-w-md">
-                  <div className="text-[10px] font-mono tracking-[0.2em] text-white/20 text-center">OR</div>
-                  <RecognizeButton
-                    onLibraryMatch={(trackId) => {
-                      setSelectedTrackId(trackId);
-                      setDetailLoading(true);
-                      api.getTrackDetail(trackId).then(detail => {
-                        setTrackDetail(detail);
-                        setDetailLoading(false);
-                        setView('workspace');
-                      }).catch(() => setDetailLoading(false));
-                    }}
-                  />
-                </div>
-              )}
-
-              {/* Recent tracks */}
-              {recentTracks.length > 0 && (
-                <div className="w-full max-w-lg mt-4">
-                  <div className="text-[10px] font-mono tracking-[0.2em] text-white/25 text-center mb-3">RECENT TRACKS</div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {recentTracks.map((t: any) => (
-                      <button
-                        key={t.track_id}
-                        onClick={() => {
-                          setSelectedTrackId(t.track_id);
-                          setDetailLoading(true);
-                          api.getTrackDetail(t.track_id).then(detail => {
-                            setTrackDetail(detail);
-                            setDetailLoading(false);
-                            setView('workspace');
-                          }).catch(() => setDetailLoading(false));
-                        }}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] hover:border-[#7F77DD]/30 transition-all text-left"
-                      >
-                        <div className="w-8 h-8 rounded bg-gradient-to-br from-[#7F77DD]/30 to-[#7F77DD]/30 flex items-center justify-center text-[#7F77DD]">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
-                        </div>
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium text-white truncate capitalize">{t.title}</div>
-                          <div className="text-[10px] text-white/30 font-mono">
-                            {t.bpm ? `${Math.round(t.bpm)} BPM` : '— BPM'}  {t.musical_key || ''}
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+                onClose={() => setView('library')}
+              />
             </div>
-          </div>
+          </ErrorBoundary>
         )}
 
         {/* ═══════════════════════════════════════════════════════════════ */}

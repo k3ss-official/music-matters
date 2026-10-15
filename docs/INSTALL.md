@@ -4,22 +4,30 @@ Repo: [k3ss-official/music-matters](https://github.com/k3ss-official/music-matte
 
 Do **not** clone into `~/music-matters`. That directory is the default **audio library**, not the source tree.
 
-## Mac app (recommended)
+## One-Shot Mac App Install (recommended)
+
+Paste this single command into Terminal:
 
 ```bash
-git clone https://github.com/k3ss-official/music-matters.git ~/Developer/music-matters
-cd ~/Developer/music-matters
-./scripts/install-macos.sh
-open ~/Applications/Music\ Matters.app
+([ -d ~/Developer/music-matters ] || git clone https://github.com/k3ss-official/music-matters.git ~/Developer/music-matters) && cd ~/Developer/music-matters && ./scripts/install-macos.sh --open
+```
+
+Or from inside your clone:
+
+```bash
+./scripts/install-macos.sh --open
 ```
 
 `install-macos.sh`:
 
-1. Uses conda env `music-matters` if present, otherwise creates `./.venv`
-2. `pip install -e .` and `npm ci && npm run build`
-3. Writes **`~/Applications/Music Matters.app`**, a thin wrapper that points at this clone
+1. Ensures Homebrew dependencies (`python@3.11`, `node`, `ffmpeg`, `libsndfile`, `chromaprint`) are installed, auto-installing any missing tools via `brew`
+2. Uses conda env `music-matters` if present, otherwise creates `./.venv`
+3. Runs `pip install -e .` and `npm ci && npm run build`
+4. Initializes the audio library directories at `~/music-matters`
+5. Writes **`/Applications/Music Matters.app`** (and `~/Applications/Music Matters.app`) and registers it with Finder / Spotlight / Launchpad
+6. Runs a post-install smoke check and launches the app when `--open` is passed
 
-Double-click the app after that. First Python install can take a long time (Demucs / PyTorch). First stem run downloads the model (~4 GB).
+Double-click **Music Matters** in **Applications** after that. First Python install can take a few minutes (Demucs / PyTorch). First stem run downloads the Demucs model (~4 GB).
 
 Logs: `~/Library/Logs/Music Matters.log`  
 Quit: power button in the header, or `kill $(lsof -ti :8010)`
@@ -29,9 +37,10 @@ Re-run `./scripts/install-macos.sh` after `git pull`.
 ## Requirements
 
 - macOS 13+
+- Homebrew (`https://brew.sh`) — `install-macos.sh` uses it to auto-install missing system tools
 - Python 3.11+
 - Node.js 18+
-- FFmpeg (`brew install ffmpeg`) — YouTube / URL ingest
+- FFmpeg (`brew install ffmpeg`) — YouTube / URL ingest & audio conditioning
 - Apple Silicon recommended (`DEMUCS_DEVICE=mps`); CUDA or CPU also work
 
 Optional conda:
@@ -52,7 +61,7 @@ From the clone:
 ./start.sh --app    # built UI served by FastAPI on :8010
 ```
 
-`Music Matters.command` in the repo root is a Finder double-click that prefers `--app` if `frontend/dist` exists.
+`Music Matters.command` in the repo root is a Finder double-click that launches the installed app (or runs `install-macos.sh --open` on first run).
 
 ## Configuration
 

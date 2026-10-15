@@ -1,5 +1,4 @@
-import os
-from pathlib import Path
+import mimetypes
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
@@ -12,16 +11,33 @@ from app.services.pipeline import pipeline
 router = APIRouter(prefix="/audio", tags=["audio"])
 
 
+def _audio_media_type(path) -> str:
+    suffix = path.suffix.lower()
+    if suffix == ".wav":
+        return "audio/wav"
+    if suffix == ".mp3":
+        return "audio/mpeg"
+    if suffix == ".flac":
+        return "audio/flac"
+    if suffix in (".m4a", ".aac"):
+        return "audio/mp4"
+    if suffix == ".ogg":
+        return "audio/ogg"
+    return mimetypes.guess_type(str(path))[0] or "audio/wav"
+
+
 @router.get("/tracks/{track_id}")
+@router.get("/{track_id}")
 async def get_track_audio(track_id: str) -> FileResponse:
     try:
         track_uuid = UUID(track_id)
         track = pipeline.get_track(track_uuid)
+        rec = pipeline._tracks.get(track_uuid)
 
         source_path_str = (
             track.metadata.get("source_path")
             or track.metadata.get("source")
-            or (str(track.original_path) if getattr(track, "original_path", None) else None)
+            or (str(rec.original_path) if rec and rec.original_path else None)
         )
 
         if not source_path_str:
@@ -34,9 +50,7 @@ async def get_track_audio(track_id: str) -> FileResponse:
         )
         return FileResponse(
             source_path,
-            media_type="audio/wav"
-            if source_path.suffix.lower() == ".wav"
-            else "audio/mpeg",
+            media_type=_audio_media_type(source_path),
             headers={"Accept-Ranges": "bytes"},
         )
     except HTTPException:
@@ -56,7 +70,9 @@ async def get_stem_audio(track_id: str, stem_name: str) -> FileResponse:
             settings.MUSIC_LIBRARY, stem_path, suffixes=AUDIO_SUFFIXES
         )
         return FileResponse(
-            stem_path, media_type="audio/wav", headers={"Accept-Ranges": "bytes"}
+            stem_path,
+            media_type=_audio_media_type(stem_path),
+            headers={"Accept-Ranges": "bytes"},
         )
     except HTTPException:
         raise

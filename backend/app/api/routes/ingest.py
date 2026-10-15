@@ -96,8 +96,10 @@ async def upload_and_ingest(
         except (json.JSONDecodeError, TypeError, ValueError):
             pass
 
+    orig_stem = Path(file.filename or "").stem.replace("_", " ").strip() or None
     payload = IngestRequest(
         source=str(dest),
+        title=orig_stem,
         tags=tag_list,
         collection=collection or "uploads",
         options=processing_options,

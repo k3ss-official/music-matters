@@ -263,3 +263,145 @@ def test_session_hydrates_from_track_and_exports_custom_format():
     sliced_samples, _ = sf.read(ext_data["output_path"])
     assert float(np.max(np.abs(sliced_samples))) > 0.1
 
+
+def test_ultra_edit_8band_eq_lr_pots_kills_element_and_save_bundle():
+    from datetime import datetime, timezone
+    from pathlib import Path
+    from uuid import uuid4
+    import numpy as np
+    import soundfile as sf
+    from app.config import settings
+    from app.services.pipeline import TrackRecord, pipeline
+
+    sr = 44100
+    t = np.linspace(0, 4.0, sr * 4, endpoint=False)
+    # Multi-tone signal: 60Hz sub, 440Hz mid, 6000Hz high
+    full_audio = (
+        0.35 * np.sin(2 * np.pi * 60 * t)
+        + 0.30 * np.sin(2 * np.pi * 440 * t)
+        + 0.25 * np.sin(2 * np.pi * 6000 * t)
+    ).astype("float32")
+
+    tid = uuid4()
+    slug = f"ultra-{tid.hex[:8]}"
+    stems_dir = settings.resolved_stems_dir / slug
+    stems_dir.mkdir(parents=True, exist_ok=True)
+    orig_path = stems_dir / "drums.wav"
+    sf.write(str(orig_path), full_audio, sr)
+
+    record = TrackRecord(
+        track_id=tid,
+        slug=slug,
+        title="Street Capture Club Track",
+        artist="DJ Street",
+        status="stems_ready",
+        created_at=datetime.now(timezone.utc),
+        bpm=120.0,
+        musical_key="Cm",
+        original_path=orig_path,
+        stems_dir=stems_dir,
+        stems=["drums.wav"],
+        metadata={"duration": 4.0},
+    )
+    pipeline._tracks[tid] = record
+
+    resp = client.post(
+        "/api/isolation/session",
+        json={
+            "source_track_id": str(tid),
+            "parent_stem_name": "drums",
+            "region_start": 0.0,
+            "region_end": 2.0,
+            "bpm": 120.0,
+            "key": "Cm",
+        },
+    )
+    assert resp.status_code == 201
+    sid = resp.json()["id"]
+
+    # 1. Split substems + isolate a specific kick drum element
+    split_resp = client.post(f"/api/isolation/session/{sid}/split-substems")
+    assert split_resp.status_code == 200
+
+    elem_resp = client.post(
+        f"/api/isolation/session/{sid}/isolate-element",
+        json={"element": "kick", "assign_to_eq": True},
+    )
+    assert elem_resp.status_code == 200
+    elem_data = elem_resp.json()
+    assert len(elem_data["substems"]) == 6
+    kick_sub = elem_data["substems"][0]
+    assert "Kick" in kick_sub["name"]
+    assert kick_sub["id"] in elem_data["eq_target_ids"]
+
+    # 2. Update substem with Left/Right gain pots, Lo/Mid/Hi kills, and 8-band EQ
+    sub_patch = client.patch(
+        f"/api/isolation/session/{sid}/substem/{kick_sub['id']}",
+        json={
+            "gain_left_db": 3.0,
+            "gain_right_db": -6.0,
+            "kill_high": True,
+            "eq_8band": {
+                "hz_31": 4.0,
+                "hz_63": 5.0,
+                "hz_125": 2.0,
+                "hz_250": -2.0,
+                "hz_500": -3.0,
+                "hz_1k": 0.0,
+                "hz_4k": -6.0,
+                "hz_12k": -12.0,
+            },
+        },
+    )
+    assert sub_patch.status_code == 200
+
+    # 3. Assign 8-channel graphic EQ to multiple sounds and enable Post-Production Mastering
+    sess_patch = client.patch(
+        f"/api/isolation/session/{sid}",
+        json={
+            "eq_target_ids": [kick_sub["id"], elem_data["substems"][1]["id"]],
+            "master_eq_8band": {
+                "hz_31": 2.5,
+                "hz_63": 3.0,
+                "hz_125": 1.0,
+                "hz_250": 0.0,
+                "hz_500": -1.5,
+                "hz_1k": 1.0,
+                "hz_4k": 2.0,
+                "hz_12k": 3.0,
+            },
+            "post_production": True,
+        },
+    )
+    assert sess_patch.status_code == 200
+    assert sess_patch.json()["post_production"] is True
+
+    # 4. Preview & verify stereo L/R balance difference + studio mastering ceiling (-0.3 dBFS ~ 0.966)
+    prev = client.post(f"/api/isolation/session/{sid}/preview")
+    assert prev.status_code == 200
+    prev_audio, _ = sf.read(prev.json()["output_path"], always_2d=True)
+    assert prev_audio.shape[1] == 2
+    # Left channel should have higher RMS than Right channel because gain_left_db=+3, gain_right_db=-6
+    rms_l = float(np.sqrt(np.mean(prev_audio[:, 0] ** 2)))
+    rms_r = float(np.sqrt(np.mean(prev_audio[:, 1] ** 2)))
+    assert rms_l > rms_r
+    assert float(np.max(np.abs(prev_audio))) <= 0.975
+
+    # 5. Save complete bundle (Ultra-Edited Isolated Sound + Complete Loop + 6 Stems)
+    bundle_resp = client.post(
+        f"/api/isolation/session/{sid}/save-complete-bundle",
+        json={
+            "label": "Street Kick Hook",
+            "save_isolated_sound": True,
+            "save_complete_loop": True,
+            "save_six_stems": True,
+            "post_production": True,
+        },
+    )
+    assert bundle_resp.status_code == 200, bundle_resp.text
+    b_data = bundle_resp.json()
+    assert b_data["status"] == "saved"
+    # 1 isolated sound + 1 complete loop + 6 stem loops = 8 loop files saved!
+    assert b_data["total_saved"] == 8
+
+
