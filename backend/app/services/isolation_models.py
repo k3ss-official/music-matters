@@ -79,6 +79,15 @@ class CreateSessionRequest(BaseModel):
     export_settings: Optional[ExportSettings] = None
 
 
+class UpdateExportSettingsRequest(BaseModel):
+    loop_length_seconds: Optional[float] = None
+    bpm: Optional[float] = None
+    grid_snap: Optional[str] = None
+    format: Optional[str] = None
+    sample_rate: Optional[int] = None
+    bit_depth: Optional[int] = None
+
+
 class UpdateSessionRequest(BaseModel):
     parent_stem_path: Optional[str] = None
     parent_stem_name: Optional[str] = None
@@ -89,7 +98,7 @@ class UpdateSessionRequest(BaseModel):
     selected_substem_ids: Optional[List[str]] = None
     active_eq_target: Optional[str] = None
     audition_mode: Optional[Literal["selected_only", "parent_minus_selected", "full_context"]] = None
-    export_settings: Optional[ExportSettings] = None
+    export_settings: Optional[UpdateExportSettingsRequest] = None
 
 
 class UpdateSubstemRequest(BaseModel):

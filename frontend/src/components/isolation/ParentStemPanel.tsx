@@ -160,8 +160,19 @@ export function ParentStemPanel({ session, onSessionUpdate }: Props) {
   const handleExtract = async () => {
     setExtracting(true);
     try {
-      await extractRegion(session.id);
-      setRegionReady(true);
+      const res = await extractRegion(session.id);
+      setRegionReady(res.status === 'extracted');
+      if (
+        typeof res.region_start === 'number' &&
+        typeof res.region_end === 'number' &&
+        (res.region_start !== session.region_start || res.region_end !== session.region_end)
+      ) {
+        onSessionUpdate({
+          ...session,
+          region_start: res.region_start,
+          region_end: res.region_end,
+        });
+      }
     } finally {
       setExtracting(false);
     }

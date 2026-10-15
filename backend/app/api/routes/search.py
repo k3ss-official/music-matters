@@ -36,9 +36,10 @@ def _search_library_tracks(query: str, limit: int = 20) -> list[dict]:
     from app.api import schemas
     from app.services.pipeline import pipeline
 
+    capped_limit = max(1, min(limit, 100))
     matches = pipeline.search_tracks(schemas.SearchRequest(query=query))
     out: list[dict] = []
-    for item in matches[:limit]:
+    for item in matches[:capped_limit]:
         rec = pipeline._tracks.get(item.track_id)
         out.append(
             {
@@ -61,6 +62,7 @@ async def search_artists_get(q: str = "", limit: int = 20):
     """Search artists across the local library."""
     from app.services.pipeline import pipeline
 
+    capped_limit = max(1, min(limit, 100))
     needle = q.strip().lower()
     artists_map: dict[str, dict] = {}
     for rec in pipeline._tracks.values():
@@ -77,15 +79,16 @@ async def search_artists_get(q: str = "", limit: int = 20):
                 "tracks": [],
             }
         artists_map[key]["track_count"] += 1
-        artists_map[key]["tracks"].append(
-            {
-                "track_id": str(rec.track_id),
-                "title": rec.title,
-                "bpm": rec.bpm,
-                "key": rec.musical_key,
-            }
-        )
-    artists = list(artists_map.values())[:limit]
+        if len(artists_map[key]["tracks"]) < 20:
+            artists_map[key]["tracks"].append(
+                {
+                    "track_id": str(rec.track_id),
+                    "title": rec.title,
+                    "bpm": rec.bpm,
+                    "key": rec.musical_key,
+                }
+            )
+    artists = list(artists_map.values())[:capped_limit]
     return {"query": q, "count": len(artists), "artists": artists}
 
 

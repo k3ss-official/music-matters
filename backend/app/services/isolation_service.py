@@ -186,15 +186,29 @@ def _mix_substems(session: IsolationSession, *, audition: bool = False) -> Optio
     return mix, int(sr)
 
 
-def _inspect_parent_stem(parent_path: Optional[str]) -> Tuple[List[float], float]:
+def _inspect_parent_stem(parent_path: Optional[str], n_peaks: int = 200) -> Tuple[List[float], float]:
     if not parent_path:
         return [], 0.0
     try:
         src = confined_file(settings.MUSIC_LIBRARY, parent_path, suffixes=AUDIO_SUFFIXES)
-        data, sr = sf.read(str(src), always_2d=False)
-        data = np.asarray(data, dtype=np.float32)
-        dur = float(data.shape[0] / sr) if sr else 0.0
-        return _waveform_peaks(data), round(dur, 4)
+        with sf.SoundFile(str(src)) as f:
+            total = len(f)
+            sr = f.samplerate
+            if total == 0 or sr <= 0:
+                return [0.0] * n_peaks, 0.0
+            dur = float(total / sr)
+            step = max(1, total // n_peaks)
+            read_frames = min(step, 4096)
+            peaks: List[float] = []
+            for i in range(n_peaks):
+                start = min(i * step, max(0, total - 1))
+                f.seek(start)
+                chunk = f.read(read_frames, dtype="float32", always_2d=False)
+                peaks.append(float(np.max(np.abs(chunk))) if len(chunk) else 0.0)
+            max_p = max(peaks) if peaks else 0.0
+            if max_p > 0:
+                peaks = [round(p / max_p, 4) for p in peaks]
+            return peaks, round(dur, 4)
     except Exception:
         return [], 0.0
 
@@ -313,7 +327,13 @@ class IsolationService:
         old_end = data.get("region_end")
 
         for k, v in updates.items():
-            if k in data and k not in ("id", "created_at", "substems"):
+            if k == "export_settings" and isinstance(v, dict):
+                merged_es = dict(data.get("export_settings") or {})
+                for ek, ev in v.items():
+                    if ev is not None:
+                        merged_es[ek] = ev
+                data["export_settings"] = merged_es
+            elif k in data and k not in ("id", "created_at", "substems"):
                 data[k] = v
 
         if (
@@ -332,13 +352,20 @@ class IsolationService:
             except Exception:
                 pass
 
-        if data.get("parent_stem_path") != old_parent:
+        parent_changed = data.get("parent_stem_path") != old_parent
+        region_changed = data.get("region_start") != old_start or data.get("region_end") != old_end
+        if parent_changed:
             peaks, dur = _inspect_parent_stem(data.get("parent_stem_path"))
             data["parent_waveform_peaks"] = peaks
             data["parent_duration"] = dur
-            (_session_dir(session_id) / "extracted_region.wav").unlink(missing_ok=True)
-        elif data.get("region_start") != old_start or data.get("region_end") != old_end:
-            (_session_dir(session_id) / "extracted_region.wav").unlink(missing_ok=True)
+        if parent_changed or region_changed:
+            sdir = _session_dir(session_id)
+            (sdir / "extracted_region.wav").unlink(missing_ok=True)
+            (sdir / "preview.wav").unlink(missing_ok=True)
+            for stale_sub in sdir.glob("sub_*.wav"):
+                stale_sub.unlink(missing_ok=True)
+            data["substems"] = []
+            data["selected_substem_ids"] = []
 
         data["updated_at"] = datetime.now(timezone.utc)
         updated = IsolationSession.model_validate(data)

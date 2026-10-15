@@ -40,7 +40,17 @@ export const updateIsolationSession = async (
   return resp.data;
 };
 
-export const extractRegion = async (sessionId: string): Promise<unknown> => {
+export const extractRegion = async (
+  sessionId: string,
+): Promise<{
+  session_id: string;
+  status: string;
+  implementation_status: string;
+  region_start: number;
+  region_end: number;
+  output_path?: string;
+  message: string;
+}> => {
   const resp = await api.post(`/isolation/session/${sessionId}/extract-region`);
   return resp.data;
 };

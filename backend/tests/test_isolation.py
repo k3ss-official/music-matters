@@ -236,8 +236,24 @@ def test_session_hydrates_from_track_and_exports_custom_format():
     # 2.0s loop_length_seconds with grid_snap="1_bar" at 125 BPM (1 bar = 1.92s) -> 1.92s
     assert abs(info.duration - 1.92) < 0.05
 
-    # Out-of-bounds / inverted region_start=5.0, region_end=1.0 on a 2.0s parent normalizes and extracts non-silent audio
-    client.patch(f"/api/isolation/session/{sid}", json={"region_start": 5.0, "region_end": 1.0})
+    # Partial export_settings patch preserves existing loop_length_seconds and bpm
+    partial_patch = client.patch(
+        f"/api/isolation/session/{sid}",
+        json={"export_settings": {"format": "wav"}},
+    )
+    assert partial_patch.status_code == 200
+    es_after = partial_patch.json()["export_settings"]
+    assert es_after["format"] == "wav"
+    assert es_after["loop_length_seconds"] == 2.0
+    assert es_after["bpm"] == 125.0
+
+    # Out-of-bounds / inverted region_start=5.0, region_end=1.0 on a 2.0s parent clears stale substems and normalizes bounds
+    region_patch = client.patch(
+        f"/api/isolation/session/{sid}",
+        json={"region_start": 5.0, "region_end": 1.0},
+    )
+    assert region_patch.status_code == 200
+    assert region_patch.json()["substems"] == []
     extracted = client.post(f"/api/isolation/session/{sid}/extract-region")
     assert extracted.status_code == 200
     ext_data = extracted.json()
