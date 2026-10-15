@@ -35,9 +35,13 @@ export type AuditionMode = 'selected_only' | 'parent_minus_selected' | 'full_con
 
 export interface IsolationSession {
   id: string;
+  source_track_id?: string | null;
   source_track_path: string | null;
   parent_stem_path: string | null;
   parent_stem_name: string;
+  available_stems?: string[];
+  parent_waveform_peaks?: number[];
+  parent_duration?: number;
   region_start: number;
   region_end: number;
   bpm: number;
@@ -52,6 +56,7 @@ export interface IsolationSession {
 }
 
 export interface CreateSessionRequest {
+  source_track_id?: string;
   source_track_path?: string;
   parent_stem_path?: string;
   parent_stem_name?: string;

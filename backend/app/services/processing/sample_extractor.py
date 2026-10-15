@@ -347,7 +347,8 @@ class SampleExtractor:
         analysis = self.analyzer.analyze(track_path)
         
         # Calculate bar count (approximate)
-        bar_duration = (60 / analysis.bpm) * 4
+        bpm = analysis.bpm if analysis.bpm and analysis.bpm > 0 else 120.0
+        bar_duration = (60 / bpm) * 4
         bar_count = int(round(duration / bar_duration))
         bar_count = max(MIN_SAMPLE_BARS, min(bar_count, MAX_SAMPLE_BARS))
         
@@ -360,8 +361,9 @@ class SampleExtractor:
         
         # Calculate energy level for this region
         energy_arr = np.array(analysis.energy_profile)
-        start_idx = int((start_time / analysis.duration) * len(energy_arr))
-        end_idx = int((end_time / analysis.duration) * len(energy_arr))
+        total_dur = analysis.duration if analysis.duration and analysis.duration > 0 else duration
+        start_idx = int((start_time / total_dur) * len(energy_arr))
+        end_idx = int((end_time / total_dur) * len(energy_arr))
         energy_level = float(np.mean(energy_arr[start_idx:end_idx])) if end_idx > start_idx else 0.5
         
         # Generate ID and paths

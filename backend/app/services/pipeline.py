@@ -139,11 +139,11 @@ class TrackRecord:
         )
 
     def to_detail(self) -> schemas.TrackDetailResponse:
-        summary = self.to_summary()
+        summary = self.to_summary().model_dump()
+        summary["stems"] = list(self.stems)
         return schemas.TrackDetailResponse(
-            **summary.model_dump(),
+            **summary,
             metadata=self.metadata,
-            stems=self.stems,
             loops=self.loops,
             provenance={"slug": self.slug},
         )
@@ -338,12 +338,32 @@ class PipelineOrchestrator:
     def delete_track(self, track_id: UUID) -> None:
         if track_id not in self._tracks:
             raise KeyError(f"Track {track_id} not found")
-        # delete track folder and clear it from memory
+        # Cancel and remove any jobs associated with this track
+        for job_id, job in list(self._jobs.items()):
+            if job.track_id == track_id:
+                if job.task and not job.task.done():
+                    job.task.cancel()
+                del self._jobs[job_id]
+                try:
+                    db.delete_job(job_id)
+                except Exception:
+                    pass
+
+        # Delete track folders and staged download copy (if confined inside downloads_dir)
         try:
             track = self._tracks[track_id]
-            for d in [track.stems_dir, track.loops_dir]:
+            projects_dir = settings.resolved_projects_dir / track.slug
+            for d in [track.stems_dir, track.loops_dir, projects_dir]:
                 if d and d.exists():
-                    shutil.rmtree(d)
+                    shutil.rmtree(d, ignore_errors=True)
+            if track.original_path and track.original_path.is_file():
+                try:
+                    dl_root = settings.resolved_downloads_dir.resolve()
+                    orig_resolved = track.original_path.resolve()
+                    orig_resolved.relative_to(dl_root)
+                    orig_resolved.unlink(missing_ok=True)
+                except ValueError:
+                    pass
         except Exception as e:
             logger.warning("Failed to remove track files for %s: %s", track_id, e)
         del self._tracks[track_id]
@@ -711,20 +731,24 @@ class PipelineOrchestrator:
         except asyncio.TimeoutError:
             logger.error("Stem separation timed out after 8 minutes — falling back to HPSS")
             stage.detail = "Separation timed out — using HPSS fallback"
-            import librosa, soundfile as sf2
-            info = sf2.info(str(audio_path))
+            info = sf.info(str(audio_path))
             sr = int(info.samplerate)
-            data, _ = sf2.read(str(audio_path), dtype="float32")
+            data, _ = sf.read(str(audio_path), dtype="float32")
             if data.ndim > 1:
                 data = data.mean(axis=1)
             mixdown_path = stems_dir / "mixdown.wav"
-            sf2.write(mixdown_path, data, sr)
-            harmonic, percussive = librosa.effects.hpss(data)
-            harmonic_path = stems_dir / "harmonic.wav"
-            percussive_path = stems_dir / "percussive.wav"
-            sf2.write(harmonic_path, harmonic.astype("float32"), sr)
-            sf2.write(percussive_path, percussive.astype("float32"), sr)
-            stem_map = {"mixdown": mixdown_path, "harmonic": harmonic_path, "percussive": percussive_path}
+            sf.write(mixdown_path, data, sr)
+            try:
+                import librosa
+
+                harmonic, percussive = librosa.effects.hpss(data)
+                harmonic_path = stems_dir / "harmonic.wav"
+                percussive_path = stems_dir / "percussive.wav"
+                sf.write(harmonic_path, harmonic.astype("float32"), sr)
+                sf.write(percussive_path, percussive.astype("float32"), sr)
+                stem_map = {"mixdown": mixdown_path, "harmonic": harmonic_path, "percussive": percussive_path}
+            except Exception:  # pylint: disable=broad-except
+                stem_map = {"mixdown": mixdown_path}
         track.stems_dir = stems_dir
         track.stems = [path.name for path in stem_map.values()]
         track.status = "stems_ready"
@@ -736,10 +760,10 @@ class PipelineOrchestrator:
     def _compute_energy(audio: "np.ndarray", sr: int) -> float:
         """Compute normalised RMS energy 0.0-1.0."""
         import math
-        import librosa
 
-        rms = librosa.feature.rms(y=audio)[0]
-        mean_rms = float(rms.mean())
+        if audio.size == 0:
+            return 0.0
+        mean_rms = float(np.sqrt(np.mean(np.square(audio, dtype=np.float64))))
         if mean_rms <= 0:
             return 0.0
         db = 20 * math.log10(mean_rms)
@@ -963,9 +987,12 @@ class PipelineOrchestrator:
         self, track_id: UUID, bar_length: int
     ) -> list[schemas.LoopPreview]:
         track = self._tracks.get(track_id)
-        if track is None or track.original_path is None:
+        if track is None or track.original_path is None or not track.original_path.exists():
             raise KeyError(f"Track {track_id} not registered")
-        bpm = track.bpm or 120.0
+        bpm = float(track.bpm or 120.0)
+        if bpm <= 0:
+            bpm = 120.0
+        loops_dir = track.loops_dir or self._loops_dir(track.slug)
 
         def _generate() -> list[LoopRecord]:
             info = sf.info(str(track.original_path))
@@ -974,16 +1001,15 @@ class PipelineOrchestrator:
             if data.ndim > 1:
                 data = data.mean(axis=1)
             data = data.astype("float32", copy=False)
-            samples_per_beat = int(sr * (60.0 / bpm))
-            loop_samples = samples_per_beat * 4 * bar_length
-            loops_dir = self._library.loops_dir(track.slug)
+            samples_per_beat = max(1, int(sr * (60.0 / bpm)))
+            loop_samples = max(1, samples_per_beat * 4 * bar_length)
             loops_dir.mkdir(parents=True, exist_ok=True)
             records: list[LoopRecord] = []
 
             # Use stored beatgrid anchor so bars are phase-locked
             raw_anchor: float = track.metadata.get("beatgrid_anchor") or 0.0
             anchor_samples = max(0, int(raw_anchor * sr))
-            usable_samples = data.shape[0] - anchor_samples
+            usable_samples = max(0, data.shape[0] - anchor_samples)
             total_loops = max(1, usable_samples // loop_samples)
             for index in range(int(total_loops)):
                 start = anchor_samples + index * loop_samples
@@ -999,6 +1025,10 @@ class PipelineOrchestrator:
                 loop_id = f"{track.slug}-loop-{bar_length}b-{index + 1}"
                 file_path = loops_dir / f"{loop_id}.wav"
                 sf.write(file_path, slice_audio, sr)
+                slice_energy = PipelineOrchestrator._compute_energy(slice_audio, sr)
+                loop_tags = PipelineOrchestrator._auto_tags(
+                    slice_energy, bpm, track.musical_key
+                )
                 records.append(
                     LoopRecord(
                         id=loop_id,
@@ -1009,16 +1039,22 @@ class PipelineOrchestrator:
                         stem="mixdown",
                         bpm=bpm,
                         musical_key=track.musical_key,
+                        energy=slice_energy,
+                        tags=loop_tags,
                     )
                 )
             return records
 
-        loop_records = _generate()
+        loop_records = await asyncio.to_thread(_generate)
         loop_map = {loop.id: loop for loop in loop_records}
         existing = self._loop_records.get(track_id, {})
         existing.update(loop_map)
         self._loop_records[track_id] = existing
+        track.loops_dir = loops_dir
         track.loops = list(existing.keys())
+        db.save_track(track)
+        for loop_rec in loop_records:
+            db.save_loop(track_id, loop_rec)
         return [loop.to_preview(track_id) for loop in loop_records]
 
     def get_loop_audio(self, track_id: UUID, loop_id: str) -> Path:
@@ -1040,53 +1076,135 @@ class PipelineOrchestrator:
     async def extract_custom_loop(
         self, track_id: UUID, start_time: float, end_time: float, stems: list[str]
     ) -> schemas.LoopPreview:
+        from fastapi import HTTPException
+        from app.security import AUDIO_SUFFIXES, confined_file, safe_name
+
         track = self._tracks.get(track_id)
         if track is None:
             raise KeyError(f"Track {track_id} not registered")
-        if not track.original_path or not track.original_path.exists():
-            raise FileNotFoundError(f"Original audio not found for {track_id}")
+        if end_time <= start_time:
+            raise ValueError("end_time must be greater than start_time")
 
-        def _generate():
-            from app.services.processing.sample_extractor import get_sample_extractor
-
-            xtp = get_sample_extractor()
-
-            # Use sample extractor to do the bounce
-            out_path = xtp.extract_custom_sample(
-                track_path=track.original_path,
-                start_time=start_time,
-                end_time=end_time,
-                artist=track.artist or "Unknown",
-                title=track.title,
-                extract_stems=len(stems) > 0,
-            )
-
-            # Record it
+        def _generate() -> schemas.LoopPreview:
             import time
+            import uuid
+            import numpy as np
+            import soundfile as sf
 
-            loop_id = f"custom-{int(time.time())}"
-            if track.loops_dir:
-                dest = track.loops_dir / f"{loop_id}.wav"
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                import shutil
+            # Resolve stem files if stems were requested and stems_dir exists
+            selected_paths: list[Path] = []
+            if stems and track.stems_dir and track.stems_dir.exists():
+                for raw_stem in stems:
+                    clean = safe_name(raw_stem)
+                    stem_key = clean[:-4] if clean.lower().endswith(".wav") else clean
+                    for cand in (track.stems_dir / f"{stem_key}.wav", track.stems_dir / clean):
+                        if cand.is_file():
+                            selected_paths.append(
+                                confined_file(settings.MUSIC_LIBRARY, cand, suffixes=AUDIO_SUFFIXES)
+                            )
+                            break
 
-                shutil.copy(out_path, dest)
-                out_path = dest
+            if not selected_paths:
+                if not track.original_path or not track.original_path.exists():
+                    raise FileNotFoundError(f"Original audio not found for {track_id}")
+                selected_paths = [
+                    confined_file(settings.MUSIC_LIBRARY, track.original_path, suffixes=AUDIO_SUFFIXES)
+                ]
 
-            return LoopRecord(
+            mixed: np.ndarray | None = None
+            target_sr = 44100
+            for path in selected_paths:
+                info = sf.info(str(path))
+                sr = info.samplerate
+                s_frame = max(0, min(int(round(start_time * sr)), info.frames))
+                e_frame = max(s_frame, min(int(round(end_time * sr)), info.frames))
+                if e_frame <= s_frame:
+                    continue
+                chunk, sr = sf.read(str(path), start=s_frame, stop=e_frame, dtype="float32", always_2d=True)
+                if mixed is None:
+                    mixed = chunk
+                    target_sr = sr
+                else:
+                    if sr != target_sr and chunk.shape[0] > 0:
+                        import math
+
+                        try:
+                            from scipy.signal import resample_poly
+
+                            g = math.gcd(target_sr, sr)
+                            chunk = np.asarray(
+                                resample_poly(chunk, target_sr // g, sr // g, axis=0),
+                                dtype="float32",
+                            )
+                        except ImportError:
+                            n_in = chunk.shape[0]
+                            n_out = max(1, int(round(n_in * target_sr / sr)))
+                            x_old = np.linspace(0.0, 1.0, n_in, endpoint=False)
+                            x_new = np.linspace(0.0, 1.0, n_out, endpoint=False)
+                            chunk = np.column_stack(
+                                [
+                                    np.interp(x_new, x_old, chunk[:, ch]).astype(np.float32)
+                                    for ch in range(chunk.shape[1])
+                                ]
+                            )
+                    if mixed.shape[1] != chunk.shape[1]:
+                        if mixed.shape[1] == 1 and chunk.shape[1] == 2:
+                            mixed = np.repeat(mixed, 2, axis=1)
+                        elif chunk.shape[1] == 1 and mixed.shape[1] == 2:
+                            chunk = np.repeat(chunk, 2, axis=1)
+                    min_len = min(len(mixed), len(chunk))
+                    mixed = mixed[:min_len] + chunk[:min_len]
+
+            if mixed is None or len(mixed) == 0:
+                raise ValueError("Selected time range produced an empty audio slice")
+
+            peak = float(np.max(np.abs(mixed)))
+            if peak > 0.99:
+                mixed = mixed * (0.98 / peak)
+
+            loops_dir = track.loops_dir or self._loops_dir(track.slug)
+            loops_dir.mkdir(parents=True, exist_ok=True)
+            track.loops_dir = loops_dir
+
+            loop_id = f"custom-{int(time.time())}-{uuid.uuid4().hex[:6]}"
+            out_path = loops_dir / f"{loop_id}.wav"
+            sf.write(str(out_path), mixed, target_sr)
+
+            bpm = float(track.bpm or 120.0)
+            bar_seconds = (60.0 / bpm) * 4.0 if bpm > 0 else 2.0
+            duration = max(0.0, end_time - start_time)
+            bar_count = max(1, int(round(duration / bar_seconds)))
+            start_bar = max(1, int(round(start_time / bar_seconds)) + 1)
+            rms_energy = min(1.0, float(np.sqrt(np.mean(mixed**2))) * 3.0)
+            stem_label = "+".join(s.replace(".wav", "") for s in stems) if stems else "custom"
+
+            record = LoopRecord(
                 id=loop_id,
-                label=f"Custom Loop ({end_time - start_time:.1f}s)",
+                label=f"Custom Loop ({duration:.1f}s)",
                 path=out_path,
-                start_bar=0,
-                bar_count=0,
-                stem="custom",
-                bpm=track.bpm or 120.0,
+                start_bar=start_bar,
+                bar_count=bar_count,
+                stem=stem_label,
+                bpm=bpm,
                 musical_key=track.musical_key,
-                energy=0.5,
-            ).to_preview(track.track_id)
+                energy=round(rms_energy, 3),
+                tags=["custom"],
+            )
+            existing = self._loop_records.get(track_id, {})
+            if not isinstance(existing, dict):
+                existing = {r.id: r for r in existing}
+            existing[loop_id] = record
+            self._loop_records[track_id] = existing
+            if loop_id not in track.loops:
+                track.loops.append(loop_id)
+            db.save_track(track)
+            db.save_loop(track_id, record)
+            return record.to_preview(track.track_id)
 
         try:
             return await asyncio.to_thread(_generate)
+        except HTTPException:
+            raise
         except Exception as exc:
             import logging
 

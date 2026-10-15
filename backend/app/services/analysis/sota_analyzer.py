@@ -11,11 +11,19 @@ from dataclasses import dataclass, asdict, field
 import numpy as np
 import json
 
-import librosa
+try:
+    import librosa
+except ImportError:  # pragma: no cover
+    librosa = None  # type: ignore[assignment]
 import soundfile as sf
-from scipy import signal
-from scipy.ndimage import gaussian_filter1d
-from scipy.spatial.distance import cdist
+try:
+    from scipy import signal
+    from scipy.ndimage import gaussian_filter1d
+    from scipy.spatial.distance import cdist
+except ImportError:  # pragma: no cover
+    signal = None  # type: ignore[assignment]
+    gaussian_filter1d = None  # type: ignore[assignment]
+    cdist = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 

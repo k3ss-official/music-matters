@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 
+from app.config import settings
+from app.security import AUDIO_SUFFIXES, confined_file
 from app.services.isolation_models import (
     CreateSessionRequest,
     IsolationSession,
@@ -24,6 +27,7 @@ def _require_session(session_id: str) -> IsolationSession:
 @router.post("/session", response_model=IsolationSession, status_code=201)
 async def create_session(payload: CreateSessionRequest) -> IsolationSession:
     return isolation_service.create_session(
+        source_track_id=payload.source_track_id,
         source_track_path=payload.source_track_path,
         parent_stem_path=payload.parent_stem_path,
         parent_stem_name=payload.parent_stem_name,
@@ -94,3 +98,20 @@ async def preview(session_id: str) -> dict:
 async def export_loop(session_id: str) -> dict:
     _require_session(session_id)
     return isolation_service.export_loop(session_id)
+
+
+@router.get("/session/{session_id}/audio/{target}")
+async def get_session_audio(session_id: str, target: str) -> FileResponse:
+    _require_session(session_id)
+    try:
+        audio_path = isolation_service.get_audio_path(session_id, target)
+        audio_path = confined_file(settings.MUSIC_LIBRARY, audio_path, suffixes=AUDIO_SUFFIXES)
+        return FileResponse(
+            audio_path,
+            media_type="audio/wav",
+            headers={"Accept-Ranges": "bytes"},
+        )
+    except HTTPException:
+        raise
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

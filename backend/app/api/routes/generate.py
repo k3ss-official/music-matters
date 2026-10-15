@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-import tempfile
+import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+
+from app.config import settings
+from app.security import AUDIO_SUFFIXES, confined_file
 
 router = APIRouter(prefix="/generate", tags=["generate"])
 
@@ -43,8 +46,9 @@ async def generate_ace_step(payload: GenerateRequest) -> FileResponse:
     if payload.key:
         prompt = f"{prompt}, {payload.key}"
 
-    out_dir = Path(tempfile.mkdtemp())
-    out_path = out_dir / "generation.wav"
+    out_dir = settings.MUSIC_LIBRARY / "generated"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"generation_{uuid.uuid4().hex[:8]}.wav"
 
     try:
         pipe = _get_pipeline()
@@ -62,7 +66,5 @@ async def generate_ace_step(payload: GenerateRequest) -> FileResponse:
             detail=f"Generation failed: {str(exc)}: {traceback.format_exc()}",
         )
 
-    if not out_path.exists():
-        raise HTTPException(status_code=500, detail="Generation produced no output file")
-
-    return FileResponse(out_path, media_type="audio/wav", filename="generation.wav")
+    safe_out = confined_file(settings.MUSIC_LIBRARY, out_path, suffixes=AUDIO_SUFFIXES)
+    return FileResponse(safe_out, media_type="audio/wav", filename=safe_out.name)

@@ -24,6 +24,8 @@ interface Props {
   sourceBpm?: number;
   sourceKey?: string | null;
   sourceTitle?: string | null;
+  regionStart?: number;
+  regionEnd?: number;
 }
 
 export function IsolationWorkspace({
@@ -31,6 +33,8 @@ export function IsolationWorkspace({
   sourceBpm = 120,
   sourceKey,
   sourceTitle,
+  regionStart = 0,
+  regionEnd = 0,
 }: Props) {
   const [session, setSession] = useState<IsolationSession | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,8 +46,10 @@ export function IsolationWorkspace({
     setError(null);
 
     createIsolationSession({
-      source_track_path: sourceTrackId ?? undefined,
+      source_track_id: sourceTrackId ?? undefined,
       parent_stem_name: sourceTitle ?? 'untitled',
+      region_start: regionStart > 0 ? regionStart : 0,
+      region_end: regionEnd > regionStart ? regionEnd : 0,
       bpm: sourceBpm,
       key: sourceKey ?? undefined,
     })
@@ -51,7 +57,7 @@ export function IsolationWorkspace({
       .catch(e => { if (!cancelled) { setError(String(e)); setLoading(false); } });
 
     return () => { cancelled = true; };
-  }, [sourceTrackId, sourceBpm, sourceKey, sourceTitle]);
+  }, [sourceTrackId, sourceBpm, sourceKey, sourceTitle, regionStart, regionEnd]);
 
   const handleSessionUpdate = useCallback((updated: IsolationSession) => {
     setSession(updated);

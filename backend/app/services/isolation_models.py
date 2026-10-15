@@ -43,9 +43,13 @@ class Substem(BaseModel):
 
 class IsolationSession(BaseModel):
     id: str
+    source_track_id: Optional[str] = None
     source_track_path: Optional[str] = None
     parent_stem_path: Optional[str] = None
     parent_stem_name: str = "untitled"
+    available_stems: List[str] = Field(default_factory=list)
+    parent_waveform_peaks: List[float] = Field(default_factory=list)
+    parent_duration: float = 0.0
     region_start: float = 0.0
     region_end: float = 0.0
     bpm: float = 120.0
@@ -64,6 +68,7 @@ class IsolationSession(BaseModel):
 # ---------------------------------------------------------------------------
 
 class CreateSessionRequest(BaseModel):
+    source_track_id: Optional[str] = None
     source_track_path: Optional[str] = None
     parent_stem_path: Optional[str] = None
     parent_stem_name: str = "untitled"
@@ -72,6 +77,15 @@ class CreateSessionRequest(BaseModel):
     bpm: float = 120.0
     key: Optional[str] = None
     export_settings: Optional[ExportSettings] = None
+
+
+class UpdateExportSettingsRequest(BaseModel):
+    loop_length_seconds: Optional[float] = None
+    bpm: Optional[float] = None
+    grid_snap: Optional[str] = None
+    format: Optional[str] = None
+    sample_rate: Optional[int] = None
+    bit_depth: Optional[int] = None
 
 
 class UpdateSessionRequest(BaseModel):
@@ -84,7 +98,7 @@ class UpdateSessionRequest(BaseModel):
     selected_substem_ids: Optional[List[str]] = None
     active_eq_target: Optional[str] = None
     audition_mode: Optional[Literal["selected_only", "parent_minus_selected", "full_context"]] = None
-    export_settings: Optional[ExportSettings] = None
+    export_settings: Optional[UpdateExportSettingsRequest] = None
 
 
 class UpdateSubstemRequest(BaseModel):

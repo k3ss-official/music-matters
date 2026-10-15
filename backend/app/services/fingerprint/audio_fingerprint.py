@@ -10,9 +10,17 @@ from dataclasses import dataclass, asdict
 import numpy as np
 import json
 
-import librosa
-from scipy import signal
-from scipy.spatial.distance import cosine, euclidean
+try:
+    import librosa
+except ImportError:  # pragma: no cover
+    librosa = None  # type: ignore[assignment]
+try:
+    from scipy import signal
+    from scipy.spatial.distance import cosine, euclidean
+except ImportError:  # pragma: no cover
+    signal = None  # type: ignore[assignment]
+    cosine = None  # type: ignore[assignment]
+    euclidean = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 

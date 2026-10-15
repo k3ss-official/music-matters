@@ -69,6 +69,33 @@ def _waveform_peaks(data: np.ndarray, n: int = _NUM_PEAKS) -> List[float]:
     return [round(p / mx, 4) for p in peaks]
 
 
+def _resample_audio(audio: np.ndarray, orig_sr: int, target_sr: int) -> np.ndarray:
+    """Resample audio along axis 0 using scipy if available, or numpy linear interpolation."""
+    if orig_sr <= 0 or target_sr <= 0 or orig_sr == target_sr or audio.size == 0:
+        return audio
+    try:
+        from scipy.signal import resample_poly
+
+        g = math.gcd(target_sr, orig_sr)
+        return np.asarray(
+            resample_poly(audio, target_sr // g, orig_sr // g, axis=0),
+            dtype=np.float32,
+        )
+    except ImportError:
+        n_in = audio.shape[0]
+        n_out = max(1, int(round(n_in * target_sr / orig_sr)))
+        x_old = np.linspace(0.0, 1.0, n_in, endpoint=False)
+        x_new = np.linspace(0.0, 1.0, n_out, endpoint=False)
+        if audio.ndim == 1:
+            return np.interp(x_new, x_old, audio).astype(np.float32)
+        return np.column_stack(
+            [
+                np.interp(x_new, x_old, audio[:, ch]).astype(np.float32)
+                for ch in range(audio.shape[1])
+            ]
+        )
+
+
 def _fft_band(data: np.ndarray, sr: int, lo: float, hi: float) -> np.ndarray:
     spec = np.fft.rfft(data, axis=0)
     freqs = np.fft.rfftfreq(data.shape[0], d=1.0 / sr)
@@ -186,6 +213,33 @@ def _mix_substems(session: IsolationSession, *, audition: bool = False) -> Optio
     return mix, int(sr)
 
 
+def _inspect_parent_stem(parent_path: Optional[str], n_peaks: int = 200) -> Tuple[List[float], float]:
+    if not parent_path:
+        return [], 0.0
+    try:
+        src = confined_file(settings.MUSIC_LIBRARY, parent_path, suffixes=AUDIO_SUFFIXES)
+        with sf.SoundFile(str(src)) as f:
+            total = len(f)
+            sr = f.samplerate
+            if total == 0 or sr <= 0:
+                return [0.0] * n_peaks, 0.0
+            dur = float(total / sr)
+            step = max(1, total // n_peaks)
+            read_frames = min(step, 4096)
+            peaks: List[float] = []
+            for i in range(n_peaks):
+                start = min(i * step, max(0, total - 1))
+                f.seek(start)
+                chunk = f.read(read_frames, dtype="float32", always_2d=False)
+                peaks.append(float(np.max(np.abs(chunk))) if len(chunk) else 0.0)
+            max_p = max(peaks) if peaks else 0.0
+            if max_p > 0:
+                peaks = [round(p / max_p, 4) for p in peaks]
+            return peaks, round(dur, 4)
+    except Exception:
+        return [], 0.0
+
+
 class IsolationService:
     """Manages isolation sessions with file persistence + in-memory cache."""
 
@@ -194,6 +248,7 @@ class IsolationService:
 
     def create_session(
         self,
+        source_track_id: Optional[str] = None,
         source_track_path: Optional[str] = None,
         parent_stem_path: Optional[str] = None,
         parent_stem_name: str = "untitled",
@@ -205,11 +260,65 @@ class IsolationService:
     ) -> IsolationSession:
         session_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc)
+        available_stems: List[str] = []
+
+        # Allow source_track_id (or a track UUID passed in source_track_path) to hydrate from pipeline
+        candidate_tid = source_track_id or source_track_path
+        if candidate_tid:
+            try:
+                from uuid import UUID as _UUID
+                from app.services.pipeline import pipeline
+
+                track_uuid = _UUID(str(candidate_tid))
+                record = pipeline._tracks.get(track_uuid)
+                if record is not None:
+                    source_track_id = str(track_uuid)
+                    track_audio = record.original_path or record.metadata.get("source_path")
+                    if track_audio:
+                        source_track_path = str(track_audio)
+                    available_stems = [Path(s).stem for s in (record.stems or [])]
+                    if record.bpm and bpm == 120.0:
+                        bpm = float(record.bpm)
+                    if key is None and record.musical_key:
+                        key = record.musical_key
+                    if not parent_stem_path:
+                        priority = ["drums", "bass", "vocals", "guitar", "piano", "other"]
+                        chosen_stem: Optional[str] = None
+                        if parent_stem_name in available_stems:
+                            chosen_stem = parent_stem_name
+                        elif available_stems:
+                            chosen_stem = next(
+                                (s for s in priority if s in available_stems),
+                                available_stems[0],
+                            )
+                        if chosen_stem:
+                            try:
+                                resolved_stem = pipeline.get_stem_path(track_uuid, chosen_stem)
+                                parent_stem_path = str(resolved_stem)
+                                parent_stem_name = chosen_stem
+                            except Exception:
+                                pass
+                        if not parent_stem_path and source_track_path:
+                            parent_stem_path = source_track_path
+            except (ValueError, TypeError):
+                pass
+
+        parent_peaks, parent_dur = _inspect_parent_stem(parent_stem_path)
+        if parent_dur > 0 and region_end <= region_start:
+            region_start = 0.0
+            four_bars = (60.0 / max(bpm, 1.0)) * 16.0
+            region_end = round(min(parent_dur, max(1.0, four_bars)), 3)
+
+        default_loop_len = round(region_end - region_start, 3) if region_end > region_start else 4.0
         session = IsolationSession(
             id=session_id,
+            source_track_id=source_track_id,
             source_track_path=source_track_path,
             parent_stem_path=parent_stem_path,
             parent_stem_name=parent_stem_name,
+            available_stems=available_stems,
+            parent_waveform_peaks=parent_peaks,
+            parent_duration=parent_dur,
             region_start=region_start,
             region_end=region_end,
             bpm=bpm,
@@ -218,7 +327,8 @@ class IsolationService:
             selected_substem_ids=[],
             active_eq_target=None,
             audition_mode="full_context",
-            export_settings=export_settings or ExportSettings(bpm=bpm),
+            export_settings=export_settings
+            or ExportSettings(bpm=bpm, loop_length_seconds=default_loop_len),
             created_at=now,
             updated_at=now,
         )
@@ -239,9 +349,51 @@ class IsolationService:
         if session is None:
             return None
         data = session.model_dump()
+        old_parent = data.get("parent_stem_path")
+        old_start = data.get("region_start")
+        old_end = data.get("region_end")
+
         for k, v in updates.items():
-            if k in data and k not in ("id", "created_at", "substems"):
+            if k == "export_settings" and isinstance(v, dict):
+                merged_es = dict(data.get("export_settings") or {})
+                for ek, ev in v.items():
+                    if ev is not None:
+                        merged_es[ek] = ev
+                data["export_settings"] = merged_es
+            elif k in data and k not in ("id", "created_at", "substems"):
                 data[k] = v
+
+        if (
+            "parent_stem_name" in updates
+            and "parent_stem_path" not in updates
+            and data.get("source_track_id")
+        ):
+            try:
+                from uuid import UUID as _UUID
+                from app.services.pipeline import pipeline
+
+                stem_path = pipeline.get_stem_path(
+                    _UUID(str(data["source_track_id"])), str(updates["parent_stem_name"])
+                )
+                data["parent_stem_path"] = str(stem_path)
+            except Exception:
+                pass
+
+        parent_changed = data.get("parent_stem_path") != old_parent
+        region_changed = data.get("region_start") != old_start or data.get("region_end") != old_end
+        if parent_changed:
+            peaks, dur = _inspect_parent_stem(data.get("parent_stem_path"))
+            data["parent_waveform_peaks"] = peaks
+            data["parent_duration"] = dur
+        if parent_changed or region_changed:
+            sdir = _session_dir(session_id)
+            (sdir / "extracted_region.wav").unlink(missing_ok=True)
+            (sdir / "preview.wav").unlink(missing_ok=True)
+            for stale_sub in sdir.glob("sub_*.wav"):
+                stale_sub.unlink(missing_ok=True)
+            data["substems"] = []
+            data["selected_substem_ids"] = []
+
         data["updated_at"] = datetime.now(timezone.utc)
         updated = IsolationSession.model_validate(data)
         self._cache[session_id] = updated
@@ -379,8 +531,46 @@ class IsolationService:
             remixed = _mix_substems(session_sel, audition=False)
             if remixed is not None:
                 audio, sr = remixed
-        out = _session_dir(session_id) / "export.wav"
-        sf.write(str(out), audio, sr)
+
+        es = session.export_settings
+        fmt = (es.format or "wav").lower()
+        if fmt not in {"wav", "flac", "aiff"}:
+            fmt = "wav"
+        target_sr = int(es.sample_rate or sr)
+        if target_sr > 0 and target_sr != sr and audio.size > 0:
+            audio = _resample_audio(audio, sr, target_sr)
+            sr = target_sr
+
+        # Apply export_settings loop_length_seconds and grid_snap
+        cur_sec = float(audio.shape[0] / sr) if sr > 0 else 0.0
+        target_sec = (
+            float(es.loop_length_seconds)
+            if (es.loop_length_seconds and es.loop_length_seconds > 0)
+            else cur_sec
+        )
+        bpm_val = float(es.bpm or session.bpm or 120.0)
+        if es.grid_snap in {"1_bar", "2_bars", "4_bars"} and bpm_val > 0 and target_sec > 0:
+            bars = {"1_bar": 1, "2_bars": 2, "4_bars": 4}[es.grid_snap]
+            snap_unit = (60.0 / bpm_val) * 4.0 * bars
+            target_sec = max(snap_unit, round(target_sec / snap_unit) * snap_unit)
+
+        if target_sec > 0 and sr > 0 and audio.size > 0:
+            target_frames = max(1, int(round(target_sec * sr)))
+            if audio.shape[0] > target_frames:
+                audio = audio[:target_frames]
+            elif audio.shape[0] < target_frames:
+                pad_len = target_frames - audio.shape[0]
+                pad_spec = ((0, pad_len),) + ((0, 0),) * (audio.ndim - 1)
+                audio = np.pad(audio, pad_spec)
+
+        bits = int(es.bit_depth or 24)
+        if fmt == "flac":
+            subtype = "PCM_16" if bits == 16 else "PCM_24"
+        else:
+            subtype = "PCM_16" if bits == 16 else ("FLOAT" if bits == 32 else "PCM_24")
+
+        out = _session_dir(session_id) / f"export.{fmt}"
+        sf.write(str(out), audio, sr, subtype=subtype)
         return {
             "session_id": session_id,
             "status": "exported",
@@ -390,6 +580,24 @@ class IsolationService:
             "output_path": str(out),
             "message": f"Exported {out.name}",
         }
+
+    def get_audio_path(self, session_id: str, target: str) -> Path:
+        session = self.get_session(session_id)
+        if session is None:
+            raise FileNotFoundError(f"Session {session_id!r} not found")
+        sdir = _session_dir(session_id)
+        if target == "parent":
+            if not session.parent_stem_path:
+                raise FileNotFoundError("No parent stem configured")
+            return confined_file(settings.MUSIC_LIBRARY, session.parent_stem_path, suffixes=AUDIO_SUFFIXES)
+        if target == "region":
+            return confined_file(settings.MUSIC_LIBRARY, sdir / "extracted_region.wav", suffixes=AUDIO_SUFFIXES)
+        if target == "preview":
+            return confined_file(settings.MUSIC_LIBRARY, sdir / "preview.wav", suffixes=AUDIO_SUFFIXES)
+        for sub in session.substems:
+            if sub.id == target and sub.file_path:
+                return confined_file(settings.MUSIC_LIBRARY, sub.file_path, suffixes=AUDIO_SUFFIXES)
+        raise FileNotFoundError(f"Audio target {target!r} not found")
 
     def extract_region(self, session_id: str) -> dict:
         """Slice the parent stem at [region_start, region_end].
@@ -427,8 +635,34 @@ class IsolationService:
 
         info = sf.info(str(src))
         sr = int(info.samplerate)
-        start = max(0, int(float(session.region_start) * sr))
-        end = max(start + 1, int(float(session.region_end) * sr))
+        total_frames = int(info.frames)
+        if total_frames <= 0 or sr <= 0:
+            return {
+                "session_id": session_id,
+                "status": "placeholder",
+                "implementation_status": "placeholder",
+                "region_start": session.region_start,
+                "region_end": session.region_end,
+                "message": "Parent stem contains no audio frames",
+            }
+        total_dur = total_frames / sr
+        reg_start = float(session.region_start)
+        reg_end = float(session.region_end)
+        if reg_start < 0.0 or reg_start >= total_dur:
+            reg_start = 0.0
+        if reg_end <= reg_start or reg_end > total_dur:
+            bpm_val = float(session.bpm or 120.0)
+            four_bars = (60.0 / bpm_val) * 16.0 if bpm_val > 0 else 8.0
+            reg_end = min(total_dur, reg_start + four_bars)
+            if reg_end <= reg_start:
+                reg_end = total_dur
+        session.region_start = round(reg_start, 4)
+        session.region_end = round(reg_end, 4)
+        self._cache[session_id] = session
+        _save_session(session)
+
+        start = max(0, min(int(round(reg_start * sr)), total_frames - 1))
+        end = max(start + 1, min(int(round(reg_end * sr)), total_frames))
         data, _ = sf.read(str(src), start=start, stop=end, always_2d=False)
         if getattr(data, "size", 0) == 0:
             data = np.zeros(sr, dtype="float32")
