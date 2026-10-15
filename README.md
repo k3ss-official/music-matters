@@ -18,20 +18,29 @@ This is a **localhost app for you**, not a hosted service. The API binds `127.0.
 
 **Docs:** [docs/README.md](docs/README.md) · [Install](docs/INSTALL.md) · [Usage](docs/USAGE.md) · [API](docs/API.md) · [macOS app](docs/MACOS-APP.md)
 
-## Install as a Mac app (`~/Applications`)
+## One-Shot Install as a Mac app (`Applications/Music Matters.app`)
 
-Do **not** clone into `~/music-matters` — that path is the default **audio library**. Clone next to it:
+Do **not** clone into `~/music-matters` — that path is the default **audio library**.
+
+Paste this single command into Terminal to clone (or update), install all system + Python + Node dependencies, build the UI, install **Music Matters** into `/Applications` (and `~/Applications`), and launch it:
 
 ```bash
-git clone https://github.com/k3ss-official/music-matters.git ~/Developer/music-matters
-cd ~/Developer/music-matters
-./scripts/install-macos.sh
-open ~/Applications/Music\ Matters.app
+([ -d ~/Developer/music-matters ] || git clone https://github.com/k3ss-official/music-matters.git ~/Developer/music-matters) && cd ~/Developer/music-matters && ./scripts/install-macos.sh --open
 ```
 
-That script creates/uses conda env `music-matters` (or a repo `.venv`), installs Python + Node deps, builds the UI, and writes **`~/Applications/Music Matters.app`**.
+Or if you already have the repo open:
 
-Double-click after that. Quit from the power button in the header. Logs: `~/Library/Logs/Music Matters.log`. Re-run the installer after `git pull`.
+```bash
+./scripts/install-macos.sh --open
+```
+
+`install-macos.sh` automatically:
+1. Detects Homebrew (`/opt/homebrew` or `/usr/local`) and installs any missing native dependencies (`python@3.11`, `node`, `ffmpeg`, `libsndfile`, `chromaprint`).
+2. Creates/uses conda env `music-matters` (or a repo `.venv`) and installs all Python backend & ML packages.
+3. Installs frontend Node dependencies and builds `frontend/dist`.
+4. Writes **`/Applications/Music Matters.app`** (and `~/Applications/Music Matters.app`) and registers it with Finder / Spotlight / Launchpad.
+
+Double-click **Music Matters** in your **Applications** folder any time after that. Quit from the power button in the header. Logs: `~/Library/Logs/Music Matters.log`. Re-run `./scripts/install-macos.sh` after `git pull`.
 
 ### Requirements
 

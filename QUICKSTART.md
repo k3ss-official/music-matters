@@ -1,15 +1,22 @@
 # Quickstart
 
-## Mac app
+## One-Shot Mac App Install (`Applications/Music Matters.app`)
+
+Paste this single command in Terminal to clone, install all dependencies, build **`Music Matters.app`** into `/Applications` (and `~/Applications`), and launch it:
 
 ```bash
-git clone https://github.com/k3ss-official/music-matters.git ~/Developer/music-matters
-cd ~/Developer/music-matters
-./scripts/install-macos.sh
-open ~/Applications/Music\ Matters.app
+([ -d ~/Developer/music-matters ] || git clone https://github.com/k3ss-official/music-matters.git ~/Developer/music-matters) && cd ~/Developer/music-matters && ./scripts/install-macos.sh --open
 ```
 
-Do not clone into `~/music-matters` — that folder is the audio library.
+Or from an existing clone:
+
+```bash
+./scripts/install-macos.sh --open
+```
+
+Then find **Music Matters** directly in your **Applications** folder or Spotlight.
+
+*(Do not clone into `~/music-matters` — that folder is reserved for your audio library.)*
 
 Full install notes: [docs/INSTALL.md](docs/INSTALL.md). Docs index: [docs/README.md](docs/README.md).
 

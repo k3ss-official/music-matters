@@ -1,103 +1,110 @@
-#!/bin/bash
-# Executable inside ~/Applications/Music Matters.app/Contents/MacOS/
-# Starts the local API (which also serves the built UI) and opens a window.
-set -euo pipefail
+#!/usr/bin/env bash
+# Music Matters.app launcher — starts local FastAPI (serving frontend/dist) and opens UI.
+set -uo pipefail
+
+# Finder / LaunchServices provides a minimal PATH (/usr/bin:/bin:/usr/sbin:/sbin).
+# Prepend Apple Silicon & Intel Homebrew paths and user-local bin so ffmpeg, fpcalc,
+# python3, node, and conda are always discoverable.
+export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin:$HOME/.local/bin:$PATH"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-RESOURCES="$HERE/../Resources"
-REPO="$(tr -d '[:space:]' < "$RESOURCES/repo_path")"
+RESOURCES="$(cd "$HERE/../Resources" && pwd)"
+URL="http://127.0.0.1:8010"
+HEALTH="$URL/api/health"
 LOG_DIR="$HOME/Library/Logs"
-SUPPORT="$HOME/Library/Application Support/Music Matters"
-PIDFILE="$SUPPORT/uvicorn.pid"
 LOG="$LOG_DIR/Music Matters.log"
-PORT="${MM_PORT:-8010}"
-URL="http://127.0.0.1:${PORT}"
+SUP_DIR="$HOME/Library/Application Support/Music Matters"
+PID_FILE="$SUP_DIR/uvicorn.pid"
 
-mkdir -p "$LOG_DIR" "$SUPPORT"
-touch "$LOG"
+mkdir -p "$LOG_DIR" "$SUP_DIR"
+
+alert() {
+    /usr/bin/osascript -e "display alert \"Music Matters\" message \"$1\" as critical" >/dev/null 2>&1 || true
+}
 
 open_ui() {
-    if [ -d "/Applications/Google Chrome.app" ] || [ -d "$HOME/Applications/Google Chrome.app" ]; then
-        open -na "Google Chrome" --args --app="$URL" --new-window >/dev/null 2>&1 || open "$URL"
-    elif [ -d "/Applications/Microsoft Edge.app" ]; then
-        open -na "Microsoft Edge" --args --app="$URL" --new-window >/dev/null 2>&1 || open "$URL"
-    elif [ -d "/Applications/Brave Browser.app" ]; then
-        open -na "Brave Browser" --args --app="$URL" --new-window >/dev/null 2>&1 || open "$URL"
+    local chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    local edge="/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+    local brave="/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
+    if [ -x "$chrome" ]; then
+        "$chrome" --app="$URL" >/dev/null 2>&1 &
+    elif [ -x "$edge" ]; then
+        "$edge" --app="$URL" >/dev/null 2>&1 &
+    elif [ -x "$brave" ]; then
+        "$brave" --app="$URL" >/dev/null 2>&1 &
     else
         open "$URL"
     fi
 }
 
-already_up() {
-    curl -sf "$URL/api/health" >/dev/null 2>&1
-}
-
-if [ ! -d "$REPO" ]; then
-    osascript -e "display alert \"Music Matters\" message \"Repo not found at $REPO. Re-run scripts/install-macos.sh from a clone.\" as critical" >/dev/null 2>&1 || true
-    exit 1
-fi
-
-if already_up; then
+# Already running and healthy -> just focus/open a window.
+if curl -sf "$HEALTH" >/dev/null 2>&1; then
     open_ui
     exit 0
 fi
 
-if [ -f "$PIDFILE" ]; then
-    oldpid="$(cat "$PIDFILE" 2>/dev/null || true)"
-    if [ -n "${oldpid:-}" ] && kill -0 "$oldpid" 2>/dev/null; then
-        # Process exists but health failed — give it a moment
-        for _ in 1 2 3 4 5; do
-            already_up && open_ui && exit 0
-            sleep 1
-        done
-    fi
-    rm -f "$PIDFILE"
+# Read repo_path while preserving spaces in directory names (only strip CR/LF).
+if [ ! -f "$RESOURCES/repo_path" ]; then
+    alert "Repository path missing inside app bundle. Re-run ./scripts/install-macos.sh from your music-matters clone."
+    exit 1
+fi
+REPO="$(tr -d '\r\n' < "$RESOURCES/repo_path")"
+if [ -z "$REPO" ] || [ ! -d "$REPO/backend/app" ]; then
+    alert "Repository not found at:
+${REPO:-<empty>}
+
+If you moved the clone, run ./scripts/install-macos.sh again."
+    exit 1
 fi
 
 # shellcheck disable=SC1091
 source "$REPO/scripts/lib-env.sh"
-mm_resolve_python "$REPO"
 
-if ! command -v "$MM_PYTHON" >/dev/null 2>&1; then
-    osascript -e "display alert \"Music Matters\" message \"Python 3.11+ not found. Install Python or create the music-matters conda env, then re-run install-macos.sh.\" as critical" >/dev/null 2>&1 || true
+if ! PY="$(mm_find_python "$REPO")"; then
+    alert "Python environment not found. Run ./scripts/install-macos.sh inside $REPO."
     exit 1
 fi
 
-DIST="$REPO/frontend/dist/index.html"
-if [ ! -f "$DIST" ]; then
-    osascript -e "display alert \"Music Matters\" message \"Frontend is not built. From the clone run: cd frontend && npm ci && npm run build\" as critical" >/dev/null 2>&1 || true
+if [ ! -f "$REPO/frontend/dist/index.html" ]; then
+    alert "Built UI missing ($REPO/frontend/dist). Run ./scripts/install-macos.sh inside $REPO."
     exit 1
 fi
 
-export MM_APP_MODE=1
-export PYTHONUNBUFFERED=1
+# If port 8010 is held by a stale/unresponsive process (since health check above failed), clean it up.
+STALE_PIDS="$(lsof -ti tcp:8010 2>/dev/null || true)"
+if [ -n "$STALE_PIDS" ]; then
+    echo "$STALE_PIDS" | xargs kill -9 2>/dev/null || true
+    sleep 0.5
+fi
 
 {
-    echo "----- $(date) starting -----"
-    echo "repo=$REPO python=$MM_PYTHON"
-} >> "$LOG"
+    echo ""
+    echo "=== $(date '+%Y-%m-%d %H:%M:%S') — starting Music Matters ==="
+    echo "REPO=$REPO"
+    echo "PY=$PY"
+    echo "PATH=$PATH"
+} >>"$LOG"
 
-cd "$REPO/backend"
-nohup "$MM_PYTHON" -m uvicorn app.main:app \
-    --host 127.0.0.1 \
-    --port "$PORT" \
-    --log-level info >> "$LOG" 2>&1 &
-echo $! > "$PIDFILE"
+cd "$REPO/backend" || exit 1
+export MM_APP_MODE=1
+export PYTHONPATH="$REPO/backend${PYTHONPATH:+:$PYTHONPATH}"
 
-# First boot can be slow (imports). Wait up to 90s.
-ok=0
-for _ in $(seq 1 90); do
-    if already_up; then
-        ok=1
+nohup "$PY" -m uvicorn app.main:app --host 127.0.0.1 --port 8010 --log-level info >>"$LOG" 2>&1 &
+SERVER_PID=$!
+echo "$SERVER_PID" >"$PID_FILE"
+
+# Wait up to 90s (first import of torch/librosa can be slow on cold disk).
+for _ in $(seq 1 180); do
+    if curl -sf "$HEALTH" >/dev/null 2>&1; then
+        open_ui
+        exit 0
+    fi
+    if ! kill -0 "$SERVER_PID" 2>/dev/null; then
         break
     fi
-    sleep 1
+    sleep 0.5
 done
 
-if [ "$ok" != "1" ]; then
-    osascript -e "display alert \"Music Matters\" message \"Server failed to start. Check ~/Library/Logs/Music Matters.log\" as critical" >/dev/null 2>&1 || true
-    exit 1
-fi
-
-open_ui
-exit 0
+alert "Server failed to start on 127.0.0.1:8010. Check $LOG"
+open -a Console "$LOG" 2>/dev/null || true
+exit 1
