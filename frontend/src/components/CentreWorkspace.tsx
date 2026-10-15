@@ -396,31 +396,10 @@ export function CentreWorkspace({
         }
     }, [stemMixer, isPlaying]);
 
-    // ── EDIT toggle — shows/hides the 3rd loop-editor pane below ─────────
-    // The main (loop chooser) waveform stays at full-track view.
-    // The 3rd pane renders its own WaveformCanvas zoomed to the region.
+    // ── EDIT toggle — shows/hides the granular EditLoopSection jog panel ───
     const handleEditToggle = useCallback(() => {
         setEditLoopOpen(prev => !prev);
     }, []);
-
-    // ── Re-zoom loop editor when region changes while editor is open ─────────
-    useEffect(() => {
-        if (editLoopOpen && loopEditorRef.current && regionEnd > regionStart) {
-            loopEditorRef.current.syncRegion(regionStart, regionEnd);
-            loopEditorRef.current.zoomToFitRegion(regionStart, regionEnd);
-        }
-    }, [editLoopOpen, regionStart, regionEnd]);
-
-    // ── Pause main waveform when loop editor opens to prevent dual audio ─────
-    useEffect(() => {
-        if (editLoopOpen && waveformRef.current?.isPlaying()) {
-            waveformRef.current.pause();
-            stemMixer.pause();
-            setIsPlaying(false);
-            isPlayingRef.current = false;
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [editLoopOpen]);
 
     // ── Shift+Up → re-center view on current loop (keyboard) ────────────────
     useEffect(() => {
@@ -726,7 +705,7 @@ export function CentreWorkspace({
 
             {/* ── Transport bar ──────────────────────────────────────────── */}
             <TransportBar
-                waveformRef={editLoopOpen ? loopEditorRef : waveformRef}
+                waveformRef={waveformRef}
                 isPlaying={isPlaying}
                 isLooping={isLooping}
                 currentTime={currentTime}
@@ -870,6 +849,21 @@ export function CentreWorkspace({
                 onSaveLoop={handleSaveLoop}
                 editLoopOpen={editLoopOpen}
             />
+
+            {/* ── Granular IN / SHIFT / OUT jog panel when EDIT is toggled ─ */}
+            {editLoopOpen && (
+                <EditLoopSection
+                    regionStart={regionStart}
+                    regionEnd={regionEnd}
+                    bpm={bpm}
+                    barCount={activeBarPreset ?? undefined}
+                    quantizeEnabled={snapEnabled}
+                    onQuantizeToggle={() => setSnapEnabled(v => !v)}
+                    onClose={() => setEditLoopOpen(false)}
+                    onRegionChange={handleRegionChange}
+                    duration={duration}
+                />
+            )}
 
             {/* ── Ready-Made One-Touch Structural Phrase Loops (Intro, Drop, Breakdown, Chorus, Outro) ── */}
             <div className="px-4 py-2 bg-[#111326] border-t border-b border-white/5 flex items-center justify-between gap-2 flex-wrap shrink-0">

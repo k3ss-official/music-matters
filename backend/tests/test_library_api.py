@@ -172,7 +172,20 @@ def test_clean_normalize_six_stems_and_multi_angle_discovery() -> None:
     assert disc_resp.status_code == 200
     disc_data = disc_resp.json()
     assert disc_data["count"] >= 1
-    assert any(m["track_id"] == str(tid) for m in disc_data["matches"])
+    matched_item = next(m for m in disc_data["matches"] if m["track_id"] == str(tid))
+    assert matched_item["preview_url"] == f"/api/audio/tracks/{tid}"
+
+    # 4. Both /api/audio/tracks/{tid} and /api/audio/{tid} serve the track audio
+    audio_resp_1 = client.get(f"/api/audio/tracks/{tid}")
+    assert audio_resp_1.status_code == 200
+    audio_resp_2 = client.get(f"/api/audio/{tid}")
+    assert audio_resp_2.status_code == 200
+
+    # 5. System resources endpoint never flags Chrome/Safari/Firefox as heavy apps to kill
+    sys_resp = client.get("/api/system/resources")
+    assert sys_resp.status_code == 200
+    from app.api.routes.system import KNOWN_HEAVY_APPS
+    assert not ({"Chrome", "Safari", "Firefox"} & KNOWN_HEAVY_APPS)
 
     # Cleanup
     client.delete(f"/api/library/tracks/{tid}")

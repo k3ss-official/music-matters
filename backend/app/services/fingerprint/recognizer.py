@@ -213,7 +213,7 @@ def _library_matches_ranked(audio_path: Path) -> tuple[dict | None, list[dict]]:
                 "status": t.status,
                 "similarity": round(sim, 3),
                 "confidence": round(sim, 3),
-                "preview_url": f"/api/audio/{t.track_id}",
+                "preview_url": f"/api/audio/tracks/{t.track_id}",
             }
         )
 

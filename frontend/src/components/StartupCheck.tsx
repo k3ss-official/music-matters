@@ -20,15 +20,20 @@ interface StartupCheckProps {
     onClear: () => void;
 }
 
-// Thresholds for M4 Mac 16 GB — demucs MLX needs ~4 GB headroom
-const WARN_PERCENT = 72;
-const HEAVY_THRESHOLD_MB = 250;
+// Thresholds for M4 Mac 16 GB — demucs MLX needs ~3 GB headroom
+const WARN_PERCENT = 85;
+const MIN_AVAILABLE_MB = 3072;
+const HEAVY_THRESHOLD_MB = 600;
 
 function getHeavyApps(data: ResourceData): Process[] {
     return data.processes.filter(p => p.is_heavy && p.rss_mb >= HEAVY_THRESHOLD_MB);
 }
 
 function isAllClear(data: ResourceData): boolean {
+    // If at least 3 GB of RAM is available and usage is below 85%, system is ready
+    if (data.available_mb >= MIN_AVAILABLE_MB && data.percent_used < WARN_PERCENT) {
+        return true;
+    }
     return data.percent_used < WARN_PERCENT && getHeavyApps(data).length === 0;
 }
 

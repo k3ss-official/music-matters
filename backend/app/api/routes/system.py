@@ -16,8 +16,7 @@ router = APIRouter(prefix="/system", tags=["system"])
 KNOWN_HEAVY_APPS = {
     "Photoshop", "Lightroom", "Final Cut Pro", "DaVinci Resolve",
     "Logic Pro", "Ableton Live", "Adobe Premiere", "After Effects",
-    "Chrome", "Firefox", "Safari", "Slack", "Zoom", "Teams",
-    "Docker", "VirtualBox", "Parallels", "Xcode",
+    "Zoom", "Teams", "Docker", "VirtualBox", "Parallels", "Xcode",
 }
 
 

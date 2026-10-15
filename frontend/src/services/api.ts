@@ -332,13 +332,13 @@ export const shutdownApp = async (): Promise<void> => {
 // Artist Search
 export const searchArtists = async (query: string): Promise<Artist[]> => {
   const response = await api.get('/search/artists', { params: { q: query } });
-  return response.data.results;
+  return response.data.artists ?? response.data.results ?? [];
 };
 
 // Track Search
 export const searchTracks = async (query: string, limit = 20): Promise<Track[]> => {
   const response = await api.get('/search/tracks', { params: { q: query, limit } });
-  return response.data.results;
+  return response.data.tracks ?? response.data.results ?? [];
 };
 
 // Audio file URL helper

@@ -112,8 +112,10 @@ async def serve_audio(path: str):
         settings.MUSIC_LIBRARY / path,
         suffixes=AUDIO_SUFFIXES,
     )
-    media = "audio/wav" if file_path.suffix.lower() == ".wav" else "audio/mpeg"
-    return FileResponse(file_path, media_type=media)
+    media = mimetypes.guess_type(str(file_path))[0] or (
+        "audio/wav" if file_path.suffix.lower() == ".wav" else "audio/mpeg"
+    )
+    return FileResponse(file_path, media_type=media, headers={"Accept-Ranges": "bytes"})
 
 
 @app.get("/api/health")

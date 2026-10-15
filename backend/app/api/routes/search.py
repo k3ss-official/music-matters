@@ -106,7 +106,7 @@ async def search_artists_get(q: str = "", limit: int = 20):
                 }
             )
     artists = list(artists_map.values())[:capped_limit]
-    return {"query": q, "count": len(artists), "artists": artists}
+    return {"query": q, "count": len(artists), "artists": artists, "results": artists}
 
 
 @router.post("/artist")
@@ -128,6 +128,7 @@ async def search_tracks_get(q: str = "", limit: int = 20):
         "query": q,
         "count": len(tracks),
         "tracks": tracks,
+        "results": tracks,
     }
 
 
@@ -140,6 +141,7 @@ async def search_tracks_post(request: TrackSearchRequest):
         "source": request.source,
         "count": len(tracks),
         "tracks": tracks,
+        "results": tracks,
     }
 
 
@@ -353,7 +355,7 @@ async def multi_angle_discover(request: MultiAngleDiscoveryRequest):
                     "status": rec.status,
                     "source": "library",
                     "in_library": True,
-                    "preview_url": f"/api/audio/{rec.track_id}",
+                    "preview_url": f"/api/audio/tracks/{rec.track_id}",
                     "stems_count": len(rec.stems),
                     "loops_count": len(rec.loops),
                     "confidence": confidence,
@@ -411,7 +413,7 @@ async def multi_angle_discover(request: MultiAngleDiscoveryRequest):
     # Attach first available library track preview URL if any exists so catalog demos can be auditioned offline
     first_lib_track = next(iter(pipeline._tracks.values()), None)
     fallback_preview_url = (
-        f"/api/audio/{first_lib_track.track_id}" if first_lib_track else None
+        f"/api/audio/tracks/{first_lib_track.track_id}" if first_lib_track else None
     )
     fallback_track_id = str(first_lib_track.track_id) if first_lib_track else None
 

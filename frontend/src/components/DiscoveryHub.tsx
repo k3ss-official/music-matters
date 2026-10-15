@@ -162,7 +162,7 @@ export const DiscoveryHub: React.FC<DiscoveryHubProps> = ({
           status: 'identified',
           source: 'shazam',
           in_library: Boolean(rec.library_match?.track_id),
-          preview_url: rec.library_match?.track_id ? `/api/audio/${rec.library_match.track_id}` : null,
+          preview_url: rec.library_match?.track_id ? `/api/audio/tracks/${rec.library_match.track_id}` : null,
           confidence: rec.shazam.score || 0.98,
           match_reasons: ['Shazam acoustic fingerprint match', 'Street recording ID'],
         });
@@ -179,7 +179,7 @@ export const DiscoveryHub: React.FC<DiscoveryHubProps> = ({
           status: tm.status || 'ready',
           source: 'library',
           in_library: true,
-          preview_url: tm.preview_url || `/api/audio/${tm.track_id}`,
+          preview_url: tm.preview_url || `/api/audio/tracks/${tm.track_id}`,
           confidence: tm.confidence || tm.similarity || 0.85,
           match_reasons: ['Spectral & rhythm fingerprint match from street clip'],
         });
@@ -243,7 +243,7 @@ export const DiscoveryHub: React.FC<DiscoveryHubProps> = ({
     }
     const url =
       match.preview_url ||
-      (match.track_id ? `/api/audio/${match.track_id}` : tracks[0] ? `/api/audio/${tracks[0].track_id}` : null);
+      (match.track_id ? `/api/audio/tracks/${match.track_id}` : tracks[0] ? `/api/audio/tracks/${tracks[0].track_id}` : null);
     if (!url) {
       setStatusBanner('No local preview stream yet — click Load into Editor to ingest and stem.');
       return;
@@ -631,7 +631,7 @@ export const DiscoveryHub: React.FC<DiscoveryHubProps> = ({
                   status: t.status,
                   source: 'library',
                   in_library: true,
-                  preview_url: `/api/audio/${t.track_id}`,
+                  preview_url: `/api/audio/tracks/${t.track_id}`,
                   stems_count: t.stems?.length || 6,
                   loops_count: t.loop_count || 4,
                   confidence: Math.max(0.75, 0.96 - idx * 0.04),
