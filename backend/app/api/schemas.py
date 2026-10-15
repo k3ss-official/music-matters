@@ -18,6 +18,7 @@ class ProcessingOptions(BaseModel):
 
 class IngestRequest(BaseModel):
     source: HttpUrl | str = Field(..., description="URL or local path to ingest")
+    title: Optional[str] = Field(default=None, description="Optional human-readable track title")
     tags: List[str] = Field(default_factory=list)
     collection: Optional[str] = Field(default=None, description="Logical grouping for batch jobs")
     options: ProcessingOptions = Field(default_factory=ProcessingOptions)

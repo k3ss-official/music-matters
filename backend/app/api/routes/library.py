@@ -28,6 +28,14 @@ class CustomLoopRequest(BaseModel):
     stems: list[str] = []
 
 
+class SaveLoopBundleRequest(BaseModel):
+    start_time: float
+    end_time: float
+    label: str | None = None
+    include_all_stems: bool = True
+    post_production: bool = True
+
+
 class SurgicalExtractRequest(BaseModel):
     description: str  # e.g. "kick drum", "bass riff", "lead vocal"
 
@@ -176,6 +184,37 @@ async def create_custom_loop(track_id: str, payload: CustomLoopRequest) -> LoopP
             end_time=payload.end_time,
             stems=payload.stems,
         )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.post("/tracks/{track_id}/loops/save-bundle")
+async def save_loop_bundle(track_id: str, payload: SaveLoopBundleRequest) -> dict:
+    """Save a complete version of the quantized loop AND all 6 stem loops."""
+    track_uuid = _parse_uuid(track_id)
+
+    try:
+        return await pipeline.save_loop_bundle(
+            track_uuid,
+            start_time=payload.start_time,
+            end_time=payload.end_time,
+            label=payload.label,
+            include_all_stems=payload.include_all_stems,
+            post_production=payload.post_production,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/tracks/{track_id}/clean")
+async def clean_track_audio(track_id: str) -> dict:
+    """Clean, improve, remove DC offset, and normalize track audio."""
+    track_uuid = _parse_uuid(track_id)
+
+    try:
+        return await pipeline.clean_track(track_uuid)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 

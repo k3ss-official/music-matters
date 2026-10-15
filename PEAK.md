@@ -160,3 +160,37 @@ All remote branches, PR refs (`refs/pull/*/head`), and merge ancestors across `k
 
 - **Wraith Sub-Agent (`bc-daeac15c-ca4d-5882-8fad-3022952a638f`)**:
   Independently executed the full verification harness on branch `elite`, audited `git diff main..HEAD` and branch lineage, verified zero placeholder/stub leaks and clean working tree, and returned **`WRAITH_CLEAN`**.
+
+---
+
+## Street-to-Studio Ultra DJ Redesign (`cursor/ultra-dj-studio-redesign-5360`)
+
+### Cycle 6 — Multi-Angle Discovery, Audio Pre-Conditioning, 6-Stem Guarantee & Phrase Loops (`reality` Lens)
+- **Scope**:
+  - Added `POST /api/search/discover` (`backend/app/api/routes/search.py`) supporting multi-angle discovery: raw street recording fingerprint (`recognize_audio` with lazy `shazamio` + spectral vector top-matches), Shazam capture, track title, remembered lyrics snippet, and natural language description with `year_from`–`year_to` date range and `producer` / `remixer` / `track_type` variables.
+  - Added `clean_and_normalize_audio` and `POST /api/library/tracks/{track_id}/clean` (`backend/app/services/pipeline.py`, `library.py`) performing per-channel DC offset removal, 25 Hz sub-sonic rumble high-pass filtering, soft de-clipping, and `-0.3 dBFS` peak normalization automatically during ingest and on demand.
+  - Added `_dsp_six_stem_fallback` in `pipeline.py` guaranteeing all **6 canonical stems** (`drums.wav`, `bass.wav`, `vocals.wav`, `guitar.wav`, `piano.wav`, `other.wav`) are always separated and saved.
+  - Upgraded `analyze_fallback` (`backend/app/services/analysis/mlx_analyzer.py`) and `_stage_loop` / `save_loop_bundle` (`POST /api/library/tracks/{track_id}/loops/save-bundle`) so tracks always produce beatgrid-quantized structural sections (`intro`, `drop`, `breakdown`, `chorus`, `outro`) and ready-made one-touch loops + 6-stem loop bundles.
+
+### Cycle 7 — Ultra Edit DSP Engine: 8-Band Graphic EQ, L/R Gain Pots, Lo/Mid/Hi Kills, Deep Element Isolator & Studio Master (`operator` Lens)
+- **Scope**:
+  - Extended `Substem` and `IsolationSession` (`backend/app/services/isolation_models.py`, `isolation_service.py`, `routes/isolation.py`) with:
+    - `EQ8Band` (`31Hz`, `63Hz`, `125Hz`, `250Hz`, `500Hz`, `1kHz`, `4kHz`, `12kHz`) assignable to one or more sounds via `eq_target_ids`
+    - Independent Left and Right channel rotary gain pots (`gain_left_db`, `gain_right_db`)
+    - 3-band DJ kill switches (`kill_low` `<200 Hz`, `kill_mid` `200–2500 Hz`, `kill_high` `>2.5 kHz`)
+    - Surgical element isolation (`POST /api/isolation/session/{session_id}/isolate-element`) for `kick`, `bass`, `vocal`, `melody`, `snare`, `hihat`, or natural-language custom prompts using harmonic-percussive + spectral zero-phase filtering
+    - Final Post-Production Studio Mastering toggle (`post_production`: DC re-center, harmonic warmth exciter, studio bus glue compression, `-0.3 dBFS` true-peak limiter)
+    - Complete Loop + 6-Stem bundle export (`POST /api/isolation/session/{session_id}/save-complete-bundle`)
+
+### Cycle 8 — Unified Studio UI & "The Chef's Kiss" Ultra Edit Window (`premise` & `verdict` Lenses)
+- **Scope**:
+  - Built `DiscoveryHub.tsx` for Street Recording upload/live mic capture, Natural Language + Date Range + Producer/Remixer search, Title/Lyrics search, and Shazam capture with Top Possible Matches (`Listen` preview + 1-click `Load Full Track into Editor`).
+  - Redesigned `CentreWorkspace.tsx` and built `UltraEditWindow.tsx` in the unified vertical studio hierarchy:
+    1. **Head Track Telemetry & Audio Conditioning Bar** (`BPM`, `Key`, `Length`, `Loop Bars/Beats/Seconds`, `Beatgrid Quantized Snap`, `DC Offset Removed · Normalized -0.3 dBFS · 6 Stems`) + **Main Waveform** + **One-Touch Structural Phrase Loops** (`Intro`, `Drop`, `Breakdown`, `Chorus`, `Outro`)
+    2. **Collapsible 6-Stem Lanes Directly Below Main Track** (`Drums`, `Bass`, `Vocals`, `Guitar`, `Piano`, `Other`)
+    3. **The Chef's Kiss — Ultra Edit Window Directly Below Stems**: Expanded quantized beat/bar snap-to loop viewer, Deep Element Isolator, 8-Channel Single Graphic EQ assignable to one or more sounds, Left/Right rotary gain pots, Lo/Mid/Hi kill buttons, Studio Post-Production Master toggle, and 1-click Save Isolated Sound + Complete Loop + All 6 Stems.
+  - Preserved original human-readable filenames as track titles in `POST /api/ingest/upload` while keeping UUID-confined disk storage (`copy_into_library`).
+- **Receipt**:
+  - `/workspace/.venv/bin/pytest backend/tests --ignore=backend/tests/test_e2e.py -v` → **30 passed in 1.96s**
+  - `cd /workspace/frontend && npx tsc --noEmit && npm run build` → **0 errors, built in 2.06s**
+
