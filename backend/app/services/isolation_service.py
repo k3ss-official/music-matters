@@ -69,6 +69,33 @@ def _waveform_peaks(data: np.ndarray, n: int = _NUM_PEAKS) -> List[float]:
     return [round(p / mx, 4) for p in peaks]
 
 
+def _resample_audio(audio: np.ndarray, orig_sr: int, target_sr: int) -> np.ndarray:
+    """Resample audio along axis 0 using scipy if available, or numpy linear interpolation."""
+    if orig_sr <= 0 or target_sr <= 0 or orig_sr == target_sr or audio.size == 0:
+        return audio
+    try:
+        from scipy.signal import resample_poly
+
+        g = math.gcd(target_sr, orig_sr)
+        return np.asarray(
+            resample_poly(audio, target_sr // g, orig_sr // g, axis=0),
+            dtype=np.float32,
+        )
+    except ImportError:
+        n_in = audio.shape[0]
+        n_out = max(1, int(round(n_in * target_sr / orig_sr)))
+        x_old = np.linspace(0.0, 1.0, n_in, endpoint=False)
+        x_new = np.linspace(0.0, 1.0, n_out, endpoint=False)
+        if audio.ndim == 1:
+            return np.interp(x_new, x_old, audio).astype(np.float32)
+        return np.column_stack(
+            [
+                np.interp(x_new, x_old, audio[:, ch]).astype(np.float32)
+                for ch in range(audio.shape[1])
+            ]
+        )
+
+
 def _fft_band(data: np.ndarray, sr: int, lo: float, hi: float) -> np.ndarray:
     spec = np.fft.rfft(data, axis=0)
     freqs = np.fft.rfftfreq(data.shape[0], d=1.0 / sr)
@@ -511,13 +538,7 @@ class IsolationService:
             fmt = "wav"
         target_sr = int(es.sample_rate or sr)
         if target_sr > 0 and target_sr != sr and audio.size > 0:
-            from scipy.signal import resample_poly
-
-            g = math.gcd(target_sr, sr)
-            audio = np.asarray(
-                resample_poly(audio, target_sr // g, sr // g, axis=0),
-                dtype=np.float32,
-            )
+            audio = _resample_audio(audio, sr, target_sr)
             sr = target_sr
 
         # Apply export_settings loop_length_seconds and grid_snap

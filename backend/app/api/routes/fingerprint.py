@@ -33,13 +33,13 @@ class FindSimilarRequest(BaseModel):
 @router.post("/generate")
 async def generate_fingerprint(request: FingerprintRequest):
     """Generate audio fingerprint for a track."""
-    from app.services.fingerprint.audio_fingerprint import get_fingerprint_service
-
     audio_path = confined_file(
         settings.MUSIC_LIBRARY, request.audio_path, suffixes=AUDIO_SUFFIXES
     )
 
     try:
+        from app.services.fingerprint.audio_fingerprint import get_fingerprint_service
+
         service = get_fingerprint_service()
         fingerprint = service.generate_fingerprint(str(audio_path))
 
@@ -57,8 +57,6 @@ async def generate_fingerprint(request: FingerprintRequest):
 @router.post("/compare")
 async def compare_tracks(request: SimilarityRequest):
     """Compare similarity between two tracks."""
-    from app.services.fingerprint.audio_fingerprint import get_fingerprint_service
-
     path1 = confined_file(
         settings.MUSIC_LIBRARY, request.audio_path1, suffixes=AUDIO_SUFFIXES
     )
@@ -67,6 +65,8 @@ async def compare_tracks(request: SimilarityRequest):
     )
 
     try:
+        from app.services.fingerprint.audio_fingerprint import get_fingerprint_service
+
         service = get_fingerprint_service()
         similarity = service.compare_tracks(
             str(path1),
@@ -88,8 +88,6 @@ async def compare_tracks(request: SimilarityRequest):
 @router.post("/find-similar")
 async def find_similar_tracks(request: FindSimilarRequest):
     """Find similar tracks in a library."""
-    from app.services.fingerprint.audio_fingerprint import get_fingerprint_service
-
     query_path = confined_file(
         settings.MUSIC_LIBRARY, request.audio_path, suffixes=AUDIO_SUFFIXES
     )
@@ -99,6 +97,8 @@ async def find_similar_tracks(request: FindSimilarRequest):
     ]
 
     try:
+        from app.services.fingerprint.audio_fingerprint import get_fingerprint_service
+
         service = get_fingerprint_service()
         similar = service.find_similar(
             audio_path=str(query_path),

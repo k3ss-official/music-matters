@@ -22,14 +22,14 @@ class AnalysisRequest(BaseModel):
 @router.post("/analyze")
 async def analyze_track(request: AnalysisRequest):
     """Full audio analysis: BPM, key, structure, sections."""
-    from app.services.analysis.audio_analyzer import get_audio_analyzer
-    from app.services.analysis.sota_analyzer import get_sota_analyzer
-
     audio_path = confined_file(
         settings.MUSIC_LIBRARY, request.audio_path, suffixes=AUDIO_SUFFIXES
     )
 
     try:
+        from app.services.analysis.audio_analyzer import get_audio_analyzer
+        from app.services.analysis.sota_analyzer import get_sota_analyzer
+
         # Basic analysis
         analyzer = get_audio_analyzer()
         basic_analysis = analyzer.analyze(str(audio_path))
@@ -73,12 +73,12 @@ async def get_compatible_keys(key: str):
 @router.post("/mashup-score")
 async def calculate_mashup_score(track1_path: str, track2_path: str):
     """Calculate mashup compatibility between two tracks."""
-    from app.services.analysis.harmonic_mixer import get_harmonic_mixer
-
     path1 = confined_file(settings.MUSIC_LIBRARY, track1_path, suffixes=AUDIO_SUFFIXES)
     path2 = confined_file(settings.MUSIC_LIBRARY, track2_path, suffixes=AUDIO_SUFFIXES)
 
     try:
+        from app.services.analysis.harmonic_mixer import get_harmonic_mixer
+
         mixer = get_harmonic_mixer()
         score = mixer.calculate_mashup_score(str(path1), str(path2))
         return score

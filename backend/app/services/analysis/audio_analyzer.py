@@ -8,7 +8,10 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, asdict
 import numpy as np
 
-import librosa
+try:
+    import librosa
+except ImportError:  # pragma: no cover
+    librosa = None  # type: ignore[assignment]
 import soundfile as sf
 
 from app.config import (

@@ -731,20 +731,24 @@ class PipelineOrchestrator:
         except asyncio.TimeoutError:
             logger.error("Stem separation timed out after 8 minutes — falling back to HPSS")
             stage.detail = "Separation timed out — using HPSS fallback"
-            import librosa, soundfile as sf2
-            info = sf2.info(str(audio_path))
+            info = sf.info(str(audio_path))
             sr = int(info.samplerate)
-            data, _ = sf2.read(str(audio_path), dtype="float32")
+            data, _ = sf.read(str(audio_path), dtype="float32")
             if data.ndim > 1:
                 data = data.mean(axis=1)
             mixdown_path = stems_dir / "mixdown.wav"
-            sf2.write(mixdown_path, data, sr)
-            harmonic, percussive = librosa.effects.hpss(data)
-            harmonic_path = stems_dir / "harmonic.wav"
-            percussive_path = stems_dir / "percussive.wav"
-            sf2.write(harmonic_path, harmonic.astype("float32"), sr)
-            sf2.write(percussive_path, percussive.astype("float32"), sr)
-            stem_map = {"mixdown": mixdown_path, "harmonic": harmonic_path, "percussive": percussive_path}
+            sf.write(mixdown_path, data, sr)
+            try:
+                import librosa
+
+                harmonic, percussive = librosa.effects.hpss(data)
+                harmonic_path = stems_dir / "harmonic.wav"
+                percussive_path = stems_dir / "percussive.wav"
+                sf.write(harmonic_path, harmonic.astype("float32"), sr)
+                sf.write(percussive_path, percussive.astype("float32"), sr)
+                stem_map = {"mixdown": mixdown_path, "harmonic": harmonic_path, "percussive": percussive_path}
+            except Exception:  # pylint: disable=broad-except
+                stem_map = {"mixdown": mixdown_path}
         track.stems_dir = stems_dir
         track.stems = [path.name for path in stem_map.values()]
         track.status = "stems_ready"
@@ -756,10 +760,10 @@ class PipelineOrchestrator:
     def _compute_energy(audio: "np.ndarray", sr: int) -> float:
         """Compute normalised RMS energy 0.0-1.0."""
         import math
-        import librosa
 
-        rms = librosa.feature.rms(y=audio)[0]
-        mean_rms = float(rms.mean())
+        if audio.size == 0:
+            return 0.0
+        mean_rms = float(np.sqrt(np.mean(np.square(audio, dtype=np.float64))))
         if mean_rms <= 0:
             return 0.0
         db = 20 * math.log10(mean_rms)
@@ -1123,13 +1127,26 @@ class PipelineOrchestrator:
                 else:
                     if sr != target_sr and chunk.shape[0] > 0:
                         import math
-                        from scipy.signal import resample_poly
 
-                        g = math.gcd(target_sr, sr)
-                        chunk = np.asarray(
-                            resample_poly(chunk, target_sr // g, sr // g, axis=0),
-                            dtype="float32",
-                        )
+                        try:
+                            from scipy.signal import resample_poly
+
+                            g = math.gcd(target_sr, sr)
+                            chunk = np.asarray(
+                                resample_poly(chunk, target_sr // g, sr // g, axis=0),
+                                dtype="float32",
+                            )
+                        except ImportError:
+                            n_in = chunk.shape[0]
+                            n_out = max(1, int(round(n_in * target_sr / sr)))
+                            x_old = np.linspace(0.0, 1.0, n_in, endpoint=False)
+                            x_new = np.linspace(0.0, 1.0, n_out, endpoint=False)
+                            chunk = np.column_stack(
+                                [
+                                    np.interp(x_new, x_old, chunk[:, ch]).astype(np.float32)
+                                    for ch in range(chunk.shape[1])
+                                ]
+                            )
                     if mixed.shape[1] != chunk.shape[1]:
                         if mixed.shape[1] == 1 and chunk.shape[1] == 2:
                             mixed = np.repeat(mixed, 2, axis=1)
